@@ -1,0 +1,32 @@
+import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
+
+import { requireUser } from '@/lib/auth/guards';
+import { listSubjects } from '@/server/actions/onboarding';
+
+import { OnboardingWizard } from './wizard';
+
+export const metadata: Metadata = { title: 'Set up your cohort' };
+export const dynamic = 'force-dynamic';
+
+export default async function OnboardingPage() {
+  const user = await requireUser();
+  if (user.onboardingCompletedAt) redirect('/');
+
+  const subjects = await listSubjects();
+
+  return (
+    <div className="relative min-h-dvh">
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-linear-to-b from-pulse-500/12 to-transparent"
+        aria-hidden
+      />
+      <main id="main" className="relative mx-auto max-w-lg px-4 py-8 sm:py-12">
+        <OnboardingWizard
+          defaultName={user.fullName}
+          subjects={subjects.map((s) => ({ id: s.id, name: s.name }))}
+        />
+      </main>
+    </div>
+  );
+}

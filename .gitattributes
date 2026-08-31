@@ -1,0 +1,8 @@
+# Normalise line endings so the repo is identical on Windows, macOS and Linux.
+* text=auto eol=lf
+
+# Generated / binary-ish files git should not try to diff or normalise.
+package-lock.json -diff
+*.png binary
+*.jpg binary
+*.woff2 binary

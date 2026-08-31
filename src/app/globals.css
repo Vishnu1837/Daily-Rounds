@@ -1,0 +1,342 @@
+@import 'tailwindcss';
+
+/*
+ * Make `dark:` follow the `.dark` class rather than the OS media query.
+ *
+ * Tailwind's default dark variant is `@media (prefers-color-scheme: dark)`, but the
+ * semantic colour tokens below are keyed off a `.dark` class that an inline script sets
+ * from the user's saved choice. Without this the two disagree the moment a student picks a
+ * theme that differs from their OS: the surfaces would switch but every `dark:` utility
+ * would not, leaving dark-on-dark buttons.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Daily Rounds design system.
+ *
+ * Identity: clinical precision with real warmth. An ink-navy base gives medical
+ * credibility; a mint "pulse" accent carries every action; a flame gradient is reserved
+ * exclusively for streaks so the flame always means the same thing. Motion is used to
+ * confirm behaviour, never for decoration.
+ */
+
+@theme {
+  /* ------------------------------------------------------------ palette */
+  --color-ink-50: oklch(0.97 0.005 260);
+  --color-ink-100: oklch(0.94 0.008 260);
+  --color-ink-200: oklch(0.88 0.012 260);
+  --color-ink-300: oklch(0.78 0.016 260);
+  --color-ink-400: oklch(0.63 0.022 260);
+  --color-ink-500: oklch(0.51 0.028 260);
+  --color-ink-600: oklch(0.41 0.032 262);
+  --color-ink-700: oklch(0.32 0.036 264);
+  --color-ink-800: oklch(0.24 0.036 265);
+  --color-ink-900: oklch(0.18 0.034 266);
+  --color-ink-950: oklch(0.13 0.03 266);
+
+  /* Mint pulse — the primary action colour. */
+  --color-pulse-50: oklch(0.97 0.03 172);
+  --color-pulse-100: oklch(0.94 0.06 172);
+  --color-pulse-200: oklch(0.88 0.1 172);
+  --color-pulse-300: oklch(0.82 0.13 170);
+  --color-pulse-400: oklch(0.76 0.15 168);
+  --color-pulse-500: oklch(0.7 0.155 166);
+  --color-pulse-600: oklch(0.61 0.14 166);
+  --color-pulse-700: oklch(0.5 0.115 167);
+  --color-pulse-800: oklch(0.4 0.09 168);
+  --color-pulse-900: oklch(0.31 0.07 169);
+
+  /* Flame — reserved for streaks and milestones. */
+  --color-flame-300: oklch(0.86 0.14 68);
+  --color-flame-400: oklch(0.8 0.17 55);
+  --color-flame-500: oklch(0.73 0.19 42);
+  --color-flame-600: oklch(0.65 0.19 33);
+
+  /* Iris — secondary accent for roadmap / progress surfaces. */
+  --color-iris-300: oklch(0.8 0.12 285);
+  --color-iris-400: oklch(0.71 0.16 285);
+  --color-iris-500: oklch(0.62 0.19 285);
+  --color-iris-600: oklch(0.54 0.19 285);
+
+  --color-success: oklch(0.68 0.16 155);
+  --color-warning: oklch(0.79 0.15 78);
+  --color-danger: oklch(0.62 0.2 22);
+
+  /* -------------------------------------------------------- typography */
+  --font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display:
+    var(--font-display), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  /* ------------------------------------------------------------ shape */
+  --radius-card: 1.25rem;
+  --radius-pill: 999px;
+
+  --shadow-soft: 0 1px 2px oklch(0.2 0.03 266 / 0.06), 0 8px 24px oklch(0.2 0.03 266 / 0.06);
+  --shadow-lift: 0 2px 4px oklch(0.2 0.03 266 / 0.08), 0 18px 40px oklch(0.2 0.03 266 / 0.12);
+
+  /* ----------------------------------------------------------- motion */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ------------------------------------------------------- semantic tokens */
+
+:root {
+  --bg: oklch(0.985 0.004 250);
+  --bg-elevated: oklch(1 0 0);
+  --bg-sunken: oklch(0.96 0.006 255);
+  --fg: oklch(0.2 0.03 266);
+  --fg-muted: oklch(0.48 0.025 262);
+  --fg-subtle: oklch(0.62 0.02 262);
+  --border: oklch(0.9 0.008 258);
+  --border-strong: oklch(0.83 0.012 258);
+  --ring: var(--color-pulse-600);
+  --nav-bg: oklch(1 0 0 / 0.86);
+
+  color-scheme: light;
+}
+
+.dark {
+  --bg: oklch(0.15 0.028 266);
+  --bg-elevated: oklch(0.196 0.03 266);
+  --bg-sunken: oklch(0.125 0.026 266);
+  --fg: oklch(0.96 0.006 250);
+  --fg-muted: oklch(0.74 0.018 255);
+  --fg-subtle: oklch(0.6 0.02 258);
+  --border: oklch(0.28 0.028 265);
+  --border-strong: oklch(0.36 0.03 265);
+  --ring: var(--color-pulse-400);
+  --nav-bg: oklch(0.196 0.03 266 / 0.9);
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-sunken: var(--bg-sunken);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+}
+
+/* ------------------------------------------------------------- base */
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    font-weight: 700;
+  }
+
+  /* A single, consistent focus treatment everywhere. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 0.5rem;
+  }
+
+  ::selection {
+    background: var(--color-pulse-200);
+    color: var(--color-ink-900);
+  }
+
+  /* Inputs never zoom the viewport on iOS. */
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1rem);
+  }
+
+  @media (min-width: 640px) {
+    input,
+    textarea,
+    select {
+      font-size: 0.9375rem;
+    }
+  }
+}
+
+/* --------------------------------------------------------- utilities */
+
+@utility surface {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+
+@utility text-balance-tight {
+  text-wrap: balance;
+}
+
+/* Hides scrollbars on horizontal chip rails without losing scrollability. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility tap {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* --------------------------------------------------------- animations */
+
+@keyframes dr-flicker {
+  0%,
+  100% {
+    transform: scale(1) rotate(-1deg);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.08) rotate(2deg);
+    opacity: 0.92;
+  }
+}
+
+@keyframes dr-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes dr-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes dr-step-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes dr-ring {
+  0% {
+    box-shadow: 0 0 0 0 oklch(0.7 0.155 166 / 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 14px oklch(0.7 0.155 166 / 0);
+  }
+}
+
+@keyframes dr-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-flicker {
+  animation: dr-flicker 2.4s ease-in-out infinite;
+  transform-origin: 50% 80%;
+}
+
+.animate-pop {
+  animation: dr-pop 0.42s var(--ease-spring) both;
+}
+
+/*
+ * Multi-step flows (onboarding, check-in, quizzes) mount each step with this class.
+ * It is a pure CSS entrance: the step's content is rendered and correct immediately, and
+ * the animation only decorates it. Nothing waits on an animation completing — a stalled
+ * or disabled animation must never be able to strand a wizard on the wrong step.
+ */
+.animate-step-in {
+  animation: dr-step-in 0.26s var(--ease-out-soft) both;
+}
+
+.animate-ring {
+  animation: dr-ring 1.6s var(--ease-out-soft) infinite;
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--bg-sunken);
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    oklch(1 0 0 / 0.14),
+    transparent
+  );
+  animation: dr-shimmer 1.6s infinite;
+}
+
+.draw-check {
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+  animation: dr-draw 0.45s var(--ease-out-soft) 0.1s forwards;
+}
+
+/* ------------------------------------------------------ reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .skeleton::after {
+    display: none;
+  }
+
+  .draw-check {
+    stroke-dashoffset: 0;
+  }
+}
