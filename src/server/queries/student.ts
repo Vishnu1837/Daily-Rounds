@@ -1,6 +1,20 @@
 import 'server-only';
 
-import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  lte,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import type { AttendanceStatus, DayBand, PointEvent } from '@/db/schema';
@@ -27,6 +41,7 @@ import {
   users,
   weeklyReviews,
 } from '@/db/schema';
+import { ancestorRefs, bestRefMatch, isSameBranch, resolveRef } from '@/lib/curriculum';
 import { ACHIEVEMENTS_BY_CODE } from '@/lib/domain/achievements';
 import {
   type ISODate,
@@ -78,6 +93,8 @@ export type HomeData = {
   assignment: {
     topicTitle: string | null;
     topicId: string | null;
+    /** Where the topic sits in the curriculum; drives the matching knowledge check. */
+    topicRef: string | null;
     subjectName: string | null;
     plannedMinutes: number;
     note: string | null;
@@ -140,6 +157,7 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
         note: dailyAssignments.note,
         topicId: roadmapTopics.id,
         topicTitle: roadmapTopics.title,
+        topicRef: roadmapTopics.curriculumRef,
         subjectName: subjects.name,
       })
       .from(dailyAssignments)
@@ -275,6 +293,7 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
       ? {
           topicTitle: assignment.topicTitle,
           topicId: assignment.topicId,
+          topicRef: assignment.topicRef,
           subjectName: assignment.subjectName,
           plannedMinutes: assignment.plannedMinutes,
           note: assignment.note,
@@ -889,15 +908,20 @@ export async function getMaterials(ctx: MemberContext) {
       description: materials.description,
       type: materials.type,
       url: materials.url,
-      topicKey: materials.topicKey,
+      curriculumRef: materials.curriculumRef,
       subjectName: subjects.name,
     })
     .from(materials)
     .leftJoin(subjects, eq(subjects.id, materials.subjectId))
     .where(eq(materials.cohortId, ctx.cohort.id))
-    .orderBy(asc(subjects.name), asc(materials.topicKey), asc(materials.title));
+    .orderBy(asc(subjects.name), asc(materials.curriculumRef), asc(materials.title));
 
-  return rows;
+  // The heading a material groups under is resolved from its ref, so renaming a curriculum
+  // section renames the group everywhere rather than leaving a stale typed-in string.
+  return rows.map((row) => ({
+    ...row,
+    topicLabel: resolveRef(row.curriculumRef)?.label ?? null,
+  }));
 }
 
 /* --------------------------------------------------------------- check-in */
@@ -978,10 +1002,28 @@ export async function getCheckInContext(ctx: MemberContext): Promise<CheckInCont
 
 /* ---------------------------------------------------------------- quizzes */
 
-export async function getQuizForTopic(topicTitle: string | null) {
-  if (!topicTitle) return null;
-  const rows = await db.select().from(quizzes).where(eq(quizzes.topicKey, topicTitle)).limit(1);
-  const quiz = rows[0];
+/**
+ * The knowledge check for a roadmap topic, matched through the curriculum rather than by
+ * title. The topic's own ref wins; failing that the nearest quiz above it in the tree, so a
+ * quiz written for a whole section still reaches a student working through one node of it.
+ */
+export async function getQuizForTopic(topicRef: string | null) {
+  if (!topicRef) return null;
+
+  const candidates = await db
+    .select({ id: quizzes.id, title: quizzes.title, curriculumRef: quizzes.curriculumRef })
+    .from(quizzes)
+    .where(
+      or(
+        inArray(quizzes.curriculumRef, ancestorRefs(topicRef)),
+        like(quizzes.curriculumRef, `${topicRef}/%`),
+      ),
+    )
+    // Two quizzes filed at the same place are equally good answers; ordering makes the
+    // choice between them the same one on every request.
+    .orderBy(asc(quizzes.id));
+
+  const quiz = bestRefMatch(topicRef, candidates);
   if (!quiz) return null;
 
   const questions = await db
@@ -998,14 +1040,14 @@ export async function getQuizForTopic(topicTitle: string | null) {
 }
 
 export async function getAvailableQuizzes(ctx: MemberContext) {
-  const topicTitles = await db
-    .select({ title: roadmapTopics.title, status: roadmapTopics.status })
+  const topicRefs = await db
+    .select({ ref: roadmapTopics.curriculumRef })
     .from(roadmapTopics)
     .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
     .where(eq(roadmaps.memberId, ctx.memberId));
 
-  const titles = topicTitles.map((t) => t.title);
-  if (titles.length === 0) return [];
+  const refs = [...new Set(topicRefs.map((t) => t.ref).filter((r): r is string => r !== null))];
+  if (refs.length === 0) return [];
 
   /*
    * The question count is a grouped join rather than a correlated subquery.
@@ -1016,10 +1058,18 @@ export async function getAvailableQuizzes(ctx: MemberContext) {
    * itself happily rendered five. A left join and a group-by cannot go wrong in that way.
    */
   const [quizRows, countRows, attemptRows] = await Promise.all([
+    /*
+     * Every filed quiz, filtered in memory rather than in SQL.
+     *
+     * Branch matching is "one ref contains the other, either way round", which against a
+     * list of the student's refs would be a pile of OR'd LIKEs. The quiz catalogue is
+     * cohort content in the hundreds, not per-student rows, so reading it whole and
+     * filtering here is both cheaper to run and far easier to read.
+     */
     db
-      .select({ id: quizzes.id, title: quizzes.title, topicKey: quizzes.topicKey })
+      .select({ id: quizzes.id, title: quizzes.title, curriculumRef: quizzes.curriculumRef })
       .from(quizzes)
-      .where(inArray(quizzes.topicKey, titles)),
+      .where(isNotNull(quizzes.curriculumRef)),
     db
       .select({ quizId: quizQuestions.quizId, n: sql<number>`count(*)::int` })
       .from(quizQuestions)
@@ -1030,6 +1080,10 @@ export async function getAvailableQuizzes(ctx: MemberContext) {
       .where(eq(quizAttempts.memberId, ctx.memberId)),
   ]);
 
+  const onMyRoadmap = quizRows.filter((q) =>
+    refs.some((ref) => isSameBranch(q.curriculumRef!, ref)),
+  );
+
   const countBy = new Map(countRows.map((r) => [r.quizId, r.n]));
 
   const bestBy = new Map<string, { score: number; total: number }>();
@@ -1038,8 +1092,10 @@ export async function getAvailableQuizzes(ctx: MemberContext) {
     if (!prev || a.score > prev.score) bestBy.set(a.quizId, { score: a.score, total: a.total });
   }
 
-  return quizRows.map((q) => ({
-    ...q,
+  return onMyRoadmap.map((q) => ({
+    id: q.id,
+    title: q.title,
+    topicLabel: resolveRef(q.curriculumRef)?.label ?? null,
     questionCount: countBy.get(q.id) ?? 0,
     best: bestBy.get(q.id) ?? null,
   }));

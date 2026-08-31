@@ -16,7 +16,7 @@ export default async function StudyPage() {
   if (!ctx) redirect('/admin');
 
   const home = await getHomeData(ctx);
-  const quiz = await getQuizForTopic(home.assignment?.topicTitle ?? null);
+  const quiz = await getQuizForTopic(home.assignment?.topicRef ?? null);
 
   return (
     <StudySessionScreen

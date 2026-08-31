@@ -13,6 +13,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/ui/page-header';
 import type { MaterialType } from '@/db/schema';
+import { type RefOption, resolveRef } from '@/lib/curriculum';
 import { deleteMaterialAction, saveMaterialAction } from '@/server/actions/admin';
 
 type Material = {
@@ -21,10 +22,12 @@ type Material = {
   description: string | null;
   type: MaterialType;
   url: string;
-  topicKey: string | null;
+  curriculumRef: string | null;
   subjectId: string | null;
   subjectName: string | null;
 };
+
+type SubjectOption = { id: string; name: string; slug: string };
 
 const TYPES: { value: MaterialType; label: string; emoji: string }[] = [
   { value: 'pdf', label: 'PDF', emoji: '📄' },
@@ -39,10 +42,13 @@ export function MaterialsAdminScreen({
   cohortId,
   materials,
   subjects,
+  refOptions,
 }: {
   cohortId: string;
   materials: Material[];
-  subjects: { id: string; name: string }[];
+  subjects: SubjectOption[];
+  /** Every addressable place in the curriculum, keyed by subject slug. */
+  refOptions: Record<string, RefOption[]>;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -87,7 +93,9 @@ export function MaterialsAdminScreen({
                   {m.description && <p className="text-fg-muted text-xs">{m.description}</p>}
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     {m.subjectName && <Badge tone="iris">{m.subjectName}</Badge>}
-                    {m.topicKey && <Badge>{m.topicKey}</Badge>}
+                    {resolveRef(m.curriculumRef) && (
+                      <Badge>{resolveRef(m.curriculumRef)!.path.join(' · ')}</Badge>
+                    )}
                     <a
                       href={m.url}
                       target="_blank"
@@ -158,6 +166,7 @@ export function MaterialsAdminScreen({
         <MaterialForm
           cohortId={cohortId}
           subjects={subjects}
+          refOptions={refOptions}
           material={sheet.material}
           onDone={() => setSheet({ open: false, material: null })}
         />
@@ -169,11 +178,13 @@ export function MaterialsAdminScreen({
 function MaterialForm({
   cohortId,
   subjects,
+  refOptions,
   material,
   onDone,
 }: {
   cohortId: string;
-  subjects: { id: string; name: string }[];
+  subjects: SubjectOption[];
+  refOptions: Record<string, RefOption[]>;
   material: Material | null;
   onDone: () => void;
 }) {
@@ -182,6 +193,16 @@ function MaterialForm({
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | undefined>();
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  /*
+   * Subject and curriculum place are one decision, not two, so the subject select drives
+   * which places are offered and clearing it clears the ref. Filing a Pathology reading
+   * under an Anatomy section was possible with the free-text field this replaced.
+   */
+  const [subjectId, setSubjectId] = useState(material?.subjectId ?? '');
+  const [curriculumRef, setCurriculumRef] = useState(material?.curriculumRef ?? '');
+  const subjectSlug = subjects.find((s) => s.id === subjectId)?.slug ?? null;
+  const places = subjectSlug ? (refOptions[subjectSlug] ?? []) : [];
 
   return (
     <form
@@ -227,7 +248,15 @@ function MaterialForm({
           </option>
         ))}
       </Select>
-      <Select label="Subject" name="subjectId" defaultValue={material?.subjectId ?? ''}>
+      <Select
+        label="Subject"
+        name="subjectId"
+        value={subjectId}
+        onChange={(e) => {
+          setSubjectId(e.target.value);
+          setCurriculumRef('');
+        }}
+      >
         <option value="">Not subject-specific</option>
         {subjects.map((s) => (
           <option key={s.id} value={s.id}>
@@ -235,13 +264,26 @@ function MaterialForm({
           </option>
         ))}
       </Select>
-      <TextInput
-        label="Topic (optional)"
-        name="topicKey"
-        defaultValue={material?.topicKey ?? ''}
-        hint="Match a roadmap topic title exactly and it will group under that topic."
-        placeholder="Acute Inflammation — vascular and cellular events"
-      />
+      <Select
+        label="Curriculum place (optional)"
+        name="curriculumRef"
+        value={curriculumRef}
+        onChange={(e) => setCurriculumRef(e.target.value)}
+        disabled={places.length === 0}
+        error={errors.curriculumRef}
+        hint={
+          places.length === 0
+            ? 'Choose a subject first to file this against a section or topic.'
+            : 'Students studying anywhere on this branch will see it.'
+        }
+      >
+        <option value="">Anywhere in the cohort library</option>
+        {places.map((p) => (
+          <option key={p.ref} value={p.ref}>
+            {p.label}
+          </option>
+        ))}
+      </Select>
       <TextArea
         label="Description (optional)"
         name="description"

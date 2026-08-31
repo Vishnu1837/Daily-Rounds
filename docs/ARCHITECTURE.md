@@ -10,14 +10,14 @@ change how scoring, streaks or the database driver work, read the relevant ADR f
 Daily Rounds separates **what happened** from **what it means**.
 
 | Source (facts, written once) | Derived (computed, always recalculable) |
-| --- | --- |
-| `attendance` | current streak, best streak |
-| `study_sessions` | consistency % |
-| `check_ins` | show-up rate |
-| `daily_assignments` | leaderboard position |
-| `points_ledger` | risk level |
-| `quiz_attempts` | cohort streak |
-| `weekly_reviews` | weekly progress, improvement |
+| ---------------------------- | --------------------------------------- |
+| `attendance`                 | current streak, best streak             |
+| `study_sessions`             | consistency %                           |
+| `check_ins`                  | show-up rate                            |
+| `daily_assignments`          | leaderboard position                    |
+| `points_ledger`              | risk level                              |
+| `quiz_attempts`              | cohort streak                           |
+| `weekly_reviews`             | weekly progress, improvement            |
 
 `daily_activity` sits between the two. It is a **cache** of derived state — one row per
 student per day holding the day's score, band, points and minutes. It exists so the
@@ -78,7 +78,7 @@ call site goes through `requireUser()` / `requireAdmin()`.
 `DATABASE_URL` absent → **PGlite**, an embedded Postgres that stores its data under `.data/`.
 
 **Why.** `git clone && npm install && npm run dev` produces a working, populated application
-with no Postgres install, no Docker, and no cloud account. Because PGlite *is* Postgres
+with no Postgres install, no Docker, and no cloud account. Because PGlite _is_ Postgres
 compiled to WebAssembly, this is not a compatibility trade: the same migrations, the same
 `jsonb` and array columns, the same enums, the same partial-unique-index semantics that make
 the points ledger idempotent. Nothing in the application layer knows which driver it is
@@ -131,7 +131,7 @@ whole ledger is visible to the student on their Progress screen.
 **Attendance is the one re-cut.** Changing a mark from present to late must change the
 value, so `markAttendanceAction` withdraws the previous award for that member-day and issues
 a new one under the same key. This is the only place an award is ever removed, it is scoped
-to a single key, and it exists because the *fact* changed — not the interpretation.
+to a single key, and it exists because the _fact_ changed — not the interpretation.
 
 ---
 
@@ -203,7 +203,7 @@ Three real failures drove this:
    than one that does not animate.
 2. `AnimatePresence mode="wait"` defers mounting the next element until the previous one
    finishes exiting. When that exit stalled, the check-in wizard's step counter advanced
-   while the *content stayed on the previous question* — the student could have answered the
+   while the _content stayed on the previous question_ — the student could have answered the
    wrong question entirely.
 3. `requestAnimationFrame` is suspended in background and occluded tabs, so anything gated
    on an rAF callback never ran at all.
@@ -244,21 +244,24 @@ cohorts ──┬── cohort_holidays
           ├── materials
           └── announcements
 
-subjects ── quizzes ── quiz_questions
+subjects ── quizzes ── quiz_questions      (subjects are a projection of the curriculum tree)
+
+curriculum_ref  a slug path — `anatomy/upper-limb` — carried by roadmap_topics, quizzes
+                and materials. The join between a student's plan and cohort content.
 audit_log                            (who changed what)
 ```
 
 **Uniqueness that carries meaning**, rather than merely preventing junk:
 
-| Index | Guarantees |
-| --- | --- |
-| `points_idempotency_unique` | a student can never be paid twice for one action |
-| `check_in_unique (member, date)` | one check-in per student per day |
-| `attendance_unique (member, date)` | one attendance mark per student per day |
-| `daily_assignment_unique (member, date)` | one assigned topic per student per day |
-| `student_achievement_unique (member, code)` | each achievement unlocks once |
-| `weekly_review_unique (member, week_start)` | one review per week |
-| `users_email_lower_idx` | case-insensitive unique email |
+| Index                                       | Guarantees                                       |
+| ------------------------------------------- | ------------------------------------------------ |
+| `points_idempotency_unique`                 | a student can never be paid twice for one action |
+| `check_in_unique (member, date)`            | one check-in per student per day                 |
+| `attendance_unique (member, date)`          | one attendance mark per student per day          |
+| `daily_assignment_unique (member, date)`    | one assigned topic per student per day           |
+| `student_achievement_unique (member, code)` | each achievement unlocks once                    |
+| `weekly_review_unique (member, week_start)` | one review per week                              |
+| `users_email_lower_idx`                     | case-insensitive unique email                    |
 
 ---
 
@@ -293,8 +296,17 @@ while letting Next's redirect/notFound control-flow throws pass through untouche
 - **A new scoring event** — add it to the `point_event` enum, give it a default in
   `DEFAULT_POINT_RULES`, and decide whether it belongs in `BEHAVIOUR_EVENTS`. That single
   decision determines whether it can affect consistency.
-- **A new roadmap template** — add it to `src/lib/roadmap-templates.ts`. It becomes
-  available to both onboarding and the admin console automatically.
+- **A new roadmap template** — add it to `CURATED_TEMPLATES` in
+  `src/lib/roadmap-templates.ts`. It becomes available to both onboarding and the admin
+  console automatically, and takes precedence over the curriculum-derived template for its
+  subject.
+- **A new quiz or reading list** — file it against a `curriculum_ref` rather than a topic
+  title. Branch matching does the rest: a section-level ref reaches every topic beneath it,
+  and nothing has to be typed identically in two places.
+- **A curriculum change** — edit `tools/curriculum/roadmap-source.txt` and regenerate
+  `src/lib/curriculum/data.ts`. Subjects, templates and the syllabus browser all follow from
+  that one tree; see [CURRICULUM.md](CURRICULUM.md). A brand-new subject also needs a row in
+  `subjects`, which is what `drizzle/0001_curriculum_subjects.sql` does.
 - **Automatic attendance** — `attendance` already carries `event_id`, `marked_by` and
   `marked_at`. A future integration writes rows the same way the admin UI does; scoring is
   unchanged.

@@ -27,6 +27,16 @@ import {
   updateTopicAction,
 } from '@/server/actions/admin';
 
+type TemplateOption = {
+  key: string;
+  title: string;
+  track: string;
+  subject: string;
+  source: 'curated' | 'curriculum';
+  weekCount: number;
+  topicCount: number;
+};
+
 type RoadmapRow = {
   roadmapId: string;
   roadmapTitle: string;
@@ -79,7 +89,7 @@ export function RoadmapAdminScreen({
   selectedMemberId: string | null;
   roadmapRows: RoadmapRow[];
   subjects: { id: string; name: string; slug: string }[];
-  templates: { key: string; title: string; subject: string }[];
+  templates: TemplateOption[];
   assignments: Assignment[];
 }) {
   const router = useRouter();
@@ -672,6 +682,13 @@ function TopicForm({
   );
 }
 
+/**
+ * Template picker.
+ *
+ * There are ~140 templates once the curriculum sections are counted, so a single flat
+ * <select> would be unusable. Picking the subject first cuts the list to the handful of
+ * tracks that actually belong to it, which is also the order the admin thinks in.
+ */
 function ApplyTemplateForm({
   cohortId,
   memberId,
@@ -680,39 +697,80 @@ function ApplyTemplateForm({
 }: {
   cohortId: string;
   memberId: string | null;
-  templates: { key: string; title: string; subject: string }[];
+  templates: TemplateOption[];
   subjects: { id: string; name: string; slug: string }[];
 }) {
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
-  const [templateKey, setTemplateKey] = useState(templates[0]?.key ?? '');
+
+  const subjectSlugs = useMemo(
+    () => subjects.filter((s) => templates.some((t) => t.subject === s.slug)),
+    [subjects, templates],
+  );
+  const [subjectSlug, setSubjectSlug] = useState(subjectSlugs[0]?.slug ?? '');
+
+  const forSubject = useMemo(
+    () => templates.filter((t) => t.subject === subjectSlug),
+    [templates, subjectSlug],
+  );
+  const [templateKey, setTemplateKey] = useState(forSubject[0]?.key ?? '');
+
+  const template = forSubject.find((t) => t.key === templateKey) ?? forSubject[0];
+  const subject = subjects.find((s) => s.slug === subjectSlug);
 
   if (!memberId) return null;
 
-  const template = templates.find((t) => t.key === templateKey);
-  const subject = subjects.find((s) => s.slug === template?.subject);
-
   return (
     <div className="space-y-3">
-      <Select label="Template" value={templateKey} onChange={(e) => setTemplateKey(e.target.value)}>
-        {templates.map((t) => (
-          <option key={t.key} value={t.key}>
-            {t.title}
+      <Select
+        label="Subject"
+        value={subjectSlug}
+        onChange={(e) => {
+          const next = e.target.value;
+          setSubjectSlug(next);
+          setTemplateKey(templates.find((t) => t.subject === next)?.key ?? '');
+        }}
+      >
+        {subjectSlugs.map((s) => (
+          <option key={s.slug} value={s.slug}>
+            {s.name}
           </option>
         ))}
       </Select>
+
+      <Select
+        label="Track"
+        value={template?.key ?? ''}
+        onChange={(e) => setTemplateKey(e.target.value)}
+      >
+        {forSubject.map((t) => (
+          <option key={t.key} value={t.key}>
+            {t.track}
+            {t.source === 'curated' ? ' (curated)' : ''}
+          </option>
+        ))}
+      </Select>
+
+      {template && (
+        <p className="text-fg-muted text-xs">
+          {template.weekCount} {template.weekCount === 1 ? 'week' : 'weeks'} · {template.topicCount}{' '}
+          topics
+          {template.source === 'curriculum' && ' · straight from the MBBS curriculum'}
+        </p>
+      )}
+
       <Button
         size="lg"
         fullWidth
         loading={pending}
-        disabled={!subject}
+        disabled={!subject || !template}
         onClick={() =>
           startTransition(async () => {
             const result = await applyRoadmapTemplateAction(
               cohortId,
               memberId,
-              templateKey,
+              template!.key,
               subject!.id,
             );
             if (!result.ok) {

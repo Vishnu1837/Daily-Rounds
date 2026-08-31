@@ -62,6 +62,7 @@ Every seeded student uses the same password. Seed credentials are configurable �
 | **Calendar**      | What was planned and what actually happened, day by day               |
 | **Progress**      | Consistency, heatmap, week-by-week trend, achievements, points ledger |
 | **Leaderboard**   | Where I stand — and five different ways to be recognised              |
+| **Syllabus**      | The whole MBBS course — 19 subjects, searchable down to the node      |
 | **Materials**     | Resources grouped by topic, plus optional knowledge checks            |
 | **Profile**       | My details, my commitment, my account                                 |
 
@@ -201,6 +202,7 @@ src/
     connection.ts         Driver selection (Postgres vs PGlite)
     scripts/              migrate, seed, reset
   lib/
+    curriculum/           The 19-subject MBBS tree (generated) and its lookups
     domain/               Pure business logic — calendar, streak, consistency,
                           points, risk, achievements. No I/O, fully unit-tested.
     auth/                 Password hashing, sessions, route guards
@@ -210,9 +212,10 @@ src/
     scoring.ts            The points ledger and derived-metric writer
     queries/              Read models for pages
     actions/              Server actions (all mutations)
-drizzle/                  Generated SQL migrations
+drizzle/                  SQL migrations
+tools/curriculum/         Source text + scripts that regenerate the curriculum tree
 tests/                    Unit and integration tests
-docs/                     Architecture and deployment notes
+docs/                     Architecture, curriculum and deployment notes
 ```
 
 ---

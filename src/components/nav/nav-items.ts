@@ -5,6 +5,7 @@ export type NavIconName =
   | 'chart'
   | 'trophy'
   | 'book'
+  | 'library'
   | 'check'
   | 'user'
   | 'settings'
@@ -74,6 +75,14 @@ export const STUDENT_NAV: NavItem[] = [
     icon: 'calendar',
     primary: false,
     group: 'Momentum',
+  },
+  {
+    href: '/syllabus',
+    label: 'Syllabus',
+    short: 'Syllabus',
+    icon: 'library',
+    primary: false,
+    group: 'Library',
   },
   {
     href: '/materials',

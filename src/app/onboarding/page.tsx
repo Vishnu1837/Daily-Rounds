@@ -24,7 +24,7 @@ export default async function OnboardingPage() {
       <main id="main" className="relative mx-auto max-w-lg px-4 py-8 sm:py-12">
         <OnboardingWizard
           defaultName={user.fullName}
-          subjects={subjects.map((s) => ({ id: s.id, name: s.name }))}
+          subjects={subjects.map((s) => ({ id: s.id, name: s.name, phaseLabel: s.phaseLabel }))}
         />
       </main>
     </div>

@@ -17,14 +17,14 @@ type Question = { id: string; prompt: string; options: string[] };
 export function QuizScreen({
   quizId,
   title,
-  topicKey,
+  topicLabel,
   questions,
   attemptPoints,
   bonusPoints,
 }: {
   quizId: string;
   title: string;
-  topicKey: string;
+  topicLabel: string | null;
   questions: Question[];
   attemptPoints: number;
   bonusPoints: number;
@@ -157,7 +157,7 @@ export function QuizScreen({
       </Link>
 
       <header className="px-1">
-        <p className="eyebrow">{topicKey}</p>
+        {topicLabel && <p className="eyebrow">{topicLabel}</p>}
         <h1 className="text-fg mt-1.5 text-2xl font-extrabold tracking-tight">{title}</h1>
         <p className="text-fg-muted mt-1.5 text-sm">
           Worth {attemptPoints} XP for attempting, up to {bonusPoints} more for accuracy.

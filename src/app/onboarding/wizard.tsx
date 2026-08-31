@@ -18,7 +18,18 @@ import { cn } from '@/lib/cn';
 import { OBSTACLE_LABELS, obstacleValues } from '@/lib/validation';
 import { completeOnboardingAction } from '@/server/actions/onboarding';
 
-type Subject = { id: string; name: string };
+type Subject = { id: string; name: string; phaseLabel: string };
+
+/** Groups the subject list by MBBS phase, preserving course order within each phase. */
+function byPhase(subjects: Subject[]): { phase: string; subjects: Subject[] }[] {
+  const groups: { phase: string; subjects: Subject[] }[] = [];
+  for (const subject of subjects) {
+    const last = groups[groups.length - 1];
+    if (last && last.phase === subject.phaseLabel) last.subjects.push(subject);
+    else groups.push({ phase: subject.phaseLabel, subjects: [subject] });
+  }
+  return groups;
+}
 
 const STEPS = [
   { key: 'welcome', title: 'Welcome to Daily Rounds' },
@@ -307,10 +318,14 @@ export function OnboardingWizard({
                   error={errors.primarySubjectId}
                 >
                   <option value="">Choose a subject</option>
-                  {subjects.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
+                  {byPhase(subjects).map((group) => (
+                    <optgroup key={group.phase} label={group.phase}>
+                      {group.subjects.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </Select>
                 <Select
@@ -319,13 +334,15 @@ export function OnboardingWizard({
                   onChange={(e) => setSecondarySubjectId(e.target.value)}
                 >
                   <option value="">None</option>
-                  {subjects
-                    .filter((s) => s.id !== primarySubjectId)
-                    .map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
+                  {byPhase(subjects.filter((s) => s.id !== primarySubjectId)).map((group) => (
+                    <optgroup key={group.phase} label={group.phase}>
+                      {group.subjects.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
                 </Select>
                 <TextArea
                   label="What do you want to finish during this cohort?"

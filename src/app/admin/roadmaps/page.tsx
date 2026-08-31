@@ -57,7 +57,7 @@ export default async function RoadmapAdminPage({
       selectedMemberId={selectedMemberId}
       roadmapRows={roadmapRows}
       subjects={subjectRows.map((s) => ({ id: s.id, name: s.name, slug: s.slug }))}
-      templates={templateList().map((t) => ({ key: t.key, title: t.title, subject: t.subject }))}
+      templates={templateList()}
       assignments={assignments}
     />
   );

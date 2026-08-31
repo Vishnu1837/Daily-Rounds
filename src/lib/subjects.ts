@@ -1,17 +1,49 @@
-/** The subject catalogue seeded into every environment. */
-export const SUBJECTS = [
-  { name: 'Pathology', slug: 'pathology', accent: 'violet' },
-  { name: 'Pharmacology', slug: 'pharmacology', accent: 'emerald' },
-  { name: 'Anatomy', slug: 'anatomy', accent: 'rose' },
-  { name: 'Physiology', slug: 'physiology', accent: 'sky' },
-  { name: 'Biochemistry', slug: 'biochemistry', accent: 'amber' },
-  { name: 'Microbiology', slug: 'microbiology', accent: 'teal' },
-  { name: 'Forensic Medicine', slug: 'forensic-medicine', accent: 'slate' },
-  { name: 'Community Medicine', slug: 'community-medicine', accent: 'lime' },
-  { name: 'General Medicine', slug: 'general-medicine', accent: 'indigo' },
-  { name: 'General Surgery', slug: 'general-surgery', accent: 'orange' },
-  { name: 'Obstetrics & Gynaecology', slug: 'obgyn', accent: 'fuchsia' },
-  { name: 'Paediatrics', slug: 'paediatrics', accent: 'cyan' },
-] as const;
+/**
+ * The subject catalogue seeded into every environment.
+ *
+ * Derived from the curriculum tree rather than hand-listed, so the 19 MBBS subjects, their
+ * slugs and their accents can only ever be defined in one place. `phase` lets the UI group
+ * a subject picker the way the course is actually taught.
+ */
+import { CURRICULUM_SUBJECTS, type CurriculumSubjectSlug } from './curriculum';
 
-export type SubjectSlug = (typeof SUBJECTS)[number]['slug'];
+export type SubjectEntry = {
+  name: string;
+  slug: CurriculumSubjectSlug;
+  accent: string;
+  /** Course position, 1–19. Subjects are listed in this order everywhere. */
+  number: number;
+  phaseId: string;
+  phaseLabel: string;
+};
+
+export const SUBJECTS: SubjectEntry[] = CURRICULUM_SUBJECTS.map((s) => ({
+  name: s.name,
+  slug: s.slug,
+  accent: s.accent,
+  number: s.number,
+  phaseId: s.phaseId,
+  phaseLabel: s.phaseLabel,
+}));
+
+export type SubjectSlug = CurriculumSubjectSlug;
+
+/** Subjects grouped by phase, in course order — for pickers and the syllabus browser. */
+export function subjectsByPhase(): {
+  phaseId: string;
+  phaseLabel: string;
+  subjects: SubjectEntry[];
+}[] {
+  const groups: { phaseId: string; phaseLabel: string; subjects: SubjectEntry[] }[] = [];
+  for (const subject of SUBJECTS) {
+    const last = groups[groups.length - 1];
+    if (last && last.phaseId === subject.phaseId) last.subjects.push(subject);
+    else
+      groups.push({
+        phaseId: subject.phaseId,
+        phaseLabel: subject.phaseLabel,
+        subjects: [subject],
+      });
+  }
+  return groups;
+}

@@ -1,23 +1,39 @@
 /**
- * Curated roadmap templates.
+ * Roadmap templates.
  *
- * These are the starting points an admin would otherwise type out by hand. Onboarding
- * applies the matching template automatically so a new student has a real roadmap on day
- * one, and the admin console can apply or replace one at any time. Every topic remains
- * fully editable afterwards.
+ * Two sources feed the same shape:
+ *
+ *  - CURATED — hand-built exam-prep plans, grouped the way a cohort lead would teach them.
+ *  - CURRICULUM — derived from the 19-subject MBBS tree in src/lib/curriculum. One template
+ *    per subject section: each curriculum topic becomes a week, and its detail nodes become
+ *    the week's roadmap topics. That gives day-sized study items straight out of the
+ *    syllabus, for every subject in the course rather than the handful we wrote by hand.
+ *
+ * Onboarding applies the matching template automatically so a new student has a real
+ * roadmap on day one, and the admin console can apply or replace one at any time. Every
+ * topic remains fully editable afterwards.
  */
+import { CURRICULUM_SUBJECTS, buildRef } from './curriculum';
 import type { SubjectSlug } from './subjects';
 
-/** Roadmap templates: a track plus week-by-week topics, as an admin would build them. */
-export const ROADMAP_TEMPLATES: Record<
-  string,
-  {
-    subject: SubjectSlug;
-    title: string;
-    track: string;
-    weeks: { title: string; topics: string[] }[];
-  }
-> = {
+/**
+ * A week of a template.
+ *
+ * `ref` is where the week sits in the curriculum, and every topic in it inherits that ref
+ * when the template is applied. It is what lets a quiz or a reading list written against the
+ * curriculum find the student studying it — see src/lib/curriculum/refs.ts.
+ */
+export type TemplateWeek = { title: string; ref: string | null; topics: string[] };
+
+export type RoadmapTemplate = {
+  subject: SubjectSlug;
+  title: string;
+  track: string;
+  weeks: TemplateWeek[];
+};
+
+/** Curated templates: a track plus week-by-week topics, as an admin would build them. */
+const CURATED_TEMPLATES = {
   general_pathology: {
     subject: 'pathology',
     title: 'Pathology — General Pathology',
@@ -25,6 +41,7 @@ export const ROADMAP_TEMPLATES: Record<
     weeks: [
       {
         title: 'Cell Injury & Inflammation Basics',
+        ref: 'pathology/general-pathology',
         topics: [
           'Cell Injury — reversible and irreversible',
           'Cellular Adaptation — hypertrophy, hyperplasia, atrophy',
@@ -35,6 +52,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Inflammation, Healing & Haemodynamics',
+        ref: 'pathology/general-pathology',
         topics: [
           'Acute Inflammation — vascular and cellular events',
           'Chemical Mediators of Inflammation',
@@ -45,6 +63,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Thrombosis, Shock & Immunopathology',
+        ref: 'pathology/general-pathology',
         topics: [
           'Thrombosis — Virchow triad',
           'Embolism and Infarction',
@@ -55,6 +74,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Neoplasia & Genetics',
+        ref: 'pathology/general-pathology/neoplasia',
         topics: [
           'Neoplasia — nomenclature and characteristics',
           'Carcinogenesis — oncogenes and tumour suppressors',
@@ -72,6 +92,7 @@ export const ROADMAP_TEMPLATES: Record<
     weeks: [
       {
         title: 'Cardiovascular & Respiratory',
+        ref: 'pathology/systemic-pathology',
         topics: [
           'Atherosclerosis and Ischaemic Heart Disease',
           'Rheumatic Heart Disease',
@@ -82,6 +103,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Haematology',
+        ref: 'pathology/hematology',
         topics: [
           'Iron Deficiency Anaemia',
           'Megaloblastic Anaemia',
@@ -92,6 +114,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'GIT, Liver & Renal',
+        ref: 'pathology/systemic-pathology',
         topics: [
           'Peptic Ulcer Disease',
           'Cirrhosis and portal hypertension',
@@ -102,6 +125,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Endocrine & Nervous System',
+        ref: 'pathology/systemic-pathology',
         topics: [
           'Diabetes Mellitus — pathogenesis and complications',
           'Thyroid Disorders',
@@ -119,6 +143,7 @@ export const ROADMAP_TEMPLATES: Record<
     weeks: [
       {
         title: 'General Pharmacology',
+        ref: 'pharmacology/general-pharmacology',
         topics: [
           'Pharmacokinetics — absorption and distribution',
           'Drug Metabolism and Excretion',
@@ -129,6 +154,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Cholinergic & Adrenergic Systems',
+        ref: 'pharmacology/autonomic-nervous-system',
         topics: [
           'Cholinergic Transmission',
           'Anticholinesterases and organophosphate poisoning',
@@ -139,6 +165,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'CNS Pharmacology',
+        ref: 'pharmacology/cns',
         topics: [
           'Sedative Hypnotics',
           'Antiepileptic Drugs',
@@ -149,6 +176,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Chemotherapy',
+        ref: 'pharmacology/antimicrobial-chemotherapy',
         topics: [
           'Beta-lactam Antibiotics',
           'Antitubercular Drugs',
@@ -166,6 +194,7 @@ export const ROADMAP_TEMPLATES: Record<
     weeks: [
       {
         title: 'Pectoral Region & Axilla',
+        ref: 'anatomy/upper-limb/pectoral-region-and-axilla',
         topics: [
           'Pectoral Region and breast',
           'Axilla — boundaries and contents',
@@ -176,6 +205,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Arm, Forearm & Hand',
+        ref: 'anatomy/upper-limb',
         topics: [
           'Arm — flexor and extensor compartments',
           'Cubital Fossa',
@@ -186,6 +216,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Thoracic Wall & Mediastinum',
+        ref: 'anatomy/thorax',
         topics: [
           'Thoracic Cage and intercostal spaces',
           'Diaphragm',
@@ -196,6 +227,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Embryology & Histology',
+        ref: 'anatomy/histology-genetics-and-applied-anatomy',
         topics: [
           'Development of the Heart',
           'Development of the Limbs',
@@ -213,6 +245,7 @@ export const ROADMAP_TEMPLATES: Record<
     weeks: [
       {
         title: 'Cardiac Physiology',
+        ref: 'physiology/cardiovascular-system',
         topics: [
           'Cardiac Cycle',
           'Cardiac Output and its regulation',
@@ -223,6 +256,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Respiratory Physiology',
+        ref: 'physiology/respiratory-system',
         topics: [
           'Mechanics of Breathing',
           'Lung Volumes and Capacities',
@@ -233,6 +267,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Blood & Body Fluids',
+        ref: 'physiology/blood-and-immunity',
         topics: [
           'Composition of Blood',
           'Haemostasis and coagulation',
@@ -243,6 +278,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Renal & GIT Physiology',
+        ref: 'physiology/renal-physiology',
         topics: [
           'Glomerular Filtration',
           'Tubular Reabsorption and secretion',
@@ -260,6 +296,7 @@ export const ROADMAP_TEMPLATES: Record<
     weeks: [
       {
         title: 'Cardiology',
+        ref: 'general-medicine/cardiovascular-medicine',
         topics: [
           'Approach to Chest Pain',
           'Acute Coronary Syndrome',
@@ -270,6 +307,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Respiratory Medicine',
+        ref: 'general-medicine/respiratory-medicine',
         topics: [
           'Approach to Dyspnoea',
           'Asthma — stepwise management',
@@ -280,6 +318,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Endocrinology & Nephrology',
+        ref: 'general-medicine/endocrinology-and-metabolism',
         topics: [
           'Type 2 Diabetes — management',
           'Diabetic Ketoacidosis',
@@ -290,6 +329,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Neurology & Infectious Disease',
+        ref: 'general-medicine/neurology',
         topics: [
           'Approach to Stroke',
           'Seizure Disorders',
@@ -307,6 +347,7 @@ export const ROADMAP_TEMPLATES: Record<
     weeks: [
       {
         title: 'Normal Pregnancy',
+        ref: 'obgyn/normal-pregnancy-and-antenatal-care',
         topics: [
           'Physiological Changes in Pregnancy',
           'Antenatal Care',
@@ -317,6 +358,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'High-Risk Obstetrics',
+        ref: 'obgyn/high-risk-pregnancy',
         topics: [
           'Hypertensive Disorders of Pregnancy',
           'Antepartum Haemorrhage',
@@ -327,6 +369,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Gynaecology I',
+        ref: 'obgyn/general-gynaecology',
         topics: [
           'Abnormal Uterine Bleeding',
           'Polycystic Ovary Syndrome',
@@ -337,6 +380,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Gynaecology II',
+        ref: 'obgyn/gynaecologic-oncology',
         topics: [
           'Contraception',
           'Cervical Cancer Screening',
@@ -354,6 +398,7 @@ export const ROADMAP_TEMPLATES: Record<
     weeks: [
       {
         title: 'General Microbiology',
+        ref: 'microbiology/general-microbiology-and-infection-control',
         topics: [
           'Bacterial Morphology and staining',
           'Sterilisation and Disinfection',
@@ -364,6 +409,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Gram Positive Cocci & Bacilli',
+        ref: 'microbiology/bacteriology',
         topics: [
           'Staphylococcus',
           'Streptococcus and pneumococcus',
@@ -374,6 +420,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Gram Negative Organisms',
+        ref: 'microbiology/bacteriology',
         topics: [
           'Enterobacteriaceae — an overview',
           'Salmonella and enteric fever',
@@ -384,6 +431,7 @@ export const ROADMAP_TEMPLATES: Record<
       },
       {
         title: 'Mycobacteria, Virology & Immunology',
+        ref: 'microbiology',
         topics: [
           'Mycobacterium tuberculosis',
           'Hepatitis Viruses',
@@ -394,15 +442,91 @@ export const ROADMAP_TEMPLATES: Record<
       },
     ],
   },
+} satisfies Record<string, RoadmapTemplate>;
+
+/**
+ * One template per curriculum section, keyed `<subject-slug>:<section-slug>`.
+ *
+ * Built once at module load — the curriculum tree is static, so there is nothing to
+ * invalidate and no reason to rebuild this per request.
+ */
+const CURRICULUM_TEMPLATES: Record<string, RoadmapTemplate> = Object.fromEntries(
+  CURRICULUM_SUBJECTS.flatMap((subject) =>
+    subject.sections.map((section) => [
+      `${subject.slug}:${section.slug}`,
+      {
+        subject: subject.slug,
+        title: `${subject.name} — ${section.title}`,
+        track: section.title,
+        weeks: section.topics.map((topic) => ({
+          title: topic.title,
+          ref: buildRef(subject.slug, section.slug, topic.slug),
+          // A topic with no detail nodes still deserves a week; it becomes its own item.
+          topics: topic.nodes.length > 0 ? topic.nodes : [topic.title],
+        })),
+      } satisfies RoadmapTemplate,
+    ]),
+  ),
+);
+
+export const ROADMAP_TEMPLATES: Record<string, RoadmapTemplate> = {
+  ...CURATED_TEMPLATES,
+  ...CURRICULUM_TEMPLATES,
 };
 
-export type RoadmapKey = keyof typeof ROADMAP_TEMPLATES;
+/** The curated template keys, which the seed refers to by name. */
+export type RoadmapKey = keyof typeof CURATED_TEMPLATES;
 
-/** The template best suited to a subject, if one exists. */
-export function templateForSubject(slug: string) {
-  return Object.entries(ROADMAP_TEMPLATES).find(([, t]) => t.subject === slug)?.[1] ?? null;
+export type TemplateSource = 'curated' | 'curriculum';
+
+export type TemplateSummary = {
+  key: string;
+  subject: SubjectSlug;
+  title: string;
+  track: string;
+  source: TemplateSource;
+  weekCount: number;
+  topicCount: number;
+};
+
+/**
+ * The template best suited to a subject.
+ *
+ * A curated plan wins when we have one, because it is grouped for an exam rather than for
+ * completeness. Otherwise the subject's first curriculum section is the natural starting
+ * point — it is where the course itself begins.
+ */
+export function templateForSubject(slug: string): RoadmapTemplate | null {
+  const curated = Object.values(CURATED_TEMPLATES).find((t) => t.subject === slug);
+  if (curated) return curated;
+  return Object.values(CURRICULUM_TEMPLATES).find((t) => t.subject === slug) ?? null;
 }
 
-export function templateList() {
-  return Object.entries(ROADMAP_TEMPLATES).map(([key, t]) => ({ key, ...t }));
+function summarise(
+  key: string,
+  template: RoadmapTemplate,
+  source: TemplateSource,
+): TemplateSummary {
+  return {
+    key,
+    subject: template.subject,
+    title: template.title,
+    track: template.track,
+    source,
+    weekCount: template.weeks.length,
+    topicCount: template.weeks.reduce((total, week) => total + week.topics.length, 0),
+  };
+}
+
+/** Curated templates first, then every curriculum section in course order. */
+export function templateList(): TemplateSummary[] {
+  return [
+    ...Object.entries(CURATED_TEMPLATES).map(([key, t]) => summarise(key, t, 'curated')),
+    ...Object.entries(CURRICULUM_TEMPLATES).map(([key, t]) => summarise(key, t, 'curriculum')),
+  ];
+}
+
+/** Templates for one subject, curated first — what the admin picker offers per subject. */
+export function templatesForSubject(slug: string): TemplateSummary[] {
+  return templateList().filter((t) => t.subject === slug);
 }

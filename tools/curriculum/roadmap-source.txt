@@ -1,0 +1,630 @@
+
+MBBS 19-SUBJECT ROADMAP
+Developer Flow-Chart Edition • NMC CBME 2024-aligned undergraduate scope
+PURPOSE: A hierarchical content tree for an MBBS student app. Each arrow represents a child node that can be opened/expanded in the UI.
+NODE MODEL: Phase → Subject → Main Section → Topic → Detailed Topic Nodes. The final nodes are syllabus/navigation labels, not explanatory textbook content.
+REGULATORY BASIS: Revised NMC Competency Based Medical Education (CBME) Curriculum dated 12 September 2024. The four supplied roadmap drafts were used as the starting taxonomy; this edition adds one deeper undergraduate-level node layer.
+How the developer should read this
+ANATOMY → Upper Limb → Pectoral Region & Axilla → Brachial Plexus → Roots / Trunks / Divisions / Cords / Branches
+PHARMACOLOGY → Antimicrobial Chemotherapy → Antibacterials → Penicillins / Cephalosporins / Aminoglycosides / Macrolides / Fluoroquinolones
+MEDICINE → Cardiovascular Medicine → Ischemic Heart Disease → Stable angina / ACS / MI / ECG basics / Initial management principles
+Recommended UI behavior: show only Main Sections on the subject landing page. Tap a section to reveal Topics; tap a Topic to reveal Detailed Topic Nodes.
+
+PHASE I — FIRST PROFESSIONAL MBBS
+01. ANATOMY
+General Anatomy & Embryology
+Anatomy  →  General Anatomy & Embryology  →  Introduction & General Anatomy  →  Anatomical position, planes & axes  →  Terms of relation & movement  →  Bones & classification  →  Joints & classification  →  Muscles & classification  →  Fascia  →  Blood vessels  →  Lymphatic system  →  Nervous system basics
+Anatomy  →  General Anatomy & Embryology  →  General Embryology  →  Gametogenesis  →  Fertilization  →  Cleavage & blastocyst  →  Implantation  →  Bilaminar germ disc  →  Gastrulation  →  Trilaminar germ disc  →  Notochord  →  Neurulation  →  Embryonic folding  →  Placenta  →  Fetal membranes  →  Umbilical cord  →  Twinning  →  Teratology basics
+Upper Limb
+Anatomy  →  Upper Limb  →  Pectoral Region & Axilla  →  Pectoral fascia  →  Pectoralis major  →  Pectoralis minor  →  Clavipectoral fascia  →  Breast  →  Axilla — boundaries  →  Axilla — contents  →  Axillary artery  →  Axillary vein  →  Axillary lymph nodes  →  Brachial plexus — roots  →  Brachial plexus — trunks  →  Brachial plexus — divisions  →  Brachial plexus — cords  →  Brachial plexus — branches  →  Erb palsy  →  Klumpke palsy
+Anatomy  →  Upper Limb  →  Back & Scapular Region  →  Scapular muscles  →  Trapezius  →  Latissimus dorsi  →  Levator scapulae  →  Rhomboids  →  Scapular anastomosis
+Anatomy  →  Upper Limb  →  Shoulder & Arm  →  Shoulder joint  →  Rotator cuff — SITS muscles  →  Movements of shoulder  →  Deltoid  →  Arm — anterior compartment  →  Arm — posterior compartment  →  Brachial artery  →  Musculocutaneous nerve  →  Radial nerve in arm
+Anatomy  →  Upper Limb  →  Forearm & Elbow  →  Elbow joint  →  Cubital fossa  →  Forearm flexor compartment  →  Forearm extensor compartment  →  Median nerve  →  Ulnar nerve  →  Radial nerve  →  Radial artery  →  Ulnar artery
+Anatomy  →  Upper Limb  →  Wrist & Hand  →  Wrist joint  →  Flexor retinaculum  →  Carpal tunnel  →  Palmar aponeurosis  →  Thenar muscles  →  Hypothenar muscles  →  Lumbricals  →  Interossei  →  Palmar arches  →  Digital nerves  →  Anatomical snuffbox  →  Median nerve injury  →  Ulnar nerve injury  →  Radial nerve injury
+Anatomy  →  Upper Limb  →  Upper Limb Osteology  →  Clavicle  →  Scapula  →  Humerus  →  Radius  →  Ulna  →  Carpal bones  →  Metacarpals  →  Phalanges
+Lower Limb
+Anatomy  →  Lower Limb  →  Gluteal Region & Hip  →  Gluteus maximus  →  Gluteus medius & minimus  →  Piriformis  →  Greater & lesser sciatic foramina  →  Sciatic nerve  →  Superior gluteal nerve  →  Inferior gluteal nerve  →  Hip joint  →  Blood supply of femoral head
+Anatomy  →  Lower Limb  →  Thigh  →  Femoral triangle  →  Femoral sheath  →  Femoral canal  →  Adductor canal  →  Anterior compartment  →  Medial compartment  →  Posterior compartment  →  Femoral nerve  →  Obturator nerve  →  Femoral artery
+Anatomy  →  Lower Limb  →  Knee & Popliteal Fossa  →  Knee joint  →  ACL  →  PCL  →  Medial meniscus  →  Lateral meniscus  →  Collateral ligaments  →  Locking & unlocking  →  Popliteal fossa  →  Popliteal artery
+Anatomy  →  Lower Limb  →  Leg  →  Anterior compartment  →  Lateral compartment  →  Posterior compartment  →  Common fibular nerve  →  Deep fibular nerve  →  Superficial fibular nerve  →  Tibial nerve
+Anatomy  →  Lower Limb  →  Ankle & Foot  →  Ankle joint  →  Talocalcaneal joints  →  Dorsum of foot  →  Sole of foot  →  Plantar aponeurosis  →  Medial plantar nerve  →  Lateral plantar nerve  →  Arches of foot  →  Dorsalis pedis artery
+Anatomy  →  Lower Limb  →  Lower Limb Osteology  →  Hip bone  →  Femur  →  Patella  →  Tibia  →  Fibula  →  Tarsal bones  →  Metatarsals  →  Phalanges
+Thorax
+Anatomy  →  Thorax  →  Thoracic Wall  →  Thoracic cage  →  Typical rib  →  Atypical ribs  →  Sternum  →  Intercostal spaces  →  Intercostal muscles  →  Intercostal nerves  →  Internal thoracic artery  →  Diaphragm
+Anatomy  →  Thorax  →  Mediastinum  →  Superior mediastinum  →  Anterior mediastinum  →  Middle mediastinum  →  Posterior mediastinum  →  Thoracic duct  →  Azygos system  →  Vagus nerves  →  Phrenic nerves
+Anatomy  →  Thorax  →  Heart & Pericardium  →  Fibrous pericardium  →  Serous pericardium  →  Right atrium  →  Right ventricle  →  Left atrium  →  Left ventricle  →  Cardiac valves  →  Coronary arteries  →  Coronary sinus  →  Conducting system  →  Fibrous skeleton of heart
+Anatomy  →  Thorax  →  Lungs & Pleura  →  Pleura  →  Pleural recesses  →  Right lung  →  Left lung  →  Root of lung  →  Hilum  →  Bronchopulmonary segments  →  Pulmonary vessels
+Abdomen & Pelvis
+Anatomy  →  Abdomen & Pelvis  →  Anterior Abdominal Wall  →  Layers  →  Rectus sheath  →  Umbilicus  →  Inguinal ligament  →  Inguinal canal  →  Deep inguinal ring  →  Superficial inguinal ring  →  Hesselbach triangle  →  Inguinal hernia anatomy
+Anatomy  →  Abdomen & Pelvis  →  Peritoneum  →  Greater sac  →  Lesser sac  →  Greater omentum  →  Lesser omentum  →  Mesentery  →  Peritoneal recesses
+Anatomy  →  Abdomen & Pelvis  →  Gastrointestinal Viscera  →  Abdominal esophagus  →  Stomach  →  Duodenum  →  Jejunum  →  Ileum  →  Cecum  →  Appendix  →  Colon  →  Rectum  →  Anal canal
+Anatomy  →  Abdomen & Pelvis  →  Hepatobiliary & Pancreas  →  Liver  →  Segments of liver basics  →  Portal vein  →  Portosystemic anastomoses  →  Gallbladder  →  Extrahepatic biliary apparatus  →  Pancreas  →  Spleen
+Anatomy  →  Abdomen & Pelvis  →  Posterior Abdominal Wall  →  Kidneys  →  Ureters  →  Suprarenal glands  →  Abdominal aorta  →  Inferior vena cava  →  Lumbar plexus  →  Posterior abdominal wall muscles
+Anatomy  →  Abdomen & Pelvis  →  Pelvis  →  Bony pelvis  →  Pelvic diaphragm  →  Pelvic fascia  →  Urinary bladder  →  Male urethra  →  Prostate  →  Seminal vesicles  →  Uterus  →  Uterine tube  →  Ovary  →  Vagina
+Anatomy  →  Abdomen & Pelvis  →  Perineum  →  Perineal body  →  Urogenital triangle  →  Anal triangle  →  Ischioanal fossa  →  Pudendal canal  →  Pudendal nerve
+Head & Neck
+Anatomy  →  Head & Neck  →  Skull  →  Norma verticalis  →  Norma frontalis  →  Norma lateralis  →  Norma occipitalis  →  Cranial fossae  →  Important foramina & transmitted structures  →  Mandible  →  Hyoid
+Anatomy  →  Head & Neck  →  Face & Scalp  →  Scalp layers  →  Facial muscles  →  Facial artery  →  Facial vein  →  Facial nerve  →  Dangerous area of face  →  Trigeminal sensory distribution
+Anatomy  →  Head & Neck  →  Neck  →  Deep cervical fascia  →  Anterior triangle  →  Posterior triangle  →  Carotid triangle  →  Submandibular triangle  →  Muscular triangle  →  Carotid sheath  →  Cervical sympathetic chain
+Anatomy  →  Head & Neck  →  Thyroid & Parathyroid  →  Thyroid gland  →  Arterial supply  →  Recurrent laryngeal nerve relation  →  Parathyroid glands
+Anatomy  →  Head & Neck  →  Oral Cavity  →  Lips & cheeks  →  Palate  →  Tongue  →  Teeth basics  →  Submandibular gland  →  Sublingual gland  →  Parotid gland
+Anatomy  →  Head & Neck  →  Pharynx & Larynx  →  Nasopharynx  →  Oropharynx  →  Laryngopharynx  →  Waldeyer ring  →  Laryngeal cartilages  →  Intrinsic muscles of larynx  →  Vocal cords  →  Recurrent laryngeal nerve
+Anatomy  →  Head & Neck  →  Nose & Paranasal Sinuses  →  Nasal septum  →  Lateral wall of nose  →  Blood supply of nose  →  Maxillary sinus  →  Frontal sinus  →  Ethmoidal air cells  →  Sphenoidal sinus
+Anatomy  →  Head & Neck  →  Orbit & Eye  →  Bony orbit  →  Extraocular muscles  →  Oculomotor nerve  →  Trochlear nerve  →  Abducens nerve  →  Ophthalmic artery  →  Lacrimal apparatus
+Anatomy  →  Head & Neck  →  Ear  →  External ear  →  Tympanic membrane  →  Middle ear  →  Auditory tube  →  Inner ear
+Anatomy  →  Head & Neck  →  Cranial Nerves  →  CN I Olfactory  →  CN II Optic  →  CN III Oculomotor  →  CN IV Trochlear  →  CN V Trigeminal  →  CN VI Abducens  →  CN VII Facial  →  CN VIII Vestibulocochlear  →  CN IX Glossopharyngeal  →  CN X Vagus  →  CN XI Accessory  →  CN XII Hypoglossal
+Neuroanatomy
+Anatomy  →  Neuroanatomy  →  Spinal Cord  →  External features  →  Gray matter  →  White matter  →  Ascending tracts  →  Descending tracts  →  Blood supply
+Anatomy  →  Neuroanatomy  →  Brainstem  →  Medulla  →  Pons  →  Midbrain  →  Cranial nerve nuclei overview
+Anatomy  →  Neuroanatomy  →  Cerebellum  →  Lobes  →  Deep nuclei  →  Cerebellar peduncles  →  Functional connections
+Anatomy  →  Neuroanatomy  →  Cerebrum  →  Lobes  →  Sulci & gyri  →  Functional cortical areas  →  White matter  →  Corpus callosum  →  Internal capsule  →  Basal ganglia
+Anatomy  →  Neuroanatomy  →  Diencephalon  →  Thalamus  →  Hypothalamus  →  Epithalamus  →  Subthalamus
+Anatomy  →  Neuroanatomy  →  Ventricles & CSF  →  Lateral ventricles  →  Third ventricle  →  Cerebral aqueduct  →  Fourth ventricle  →  CSF circulation
+Anatomy  →  Neuroanatomy  →  Meninges & Venous Sinuses  →  Dura mater  →  Arachnoid  →  Pia mater  →  Dural venous sinuses
+Anatomy  →  Neuroanatomy  →  Blood Supply of Brain  →  Internal carotid system  →  Vertebrobasilar system  →  Circle of Willis  →  Major cerebral arteries  →  Arterial territories
+Histology, Genetics & Applied Anatomy
+Anatomy  →  Histology, Genetics & Applied Anatomy  →  General Histology  →  Epithelium  →  Connective tissue  →  Cartilage  →  Bone  →  Muscle  →  Nervous tissue  →  Blood vessels  →  Lymphoid tissue
+Anatomy  →  Histology, Genetics & Applied Anatomy  →  Systemic Histology  →  Cardiovascular system  →  Respiratory system  →  GIT  →  Liver & pancreas  →  Urinary system  →  Endocrine organs  →  Male reproductive system  →  Female reproductive system  →  Skin  →  Eye & ear
+Anatomy  →  Histology, Genetics & Applied Anatomy  →  Genetics  →  Chromosomes  →  Karyotyping basics  →  Patterns of inheritance  →  Common chromosomal abnormalities
+Anatomy  →  Histology, Genetics & Applied Anatomy  →  Surface & Radiological Anatomy  →  Surface markings  →  Basic X-ray anatomy  →  Basic CT anatomy  →  Basic MRI anatomy
+02. PHYSIOLOGY
+General Physiology
+Physiology  →  General Physiology  →  Cell Physiology  →  Cell membrane  →  Membrane transport  →  Diffusion  →  Osmosis  →  Active transport  →  Resting membrane potential  →  Action potential
+Physiology  →  General Physiology  →  Homeostasis & Body Fluids  →  Homeostasis  →  Feedback systems  →  Total body water  →  ICF  →  ECF  →  Osmolarity
+Blood & Immunity
+Physiology  →  Blood & Immunity  →  RBC & Hemoglobin  →  Erythropoiesis  →  RBC functions  →  Hemoglobin  →  RBC indices  →  ESR  →  Anemia — physiological basis
+Physiology  →  Blood & Immunity  →  WBC & Immunity  →  Leukopoiesis  →  Neutrophils  →  Eosinophils  →  Basophils  →  Monocytes  →  Lymphocytes  →  Innate immunity  →  Adaptive immunity
+Physiology  →  Blood & Immunity  →  Hemostasis  →  Platelets  →  Primary hemostasis  →  Coagulation  →  Fibrinolysis  →  Bleeding & clotting time
+Physiology  →  Blood & Immunity  →  Blood Groups  →  ABO system  →  Rh system  →  Cross matching  →  Transfusion reactions
+Nerve & Muscle
+Physiology  →  Nerve & Muscle  →  Nerve  →  Excitability  →  Action potential  →  Nerve conduction  →  Refractory period  →  Degeneration & regeneration
+Physiology  →  Nerve & Muscle  →  Neuromuscular Junction  →  Acetylcholine  →  End plate potential  →  Neuromuscular transmission  →  Myasthenia gravis correlation
+Physiology  →  Nerve & Muscle  →  Muscle  →  Skeletal muscle  →  Excitation-contraction coupling  →  Sliding filament mechanism  →  Motor unit  →  Smooth muscle  →  Cardiac muscle
+Cardiovascular System
+Physiology  →  Cardiovascular System  →  Heart  →  Cardiac muscle properties  →  Pacemaker potential  →  Conducting system  →  ECG  →  Cardiac cycle  →  Heart sounds  →  Cardiac output
+Physiology  →  Cardiovascular System  →  Circulation  →  Hemodynamics  →  Arterial pulse  →  Blood pressure  →  Microcirculation  →  Venous return  →  Capillary exchange
+Physiology  →  Cardiovascular System  →  Regulation  →  Baroreceptor reflex  →  Chemoreceptor reflex  →  RAAS  →  Local regulation  →  Coronary circulation
+Respiratory System
+Physiology  →  Respiratory System  →  Ventilation  →  Mechanics of breathing  →  Compliance  →  Airway resistance  →  Lung volumes  →  Lung capacities  →  Spirometry  →  Dead space  →  Alveolar ventilation
+Physiology  →  Respiratory System  →  Gas Exchange & Transport  →  Diffusion  →  V/Q relationship  →  Oxygen transport  →  Oxygen dissociation curve  →  Carbon dioxide transport
+Physiology  →  Respiratory System  →  Regulation  →  Respiratory centers  →  Central chemoreceptors  →  Peripheral chemoreceptors  →  Hypoxia  →  High altitude  →  Exercise
+Renal Physiology
+Physiology  →  Renal Physiology  →  Renal Hemodynamics  →  Renal blood flow  →  GFR  →  Filtration fraction  →  Renal clearance
+Physiology  →  Renal Physiology  →  Tubular Functions  →  Proximal tubule  →  Loop of Henle  →  Distal tubule  →  Collecting duct  →  Tubular reabsorption  →  Tubular secretion
+Physiology  →  Renal Physiology  →  Concentration & Dilution  →  Countercurrent mechanism  →  ADH  →  Urine concentration  →  Urine dilution
+Physiology  →  Renal Physiology  →  Fluid, Electrolyte & Acid-Base  →  Sodium balance  →  Potassium balance  →  Water balance  →  Renal acidification  →  Acid-base regulation
+Physiology  →  Renal Physiology  →  Micturition  →  Urinary bladder physiology  →  Micturition reflex
+Gastrointestinal System
+Physiology  →  Gastrointestinal System  →  Motility  →  Mastication  →  Swallowing  →  Esophageal motility  →  Gastric motility  →  Small intestinal motility  →  Colonic motility  →  Defecation
+Physiology  →  Gastrointestinal System  →  Secretions  →  Saliva  →  Gastric secretion  →  Pancreatic secretion  →  Bile  →  Intestinal secretion
+Physiology  →  Gastrointestinal System  →  Digestion & Absorption  →  Carbohydrates  →  Proteins  →  Lipids  →  Vitamins  →  Minerals  →  Water & electrolytes
+Endocrine & Reproductive Physiology
+Physiology  →  Endocrine & Reproductive Physiology  →  General Endocrine  →  Hormone receptors  →  Second messengers  →  Feedback regulation
+Physiology  →  Endocrine & Reproductive Physiology  →  Pituitary  →  Growth hormone  →  Prolactin  →  Posterior pituitary hormones
+Physiology  →  Endocrine & Reproductive Physiology  →  Thyroid & Parathyroid  →  Thyroid hormones  →  Calcitonin  →  PTH  →  Calcium homeostasis
+Physiology  →  Endocrine & Reproductive Physiology  →  Adrenal  →  Cortisol  →  Aldosterone  →  Adrenal androgens  →  Catecholamines
+Physiology  →  Endocrine & Reproductive Physiology  →  Pancreas  →  Insulin  →  Glucagon  →  Blood glucose regulation
+Physiology  →  Endocrine & Reproductive Physiology  →  Male Reproduction  →  Spermatogenesis  →  Testosterone  →  Male sexual function
+Physiology  →  Endocrine & Reproductive Physiology  →  Female Reproduction  →  Oogenesis  →  Menstrual cycle  →  Estrogen  →  Progesterone  →  Pregnancy physiology  →  Lactation
+Central Nervous System & Special Senses
+Physiology  →  Central Nervous System & Special Senses  →  General CNS  →  Synapse  →  Neurotransmitters  →  Sensory receptors  →  Reflexes
+Physiology  →  Central Nervous System & Special Senses  →  Sensory System  →  Somatic sensation  →  Pain  →  Temperature  →  Touch  →  Proprioception
+Physiology  →  Central Nervous System & Special Senses  →  Motor System  →  Spinal reflexes  →  Motor cortex  →  Corticospinal tract  →  Basal ganglia  →  Cerebellum  →  Posture & equilibrium
+Physiology  →  Central Nervous System & Special Senses  →  Higher Functions  →  Cerebral cortex  →  Learning  →  Memory  →  Speech  →  Sleep  →  EEG
+Physiology  →  Central Nervous System & Special Senses  →  Autonomic Nervous System  →  Sympathetic system  →  Parasympathetic system  →  Autonomic reflexes
+Physiology  →  Central Nervous System & Special Senses  →  Vision  →  Optics  →  Accommodation  →  Phototransduction  →  Visual pathway  →  Color vision  →  Visual fields
+Physiology  →  Central Nervous System & Special Senses  →  Hearing & Vestibular  →  Sound conduction  →  Cochlear function  →  Auditory pathway  →  Vestibular apparatus
+Physiology  →  Central Nervous System & Special Senses  →  Taste & Smell  →  Taste  →  Olfaction
+Integrated & Applied Physiology
+Physiology  →  Integrated & Applied Physiology  →  Exercise  →  Cardiovascular responses  →  Respiratory responses  →  Muscle responses
+Physiology  →  Integrated & Applied Physiology  →  Temperature  →  Heat production  →  Heat loss  →  Thermoregulation  →  Fever
+Physiology  →  Integrated & Applied Physiology  →  Environmental Physiology  →  High altitude  →  Deep sea / diving  →  Aviation basics
+Physiology  →  Integrated & Applied Physiology  →  Clinical Practicals  →  Pulse  →  Blood pressure  →  Respiratory examination basics  →  Spirometry  →  ECG basics  →  Hematology practicals
+03. BIOCHEMISTRY
+Biomolecules & Cell
+Biochemistry  →  Biomolecules & Cell  →  Cell & Membrane  →  Cell organelles  →  Cell membrane  →  Membrane transport  →  Extracellular matrix
+Biochemistry  →  Biomolecules & Cell  →  Carbohydrates  →  Monosaccharides  →  Disaccharides  →  Polysaccharides  →  Glycosaminoglycans
+Biochemistry  →  Biomolecules & Cell  →  Amino Acids & Proteins  →  Amino acid classification  →  Protein structure  →  Protein folding  →  Plasma proteins  →  Immunoglobulins
+Biochemistry  →  Biomolecules & Cell  →  Lipids  →  Fatty acids  →  Triacylglycerol  →  Phospholipids  →  Cholesterol  →  Lipoproteins
+Enzymes & Bioenergetics
+Biochemistry  →  Enzymes & Bioenergetics  →  Enzymes  →  Classification  →  Kinetics  →  Km & Vmax  →  Inhibition  →  Isoenzymes  →  Clinical enzymology
+Biochemistry  →  Enzymes & Bioenergetics  →  Bioenergetics  →  High-energy compounds  →  Electron transport chain  →  Oxidative phosphorylation  →  Uncouplers & inhibitors
+Carbohydrate Metabolism
+Biochemistry  →  Carbohydrate Metabolism  →  Core Pathways  →  Glycolysis  →  Pyruvate dehydrogenase  →  TCA cycle  →  Gluconeogenesis  →  Glycogenesis  →  Glycogenolysis  →  HMP shunt
+Biochemistry  →  Carbohydrate Metabolism  →  Clinical Correlations  →  Blood glucose regulation  →  Diabetes mellitus  →  Glycogen storage disorders  →  G6PD deficiency
+Lipid Metabolism
+Biochemistry  →  Lipid Metabolism  →  Fatty Acids  →  Beta oxidation  →  Fatty acid synthesis  →  Essential fatty acids
+Biochemistry  →  Lipid Metabolism  →  Ketone Bodies  →  Ketogenesis  →  Ketolysis  →  Ketoacidosis biochemical basis
+Biochemistry  →  Lipid Metabolism  →  Cholesterol & Lipoproteins  →  Cholesterol synthesis  →  Bile acids  →  Chylomicrons  →  VLDL  →  LDL  →  HDL  →  Dyslipidemia
+Amino Acid & Protein Metabolism
+Biochemistry  →  Amino Acid & Protein Metabolism  →  Nitrogen Metabolism  →  Transamination  →  Deamination  →  Ammonia transport  →  Urea cycle
+Biochemistry  →  Amino Acid & Protein Metabolism  →  Selected Amino Acids  →  Phenylalanine & tyrosine  →  Methionine  →  Tryptophan  →  Branched-chain amino acids
+Biochemistry  →  Amino Acid & Protein Metabolism  →  Inborn Errors  →  Phenylketonuria  →  Alkaptonuria  →  Maple syrup urine disease  →  Homocystinuria
+Heme & Hemoglobin
+Biochemistry  →  Heme & Hemoglobin  →  Heme  →  Heme synthesis  →  Porphyrias  →  Heme degradation  →  Bilirubin metabolism  →  Jaundice
+Biochemistry  →  Heme & Hemoglobin  →  Hemoglobin  →  Hemoglobin structure  →  Hemoglobin variants  →  Hemoglobinopathies  →  Iron metabolism
+Vitamins, Minerals & Nutrition
+Biochemistry  →  Vitamins, Minerals & Nutrition  →  Fat-Soluble Vitamins  →  Vitamin A  →  Vitamin D  →  Vitamin E  →  Vitamin K
+Biochemistry  →  Vitamins, Minerals & Nutrition  →  Water-Soluble Vitamins  →  Thiamine  →  Riboflavin  →  Niacin  →  Pantothenate  →  Pyridoxine  →  Biotin  →  Folate  →  Vitamin B12  →  Vitamin C
+Biochemistry  →  Vitamins, Minerals & Nutrition  →  Minerals  →  Calcium  →  Phosphate  →  Iron  →  Iodine  →  Trace elements
+Biochemistry  →  Vitamins, Minerals & Nutrition  →  Nutrition  →  Energy requirements  →  Balanced diet  →  Protein-energy malnutrition  →  Dietary fiber  →  Nutritional assessment
+Molecular Biology & Genetics
+Biochemistry  →  Molecular Biology & Genetics  →  Nucleotides  →  Purine synthesis  →  Purine degradation  →  Salvage pathway  →  Gout  →  Pyrimidine metabolism
+Biochemistry  →  Molecular Biology & Genetics  →  DNA  →  DNA structure  →  Replication  →  DNA damage  →  DNA repair
+Biochemistry  →  Molecular Biology & Genetics  →  RNA & Protein Synthesis  →  Transcription  →  RNA processing  →  Genetic code  →  Translation  →  Post-translational modification
+Biochemistry  →  Molecular Biology & Genetics  →  Gene Regulation & Mutation  →  Gene expression  →  Mutations  →  Epigenetics basics
+Biochemistry  →  Molecular Biology & Genetics  →  Biotechnology  →  PCR  →  Electrophoresis  →  Blotting basics  →  Recombinant DNA  →  DNA sequencing basics
+Clinical Biochemistry
+Biochemistry  →  Clinical Biochemistry  →  Liver  →  Bilirubin  →  AST/ALT  →  ALP/GGT  →  Albumin  →  Liver function tests
+Biochemistry  →  Clinical Biochemistry  →  Kidney  →  Urea  →  Creatinine  →  eGFR concept  →  Renal function tests
+Biochemistry  →  Clinical Biochemistry  →  Acid-Base & Electrolytes  →  Buffers  →  Metabolic acidosis  →  Metabolic alkalosis  →  Respiratory acidosis  →  Respiratory alkalosis  →  Sodium  →  Potassium
+Biochemistry  →  Clinical Biochemistry  →  Endocrine Biochemistry  →  Thyroid function tests  →  Adrenal function tests  →  Reproductive hormones
+Biochemistry  →  Clinical Biochemistry  →  Other Clinical Topics  →  Tumor markers  →  Free radicals & antioxidants  →  Xenobiotic metabolism  →  Prenatal screening  →  Newborn screening
+Biochemistry  →  Clinical Biochemistry  →  Laboratory Skills  →  Colorimetry  →  Chromatography demonstration  →  Electrophoresis demonstration  →  Urine analysis  →  Glucose estimation  →  Urea estimation  →  Creatinine estimation  →  Protein & albumin estimation
+PHASE II — SECOND PROFESSIONAL MBBS
+04. PATHOLOGY
+General Pathology
+Pathology  →  General Pathology  →  Cell Injury & Adaptation  →  Hypertrophy  →  Hyperplasia  →  Atrophy  →  Metaplasia  →  Reversible cell injury  →  Irreversible cell injury  →  Necrosis  →  Apoptosis  →  Intracellular accumulations  →  Pathologic calcification
+Pathology  →  General Pathology  →  Inflammation  →  Acute inflammation  →  Vascular events  →  Cellular events  →  Chemical mediators  →  Chronic inflammation  →  Granulomatous inflammation
+Pathology  →  General Pathology  →  Healing & Repair  →  Regeneration  →  Scar formation  →  Wound healing  →  Factors affecting healing
+Pathology  →  General Pathology  →  Hemodynamic Disorders  →  Edema  →  Hyperemia  →  Congestion  →  Hemorrhage  →  Thrombosis  →  Embolism  →  Infarction  →  Shock
+Pathology  →  General Pathology  →  Immunopathology  →  Hypersensitivity I  →  Hypersensitivity II  →  Hypersensitivity III  →  Hypersensitivity IV  →  Autoimmunity  →  Immunodeficiency basics  →  Transplant rejection  →  Amyloidosis
+Pathology  →  General Pathology  →  Neoplasia  →  Nomenclature  →  Benign vs malignant  →  Hallmarks basics  →  Carcinogenesis  →  Tumor suppressor genes  →  Oncogenes  →  Invasion  →  Metastasis  →  Grading  →  Staging  →  Tumor markers  →  Paraneoplastic syndromes
+Hematology
+Pathology  →  Hematology  →  Anemias  →  Classification  →  Iron deficiency anemia  →  Megaloblastic anemia  →  Hemolytic anemia  →  Aplastic anemia  →  Hemoglobinopathies basics
+Pathology  →  Hematology  →  WBC Disorders  →  Leukocytosis  →  Leukopenia  →  Acute leukemias  →  Chronic leukemias  →  Myeloproliferative neoplasms basics
+Pathology  →  Hematology  →  Lymphoid Disorders  →  Hodgkin lymphoma  →  Non-Hodgkin lymphoma  →  Plasma cell myeloma
+Pathology  →  Hematology  →  Hemostasis  →  Platelet disorders  →  Coagulation disorders  →  Hemophilia  →  DIC
+Pathology  →  Hematology  →  Blood Bank  →  Blood grouping  →  Cross matching  →  Blood components  →  Transfusion reactions
+Systemic Pathology
+Pathology  →  Systemic Pathology  →  Cardiovascular  →  Atherosclerosis  →  Hypertension vascular changes  →  Ischemic heart disease  →  Myocardial infarction  →  Rheumatic heart disease  →  Infective endocarditis  →  Cardiomyopathies
+Pathology  →  Systemic Pathology  →  Respiratory  →  Pneumonia  →  Tuberculosis  →  COPD  →  Bronchiectasis  →  Interstitial lung disease basics  →  Lung carcinoma
+Pathology  →  Systemic Pathology  →  GIT  →  Esophagitis basics  →  Peptic ulcer  →  Gastritis basics  →  Inflammatory bowel disease  →  Colorectal carcinoma
+Pathology  →  Systemic Pathology  →  Hepatobiliary & Pancreas  →  Viral hepatitis  →  Fatty liver  →  Cirrhosis  →  Hepatocellular carcinoma  →  Gallstones basics  →  Pancreatitis
+Pathology  →  Systemic Pathology  →  Renal  →  Nephritic syndrome  →  Nephrotic syndrome  →  Glomerulonephritis  →  Pyelonephritis  →  Acute kidney injury pathology  →  Chronic kidney disease pathology  →  Renal tumors
+Pathology  →  Systemic Pathology  →  Male Genital  →  Prostatitis basics  →  BPH  →  Prostate carcinoma  →  Testicular tumors basics
+Pathology  →  Systemic Pathology  →  Female Genital  →  Cervicitis basics  →  CIN  →  Cervical carcinoma  →  Endometrial hyperplasia  →  Endometrial carcinoma  →  Ovarian tumors
+Pathology  →  Systemic Pathology  →  Breast  →  Fibrocystic change  →  Fibroadenoma  →  Breast carcinoma
+Pathology  →  Systemic Pathology  →  Endocrine  →  Goiter  →  Thyroiditis  →  Thyroid tumors  →  Diabetes mellitus pathology  →  Adrenal pathology basics
+Pathology  →  Systemic Pathology  →  Bone & Soft Tissue  →  Osteomyelitis  →  Metabolic bone disease basics  →  Bone tumors  →  Soft tissue tumors basics
+Pathology  →  Systemic Pathology  →  CNS  →  Cerebral infarction  →  Intracranial hemorrhage  →  Meningitis pathology basics  →  CNS tumors basics
+Pathology Practicals
+Pathology  →  Pathology Practicals  →  Microscopy  →  General pathology slides  →  Hematology smears  →  Systemic pathology slides
+Pathology  →  Pathology Practicals  →  Gross Specimens  →  Cardiovascular  →  Respiratory  →  GIT  →  Liver  →  Kidney  →  Reproductive  →  Breast  →  Endocrine
+Pathology  →  Pathology Practicals  →  Clinical Pathology  →  Urine examination  →  Body fluids  →  CBC interpretation  →  Peripheral smear  →  Coagulation profile basics
+05. PHARMACOLOGY
+General Pharmacology
+Pharmacology  →  General Pharmacology  →  Pharmacokinetics  →  Routes  →  Absorption  →  Bioavailability  →  Distribution  →  Volume of distribution  →  Metabolism  →  First-pass effect  →  Excretion  →  Clearance  →  Half-life  →  Steady state
+Pharmacology  →  General Pharmacology  →  Pharmacodynamics  →  Receptors  →  Agonists  →  Antagonists  →  Dose-response curve  →  Potency  →  Efficacy  →  Therapeutic index
+Pharmacology  →  General Pharmacology  →  Drug Safety & Rational Use  →  Adverse drug reactions  →  Drug interactions  →  Pharmacovigilance  →  Essential medicines  →  Rational prescribing  →  Fixed-dose combinations
+Autonomic Nervous System
+Pharmacology  →  Autonomic Nervous System  →  Cholinergic Drugs  →  Muscarinic agonists  →  Anticholinesterases  →  Atropine & antimuscarinics  →  Neuromuscular blockers
+Pharmacology  →  Autonomic Nervous System  →  Adrenergic Drugs  →  Adrenaline  →  Noradrenaline  →  Dopamine  →  Beta agonists  →  Alpha blockers  →  Beta blockers
+Pharmacology  →  Autonomic Nervous System  →  ANS Toxicology Link  →  Organophosphate poisoning — pharmacologic management
+Cardiovascular & Renal
+Pharmacology  →  Cardiovascular & Renal  →  Hypertension  →  ACE inhibitors  →  ARBs  →  Calcium channel blockers  →  Beta blockers  →  Alpha blockers  →  Central sympatholytics  →  Vasodilators
+Pharmacology  →  Cardiovascular & Renal  →  Angina & Ischemic Heart Disease  →  Nitrates  →  Beta blockers  →  Calcium channel blockers  →  Antiplatelet drugs
+Pharmacology  →  Cardiovascular & Renal  →  Heart Failure  →  ACEI/ARB/ARNI concept  →  Beta blockers  →  Diuretics  →  Digoxin  →  Vasodilators
+Pharmacology  →  Cardiovascular & Renal  →  Arrhythmias  →  Class I  →  Class II  →  Class III  →  Class IV  →  Adenosine basics
+Pharmacology  →  Cardiovascular & Renal  →  Diuretics  →  Carbonic anhydrase inhibitors  →  Loop diuretics  →  Thiazides  →  Potassium-sparing diuretics  →  Osmotic diuretics
+Pharmacology  →  Cardiovascular & Renal  →  Coagulation  →  Anticoagulants  →  Antiplatelets  →  Thrombolytics  →  Hemostatics
+CNS
+Pharmacology  →  CNS  →  Sedatives & Anxiolytics  →  Benzodiazepines  →  Barbiturates  →  Other hypnotics basics
+Pharmacology  →  CNS  →  Antiepileptics  →  Sodium-channel drugs  →  GABAergic drugs  →  Broad-spectrum agents  →  Status epilepticus drugs
+Pharmacology  →  CNS  →  Psychopharmacology  →  Antipsychotics  →  Antidepressants  →  Mood stabilizers
+Pharmacology  →  CNS  →  Parkinsonism  →  Levodopa  →  Dopamine agonists  →  MAO-B/COMT inhibitors  →  Anticholinergics
+Pharmacology  →  CNS  →  Pain  →  Opioids  →  Opioid antagonists
+Pharmacology  →  CNS  →  Anaesthetic Drugs  →  General anaesthetics  →  Local anaesthetics
+Autacoids & Respiratory
+Pharmacology  →  Autacoids & Respiratory  →  Autacoids  →  Histamine  →  Antihistamines  →  Serotonin basics  →  Prostaglandins basics
+Pharmacology  →  Autacoids & Respiratory  →  NSAIDs  →  Aspirin  →  Paracetamol  →  Nonselective NSAIDs  →  COX-2 inhibitors
+Pharmacology  →  Autacoids & Respiratory  →  Asthma & COPD  →  Beta-2 agonists  →  Antimuscarinics  →  Methylxanthines  →  Inhaled corticosteroids  →  Leukotriene modifiers
+Antimicrobial Chemotherapy
+Pharmacology  →  Antimicrobial Chemotherapy  →  Principles  →  Selective toxicity  →  Bactericidal vs bacteriostatic  →  Antimicrobial resistance  →  Combination therapy  →  Prophylaxis
+Pharmacology  →  Antimicrobial Chemotherapy  →  Antibacterials  →  Penicillins  →  Cephalosporins  →  Carbapenems  →  Aminoglycosides  →  Macrolides  →  Tetracyclines  →  Fluoroquinolones  →  Sulfonamides & trimethoprim  →  Glycopeptides  →  Other antibacterials basics
+Pharmacology  →  Antimicrobial Chemotherapy  →  Antitubercular  →  Isoniazid  →  Rifampicin  →  Pyrazinamide  →  Ethambutol  →  Second-line overview
+Pharmacology  →  Antimicrobial Chemotherapy  →  Antileprosy  →  Dapsone  →  Rifampicin  →  Clofazimine
+Pharmacology  →  Antimicrobial Chemotherapy  →  Antifungal  →  Azoles  →  Amphotericin B  →  Echinocandins basics  →  Other antifungals
+Pharmacology  →  Antimicrobial Chemotherapy  →  Antiviral  →  Anti-herpes  →  Antiretroviral therapy classes  →  Anti-influenza basics  →  Hepatitis antivirals basics
+Pharmacology  →  Antimicrobial Chemotherapy  →  Antiparasitic  →  Antimalarials  →  Anti-amoebic drugs  →  Antihelminthics
+Pharmacology  →  Antimicrobial Chemotherapy  →  Anticancer  →  Alkylating agents  →  Antimetabolites  →  Antitumor antibiotics  →  Microtubule inhibitors  →  Hormonal therapy  →  Targeted therapy basics
+Endocrine & GIT
+Pharmacology  →  Endocrine & GIT  →  Diabetes  →  Insulin  →  Metformin  →  Sulfonylureas  →  Other oral antidiabetics  →  Incretin-based drugs basics
+Pharmacology  →  Endocrine & GIT  →  Thyroid  →  Thyroid hormone  →  Antithyroid drugs
+Pharmacology  →  Endocrine & GIT  →  Corticosteroids  →  Glucocorticoids  →  Mineralocorticoids  →  Adverse effects
+Pharmacology  →  Endocrine & GIT  →  Reproductive  →  Estrogens  →  Progestins  →  Hormonal contraception  →  Uterotonics basics
+Pharmacology  →  Endocrine & GIT  →  GIT  →  Antacids  →  H2 blockers  →  PPIs  →  Antiemetics  →  Prokinetics  →  Laxatives  →  Antidiarrheals
+Clinical Pharmacology & Practicals
+Pharmacology  →  Clinical Pharmacology & Practicals  →  Prescription Skills  →  Prescription format  →  Dose calculation  →  P-drug concept  →  Prescription audit
+Pharmacology  →  Clinical Pharmacology & Practicals  →  Drug Delivery  →  Inhalers  →  Spacers  →  Insulin devices  →  Topical preparations
+Pharmacology  →  Clinical Pharmacology & Practicals  →  Communication & Safety  →  ADR reporting  →  Patient counseling  →  Medication adherence
+06. MICROBIOLOGY
+General Microbiology & Infection Control
+Microbiology  →  General Microbiology & Infection Control  →  Bacterial Structure & Growth  →  Morphology  →  Cell wall  →  Spores  →  Motility  →  Growth curve  →  Culture requirements
+Microbiology  →  General Microbiology & Infection Control  →  Staining  →  Gram stain  →  Acid-fast stain  →  Special stains basics
+Microbiology  →  General Microbiology & Infection Control  →  Sterilization & Disinfection  →  Moist heat  →  Dry heat  →  Filtration  →  Radiation  →  Chemical disinfectants  →  Autoclave
+Microbiology  →  General Microbiology & Infection Control  →  Microbial Genetics  →  Mutation  →  Transformation  →  Transduction  →  Conjugation  →  Antimicrobial resistance genetics
+Microbiology  →  General Microbiology & Infection Control  →  Healthcare-Associated Infection  →  Standard precautions  →  Hand hygiene  →  Biomedical waste  →  Needle-stick injury  →  Hospital infection surveillance basics
+Immunology
+Microbiology  →  Immunology  →  Innate Immunity  →  Barriers  →  Phagocytosis  →  Complement  →  NK cells
+Microbiology  →  Immunology  →  Adaptive Immunity  →  B cells  →  T cells  →  Antibodies  →  Cell-mediated immunity
+Microbiology  →  Immunology  →  Antigen-Antibody Reactions  →  Precipitation  →  Agglutination  →  ELISA principles  →  Immunofluorescence basics
+Microbiology  →  Immunology  →  Hypersensitivity  →  Type I  →  Type II  →  Type III  →  Type IV
+Microbiology  →  Immunology  →  Immunoprophylaxis  →  Vaccines  →  Passive immunization  →  Immunization principles
+Bacteriology
+Microbiology  →  Bacteriology  →  Gram-Positive Cocci  →  Staphylococcus aureus  →  Streptococcus pyogenes  →  Streptococcus pneumoniae  →  Enterococcus
+Microbiology  →  Bacteriology  →  Gram-Negative Cocci  →  Neisseria gonorrhoeae  →  Neisseria meningitidis
+Microbiology  →  Bacteriology  →  Enteric Gram-Negative Bacilli  →  Escherichia coli  →  Klebsiella  →  Salmonella  →  Shigella  →  Proteus
+Microbiology  →  Bacteriology  →  Other Gram-Negative Bacilli  →  Vibrio cholerae  →  Pseudomonas  →  Haemophilus  →  Bordetella basics
+Microbiology  →  Bacteriology  →  Gram-Positive Bacilli  →  Corynebacterium diphtheriae  →  Bacillus  →  Listeria basics
+Microbiology  →  Bacteriology  →  Anaerobes  →  Clostridium tetani  →  Clostridium botulinum  →  Clostridium perfringens  →  C. difficile basics
+Microbiology  →  Bacteriology  →  Mycobacteria  →  Mycobacterium tuberculosis  →  Mycobacterium leprae
+Microbiology  →  Bacteriology  →  Spirochetes & Others  →  Treponema pallidum  →  Leptospira  →  Rickettsial infections basics  →  Chlamydia basics  →  Mycoplasma basics
+Virology
+Microbiology  →  Virology  →  General Virology  →  Viral structure  →  Replication  →  Cultivation  →  Diagnosis
+Microbiology  →  Virology  →  DNA Viruses  →  Herpes viruses  →  Hepatitis B  →  HPV  →  Poxvirus basics
+Microbiology  →  Virology  →  RNA Viruses  →  Influenza  →  Measles  →  Mumps  →  Rabies  →  Polio  →  Dengue  →  Chikungunya  →  Hepatitis A/C/E  →  HIV  →  Coronaviruses basics
+Mycology
+Microbiology  →  Mycology  →  Superficial & Cutaneous  →  Dermatophytes  →  Malassezia basics
+Microbiology  →  Mycology  →  Opportunistic & Systemic  →  Candida  →  Cryptococcus  →  Aspergillus  →  Mucorales  →  Dimorphic fungi basics
+Parasitology
+Microbiology  →  Parasitology  →  Protozoa  →  Entamoeba histolytica  →  Giardia  →  Trichomonas  →  Plasmodium  →  Leishmania  →  Toxoplasma basics
+Microbiology  →  Parasitology  →  Helminths  →  Ascaris  →  Hookworm  →  Enterobius  →  Strongyloides  →  Taenia  →  Echinococcus  →  Filarial worms
+System-Based Diagnostic Microbiology
+Microbiology  →  System-Based Diagnostic Microbiology  →  Bloodstream & CVS  →  Blood culture  →  Sepsis microbiology basics
+Microbiology  →  System-Based Diagnostic Microbiology  →  Respiratory  →  Sputum examination  →  TB diagnosis  →  Respiratory pathogen diagnosis
+Microbiology  →  System-Based Diagnostic Microbiology  →  GIT  →  Stool microscopy  →  Stool culture basics  →  Enteric pathogen diagnosis
+Microbiology  →  System-Based Diagnostic Microbiology  →  Urinary  →  Urine microscopy  →  Urine culture  →  Significant bacteriuria
+Microbiology  →  System-Based Diagnostic Microbiology  →  CNS  →  CSF examination  →  Meningitis pathogen diagnosis
+Microbiology  →  System-Based Diagnostic Microbiology  →  Genital Tract  →  STI specimen collection  →  Syphilis tests  →  HIV testing algorithm basics
+07. FORENSIC MEDICINE & TOXICOLOGY
+Forensic Medicine & Law
+Forensic Medicine & Toxicology  →  Forensic Medicine & Law  →  Legal Procedures  →  Inquest  →  Summons  →  Evidence  →  Dying declaration  →  Dying deposition basics
+Forensic Medicine & Toxicology  →  Forensic Medicine & Law  →  Identification  →  Age  →  Sex  →  Stature  →  Race-related identification concepts  →  Scars & tattoos  →  Fingerprints  →  DNA profiling basics
+Forensic Medicine & Toxicology  →  Forensic Medicine & Law  →  Medical Jurisprudence  →  Consent  →  Confidentiality  →  Medical negligence  →  Professional misconduct  →  Medical records  →  Consumer protection basics
+Thanatology
+Forensic Medicine & Toxicology  →  Thanatology  →  Death  →  Somatic death  →  Molecular death  →  Brain death  →  Cause/mechanism/manner of death
+Forensic Medicine & Toxicology  →  Thanatology  →  Postmortem Changes  →  Algor mortis  →  Livor mortis  →  Rigor mortis  →  Decomposition  →  Adipocere  →  Mummification
+Forensic Medicine & Toxicology  →  Thanatology  →  Autopsy  →  Medicolegal autopsy  →  Objectives  →  Basic procedure  →  Preservation of viscera
+Injuries
+Forensic Medicine & Toxicology  →  Injuries  →  Mechanical Injuries  →  Abrasion  →  Contusion  →  Laceration  →  Incised wound  →  Stab wound  →  Chop wound
+Forensic Medicine & Toxicology  →  Injuries  →  Regional & Special Injuries  →  Head injury basics  →  Defense wounds  →  Fabricated injuries
+Forensic Medicine & Toxicology  →  Injuries  →  Firearm Injuries  →  Entry wound  →  Exit wound  →  Range of fire basics
+Forensic Medicine & Toxicology  →  Injuries  →  Thermal & Electrical  →  Burns  →  Scalds  →  Electrocution  →  Lightning basics
+Asphyxial Deaths
+Forensic Medicine & Toxicology  →  Asphyxial Deaths  →  Asphyxia  →  Hanging  →  Ligature strangulation  →  Manual strangulation  →  Suffocation  →  Drowning
+Sexual & Reproductive Forensics
+Forensic Medicine & Toxicology  →  Sexual & Reproductive Forensics  →  Sexual Offences  →  Examination principles  →  Evidence collection  →  Consent & legal considerations
+Forensic Medicine & Toxicology  →  Sexual & Reproductive Forensics  →  Pregnancy & Delivery  →  Pregnancy diagnosis forensic aspects  →  Delivery forensic aspects  →  Abortion medicolegal aspects basics
+Toxicology
+Forensic Medicine & Toxicology  →  Toxicology  →  General Toxicology  →  Routes  →  Toxidromes basics  →  Decontamination  →  Antidotes  →  Sample preservation
+Forensic Medicine & Toxicology  →  Toxicology  →  Corrosives & Irritants  →  Acids  →  Alkalis  →  Irritant poisons
+Forensic Medicine & Toxicology  →  Toxicology  →  Pesticides  →  Organophosphates  →  Carbamates basics  →  Aluminium phosphide
+Forensic Medicine & Toxicology  →  Toxicology  →  CNS Poisons  →  Alcohol  →  Opioids  →  Sedative-hypnotics basics  →  Deliriants basics
+Forensic Medicine & Toxicology  →  Toxicology  →  Plant Poisons  →  Datura  →  Oleander basics
+Forensic Medicine & Toxicology  →  Toxicology  →  Animal Poisons  →  Snake bite  →  Scorpion sting
+Forensic Medicine & Toxicology  →  Toxicology  →  Common Gases  →  Carbon monoxide  →  Other asphyxiant gases basics
+Documentation & Practicals
+Forensic Medicine & Toxicology  →  Documentation & Practicals  →  Certificates  →  Death certificate  →  Injury certificate  →  Age certificate basics
+Forensic Medicine & Toxicology  →  Documentation & Practicals  →  Reports  →  Medicolegal report  →  Poisoning documentation  →  Sexual offence documentation principles
+PHASE III PART I — THIRD PROFESSIONAL MBBS PART I
+08. COMMUNITY MEDICINE
+Health, Disease & Epidemiology
+Community Medicine  →  Health, Disease & Epidemiology  →  Health & Disease  →  Concept of health  →  Dimensions  →  Determinants  →  Natural history of disease  →  Levels of prevention
+Community Medicine  →  Health, Disease & Epidemiology  →  Epidemiologic Measures  →  Incidence  →  Prevalence  →  Mortality rates  →  Case fatality  →  Association measures basics
+Community Medicine  →  Health, Disease & Epidemiology  →  Study Designs  →  Cross-sectional  →  Case-control  →  Cohort  →  Randomized controlled trial basics
+Community Medicine  →  Health, Disease & Epidemiology  →  Screening  →  Sensitivity  →  Specificity  →  Predictive values  →  Screening criteria
+Community Medicine  →  Health, Disease & Epidemiology  →  Outbreak Investigation  →  Case definition  →  Epidemic curve  →  Attack rate  →  Steps of outbreak investigation
+Biostatistics & Demography
+Community Medicine  →  Biostatistics & Demography  →  Biostatistics  →  Data types  →  Tables & graphs  →  Mean  →  Median  →  Mode  →  Range  →  Variance  →  Standard deviation  →  Normal distribution basics  →  Sampling  →  Tests of significance basics
+Community Medicine  →  Biostatistics & Demography  →  Demography  →  Census  →  Population pyramid  →  Demographic cycle  →  Fertility indicators  →  Mortality indicators  →  Life expectancy
+Communicable Diseases
+Community Medicine  →  Communicable Diseases  →  Respiratory  →  Tuberculosis  →  Diphtheria  →  Pertussis  →  Measles  →  Influenza basics
+Community Medicine  →  Communicable Diseases  →  Vector-Borne  →  Malaria  →  Dengue  →  Chikungunya  →  Filariasis  →  Japanese encephalitis basics
+Community Medicine  →  Communicable Diseases  →  Water/Food-Borne  →  Diarrheal diseases  →  Cholera  →  Typhoid  →  Hepatitis A/E
+Community Medicine  →  Communicable Diseases  →  Zoonoses  →  Rabies  →  Leptospirosis
+Community Medicine  →  Communicable Diseases  →  STI & HIV  →  HIV/AIDS  →  STI control principles
+Non-Communicable Diseases
+Community Medicine  →  Non-Communicable Diseases  →  Major NCDs  →  Hypertension  →  Diabetes  →  Cardiovascular disease  →  Cancer  →  Chronic respiratory disease
+Community Medicine  →  Non-Communicable Diseases  →  Risk Factors  →  Tobacco  →  Alcohol  →  Diet  →  Physical inactivity  →  Obesity
+Maternal, Child & Adolescent Health
+Community Medicine  →  Maternal, Child & Adolescent Health  →  Maternal Health  →  Antenatal care  →  Intranatal care  →  Postnatal care  →  High-risk approach  →  Maternal mortality
+Community Medicine  →  Maternal, Child & Adolescent Health  →  Child Health  →  Growth monitoring  →  Infant mortality  →  Under-five mortality  →  IMNCI basics
+Community Medicine  →  Maternal, Child & Adolescent Health  →  Adolescent Health  →  Adolescent health problems  →  Adolescent health services basics
+Community Medicine  →  Maternal, Child & Adolescent Health  →  Immunization  →  National Immunization Schedule  →  Cold chain  →  Vaccine logistics  →  AEFI basics
+Nutrition
+Community Medicine  →  Nutrition  →  Assessment  →  Nutritional assessment  →  Anthropometry  →  Diet survey basics
+Community Medicine  →  Nutrition  →  Deficiencies  →  Protein-energy malnutrition  →  Iron deficiency anemia  →  Vitamin A deficiency  →  Iodine deficiency disorders
+Community Medicine  →  Nutrition  →  Programs  →  Nutrition programs  →  Supplementation & fortification basics
+Environmental & Occupational Health
+Community Medicine  →  Environmental & Occupational Health  →  Water & Sanitation  →  Safe water  →  Purification  →  Water quality  →  Excreta disposal  →  Sewage basics
+Community Medicine  →  Environmental & Occupational Health  →  Air, Housing & Waste  →  Air pollution  →  Ventilation  →  Housing standards basics  →  Solid waste  →  Biomedical waste
+Community Medicine  →  Environmental & Occupational Health  →  Occupational Health  →  Occupational hazards  →  Pneumoconiosis  →  Lead poisoning basics  →  Ergonomics  →  Occupational prevention
+Health System, Programs & Management
+Community Medicine  →  Health System, Programs & Management  →  Health Care Delivery  →  Subcentre  →  PHC  →  CHC  →  District hospital  →  Referral system
+Community Medicine  →  Health System, Programs & Management  →  National Programs  →  NTEP  →  Vector-borne disease program  →  HIV/AIDS control  →  NCD program  →  National Health Mission  →  Blindness control  →  Mental health program basics
+Community Medicine  →  Health System, Programs & Management  →  Health Planning  →  Health indicators  →  National Health Policy  →  Health planning basics
+Community Medicine  →  Health System, Programs & Management  →  Family Welfare  →  Contraceptive methods  →  Eligible couple  →  Family planning services
+Field & Practical Skills
+Community Medicine  →  Field & Practical Skills  →  Family Study  →  Family folder  →  Socioeconomic assessment  →  Environmental assessment  →  Risk assessment
+Community Medicine  →  Field & Practical Skills  →  Community Skills  →  Health education  →  Survey  →  Home visit  →  Community diagnosis basics
+09. OPHTHALMOLOGY
+Optics, Examination & Refraction
+Ophthalmology  →  Optics, Examination & Refraction  →  Examination  →  Visual acuity  →  Pupils  →  Torchlight examination  →  Slit lamp basics  →  Ophthalmoscopy  →  Intraocular pressure basics
+Ophthalmology  →  Optics, Examination & Refraction  →  Refraction  →  Myopia  →  Hypermetropia  →  Astigmatism  →  Presbyopia  →  Correction principles
+Adnexa & Conjunctiva
+Ophthalmology  →  Adnexa & Conjunctiva  →  Eyelid  →  Blepharitis  →  Stye  →  Chalazion  →  Ptosis basics  →  Entropion  →  Ectropion
+Ophthalmology  →  Adnexa & Conjunctiva  →  Lacrimal  →  Dacryocystitis  →  Lacrimal obstruction basics
+Ophthalmology  →  Adnexa & Conjunctiva  →  Conjunctiva  →  Bacterial conjunctivitis  →  Viral conjunctivitis  →  Allergic conjunctivitis  →  Trachoma basics  →  Pterygium
+Cornea, Sclera & Uvea
+Ophthalmology  →  Cornea, Sclera & Uvea  →  Cornea  →  Keratitis  →  Corneal ulcer  →  Corneal opacity  →  Keratoconus basics
+Ophthalmology  →  Cornea, Sclera & Uvea  →  Sclera  →  Episcleritis basics  →  Scleritis basics
+Ophthalmology  →  Cornea, Sclera & Uvea  →  Uvea  →  Anterior uveitis  →  Posterior uveitis basics
+Lens & Glaucoma
+Ophthalmology  →  Lens & Glaucoma  →  Lens  →  Cataract — types  →  Clinical features  →  Complications basics  →  Principles of cataract surgery
+Ophthalmology  →  Lens & Glaucoma  →  Glaucoma  →  Primary open-angle glaucoma  →  Angle-closure glaucoma  →  Congenital glaucoma basics  →  Tonometry  →  Visual fields basics
+Retina & Optic Nerve
+Ophthalmology  →  Retina & Optic Nerve  →  Retina  →  Diabetic retinopathy  →  Hypertensive retinopathy  →  Retinal detachment  →  Retinal vascular occlusion basics  →  Macular disorders basics
+Ophthalmology  →  Retina & Optic Nerve  →  Optic Nerve  →  Optic neuritis basics  →  Papilledema basics  →  Optic atrophy basics
+Squint, Neuro-ophthalmology & Trauma
+Ophthalmology  →  Squint, Neuro-ophthalmology & Trauma  →  Squint  →  Concomitant squint basics  →  Paralytic squint basics  →  Cover tests basics
+Ophthalmology  →  Squint, Neuro-ophthalmology & Trauma  →  Neuro-ophthalmology  →  Pupillary abnormalities  →  Visual pathway lesions  →  Field defects basics
+Ophthalmology  →  Squint, Neuro-ophthalmology & Trauma  →  Trauma  →  Chemical injury  →  Blunt trauma  →  Penetrating injury basics  →  Ocular foreign body basics
+Community Ophthalmology & Skills
+Ophthalmology  →  Community Ophthalmology & Skills  →  Blindness  →  Avoidable blindness  →  Cataract blindness  →  Refractive error  →  National blindness control program
+Ophthalmology  →  Community Ophthalmology & Skills  →  Skills  →  Visual acuity  →  Torch exam  →  Direct ophthalmoscopy  →  Eye first aid
+10. ENT / OTORHINOLARYNGOLOGY
+Ear
+Ent / Otorhinolaryngology  →  Ear  →  Clinical Anatomy & Examination  →  External ear  →  Tympanic membrane  →  Middle ear  →  Inner ear  →  Otoscopy
+Ent / Otorhinolaryngology  →  Ear  →  External Ear  →  Wax  →  Otitis externa  →  Foreign body
+Ent / Otorhinolaryngology  →  Ear  →  Middle Ear  →  Acute otitis media  →  Otitis media with effusion basics  →  Chronic suppurative otitis media  →  Complications of otitis media
+Ent / Otorhinolaryngology  →  Ear  →  Inner Ear  →  Sensorineural hearing loss  →  Vertigo  →  Ménière disease basics
+Ent / Otorhinolaryngology  →  Ear  →  Hearing  →  Rinne test  →  Weber test  →  Pure-tone audiometry basics  →  Conductive vs sensorineural loss
+Nose & Paranasal Sinuses
+Ent / Otorhinolaryngology  →  Nose & Paranasal Sinuses  →  Nose  →  Deviated nasal septum  →  Allergic rhinitis  →  Epistaxis  →  Nasal polyp  →  Foreign body
+Ent / Otorhinolaryngology  →  Nose & Paranasal Sinuses  →  Sinuses  →  Acute sinusitis  →  Chronic rhinosinusitis  →  Complications basics
+Pharynx & Oral Cavity
+Ent / Otorhinolaryngology  →  Pharynx & Oral Cavity  →  Tonsil & Adenoid  →  Acute tonsillitis  →  Chronic tonsillitis  →  Peritonsillar abscess  →  Adenoid hypertrophy
+Ent / Otorhinolaryngology  →  Pharynx & Oral Cavity  →  Pharynx  →  Pharyngitis  →  Dysphagia approach basics
+Larynx & Airway
+Ent / Otorhinolaryngology  →  Larynx & Airway  →  Larynx  →  Acute laryngitis  →  Chronic hoarseness approach  →  Vocal cord palsy basics
+Ent / Otorhinolaryngology  →  Larynx & Airway  →  Airway  →  Stridor  →  Foreign body aspiration  →  Tracheostomy principles basics
+Head & Neck
+Ent / Otorhinolaryngology  →  Head & Neck  →  Neck Swelling  →  Lymph nodes  →  Thyroid-related swelling cross-link  →  Congenital neck swelling basics
+Ent / Otorhinolaryngology  →  Head & Neck  →  Malignancy  →  Oral cancer red flags  →  Laryngeal cancer red flags  →  Nasopharyngeal malignancy basics
+ENT Clinical Skills
+Ent / Otorhinolaryngology  →  ENT Clinical Skills  →  Examination  →  Ear examination  →  Nasal examination  →  Oral cavity examination  →  Throat examination  →  Neck examination  →  Tuning fork tests
+PHASE III PART II — FINAL PROFESSIONAL MBBS
+11. GENERAL MEDICINE
+Clinical Methods & Emergency Approach
+General Medicine  →  Clinical Methods & Emergency Approach  →  Clinical Methods  →  History taking  →  General examination  →  Vitals  →  Pallor  →  Icterus  →  Cyanosis  →  Clubbing  →  Lymphadenopathy  →  Edema
+General Medicine  →  Clinical Methods & Emergency Approach  →  Common Presentations  →  Fever  →  Chest pain  →  Breathlessness  →  Cough  →  Palpitations  →  Syncope  →  Edema  →  Jaundice  →  Altered sensorium
+General Medicine  →  Clinical Methods & Emergency Approach  →  Emergency Basics  →  ABCDE approach  →  Shock recognition  →  Sepsis recognition  →  Basic resuscitation principles
+Cardiovascular Medicine
+General Medicine  →  Cardiovascular Medicine  →  Ischemic Heart Disease  →  Stable angina  →  Acute coronary syndrome  →  Myocardial infarction  →  ECG basics  →  Initial management principles
+General Medicine  →  Cardiovascular Medicine  →  Heart Failure  →  Left heart failure  →  Right heart failure  →  Acute pulmonary edema basics
+General Medicine  →  Cardiovascular Medicine  →  Hypertension  →  Primary hypertension  →  Secondary causes basics  →  Hypertensive emergency basics
+General Medicine  →  Cardiovascular Medicine  →  Valvular Disease  →  Mitral stenosis  →  Mitral regurgitation  →  Aortic stenosis  →  Aortic regurgitation  →  Rheumatic heart disease
+General Medicine  →  Cardiovascular Medicine  →  Arrhythmias  →  Atrial fibrillation  →  SVT basics  →  Bradyarrhythmia basics  →  Ventricular arrhythmia recognition basics
+Respiratory Medicine
+General Medicine  →  Respiratory Medicine  →  Airway Disease  →  Bronchial asthma  →  COPD
+General Medicine  →  Respiratory Medicine  →  Infections  →  Community-acquired pneumonia  →  Pulmonary tuberculosis
+General Medicine  →  Respiratory Medicine  →  Pleural Disease  →  Pleural effusion  →  Pneumothorax
+General Medicine  →  Respiratory Medicine  →  Other  →  Respiratory failure basics  →  Hemoptysis approach  →  Lung malignancy red flags basics
+Gastroenterology & Hepatology
+General Medicine  →  Gastroenterology & Hepatology  →  Upper GI  →  GERD  →  Peptic ulcer disease  →  Upper GI bleed
+General Medicine  →  Gastroenterology & Hepatology  →  Intestinal  →  Acute diarrhea  →  Chronic diarrhea  →  Malabsorption basics  →  Inflammatory bowel disease basics
+General Medicine  →  Gastroenterology & Hepatology  →  Liver  →  Jaundice  →  Viral hepatitis  →  Cirrhosis  →  Portal hypertension  →  Hepatic encephalopathy basics
+Renal & Electrolytes
+General Medicine  →  Renal & Electrolytes  →  Kidney Disease  →  Acute kidney injury  →  Chronic kidney disease  →  Nephrotic syndrome  →  Nephritic syndrome basics
+General Medicine  →  Renal & Electrolytes  →  Urinary  →  Urinary tract infection
+General Medicine  →  Renal & Electrolytes  →  Electrolytes & Acid-Base  →  Hyponatremia  →  Hypernatremia  →  Hypokalemia  →  Hyperkalemia  →  Acid-base disorders basics
+Endocrinology & Metabolism
+General Medicine  →  Endocrinology & Metabolism  →  Diabetes  →  Diagnosis  →  Type 1  →  Type 2  →  Hypoglycemia  →  DKA  →  Chronic complications
+General Medicine  →  Endocrinology & Metabolism  →  Thyroid  →  Hypothyroidism  →  Hyperthyroidism  →  Thyroid function interpretation basics
+General Medicine  →  Endocrinology & Metabolism  →  Other Endocrine  →  Adrenal disorders basics  →  Pituitary disorders basics  →  Calcium disorders basics
+Hematology & Oncology
+General Medicine  →  Hematology & Oncology  →  Anemia  →  Microcytic anemia  →  Macrocytic anemia  →  Hemolytic anemia  →  Anemia of chronic disease basics
+General Medicine  →  Hematology & Oncology  →  Blood Malignancy  →  Leukemia recognition basics  →  Lymphoma recognition basics
+General Medicine  →  Hematology & Oncology  →  Bleeding  →  Thrombocytopenia  →  Coagulation disorder approach basics
+General Medicine  →  Hematology & Oncology  →  Oncology  →  Cancer warning signs  →  Common malignancies overview  →  Oncologic emergencies basics
+Infectious & Tropical Medicine
+General Medicine  →  Infectious & Tropical Medicine  →  Fever  →  Acute febrile illness  →  Fever of unknown origin basics  →  Sepsis
+General Medicine  →  Infectious & Tropical Medicine  →  Tropical  →  Malaria  →  Dengue  →  Typhoid  →  Leptospirosis  →  Scrub typhus basics
+General Medicine  →  Infectious & Tropical Medicine  →  HIV  →  HIV diagnosis basics  →  Opportunistic infections  →  ART principles basics
+Neurology
+General Medicine  →  Neurology  →  Cerebrovascular  →  Ischemic stroke  →  Hemorrhagic stroke  →  TIA basics
+General Medicine  →  Neurology  →  Seizures  →  Generalized seizures  →  Focal seizures  →  Status epilepticus basics
+General Medicine  →  Neurology  →  CNS Infection  →  Meningitis  →  Encephalitis
+General Medicine  →  Neurology  →  Other  →  Headache approach  →  Peripheral neuropathy basics  →  Movement disorder basics
+Rheumatology, Toxicology & Miscellaneous
+General Medicine  →  Rheumatology, Toxicology & Miscellaneous  →  Rheumatology  →  Rheumatoid arthritis  →  SLE  →  Spondyloarthritis basics
+General Medicine  →  Rheumatology, Toxicology & Miscellaneous  →  Poisoning  →  Organophosphate poisoning  →  Snake bite  →  Common poisoning approach
+General Medicine  →  Rheumatology, Toxicology & Miscellaneous  →  Nutrition  →  Common vitamin deficiencies  →  Malnutrition basics
+Medicine Clinical Skills
+General Medicine  →  Medicine Clinical Skills  →  System Examination  →  CVS examination  →  Respiratory examination  →  Abdominal examination  →  Neurological examination
+General Medicine  →  Medicine Clinical Skills  →  Interpretation  →  ECG basics  →  Chest X-ray basics  →  ABG basics  →  Common lab interpretation
+12. GENERAL SURGERY
+Principles of Surgery
+General Surgery  →  Principles of Surgery  →  Perioperative Care  →  Preoperative assessment  →  Surgical risk basics  →  Postoperative care  →  Postoperative complications
+General Surgery  →  Principles of Surgery  →  Wounds & Infection  →  Wound classification  →  Wound healing  →  Surgical site infection  →  Abscess  →  Tetanus prophylaxis basics
+General Surgery  →  Principles of Surgery  →  Fluids, Blood & Nutrition  →  Fluid therapy  →  Electrolytes  →  Blood transfusion  →  Surgical nutrition basics
+General Surgery  →  Principles of Surgery  →  Shock  →  Hypovolemic shock  →  Septic shock basics  →  Initial management
+Trauma
+General Surgery  →  Trauma  →  Initial Trauma Care  →  Primary survey  →  Secondary survey  →  Airway  →  Breathing  →  Circulation
+General Surgery  →  Trauma  →  Head & Chest Trauma  →  Head injury basics  →  Pneumothorax  →  Hemothorax basics
+General Surgery  →  Trauma  →  Abdominal Trauma  →  Blunt abdominal trauma basics  →  Penetrating trauma basics
+Gastrointestinal Surgery
+General Surgery  →  Gastrointestinal Surgery  →  Esophagus & Stomach  →  Dysphagia surgical approach basics  →  Peptic ulcer complications  →  Gastric malignancy basics
+General Surgery  →  Gastrointestinal Surgery  →  Small & Large Bowel  →  Intestinal obstruction  →  Perforation peritonitis basics  →  Appendicitis  →  Colorectal malignancy basics
+General Surgery  →  Gastrointestinal Surgery  →  Hernias  →  Inguinal hernia  →  Femoral hernia  →  Umbilical hernia  →  Incisional hernia  →  Obstruction & strangulation
+General Surgery  →  Gastrointestinal Surgery  →  Anorectal  →  Hemorrhoids  →  Anal fissure  →  Fistula-in-ano
+Hepatobiliary & Pancreas
+General Surgery  →  Hepatobiliary & Pancreas  →  Biliary  →  Gallstones  →  Acute cholecystitis  →  Obstructive jaundice basics
+General Surgery  →  Hepatobiliary & Pancreas  →  Pancreas  →  Acute pancreatitis  →  Pancreatic malignancy basics
+Breast & Endocrine Surgery
+General Surgery  →  Breast & Endocrine Surgery  →  Breast  →  Breast lump approach  →  Fibroadenoma  →  Breast abscess  →  Breast carcinoma
+General Surgery  →  Breast & Endocrine Surgery  →  Thyroid  →  Goiter  →  Solitary thyroid nodule  →  Thyroid malignancy basics  →  Thyroidectomy complications basics
+Urology
+General Surgery  →  Urology  →  Urinary Stones  →  Renal calculus  →  Ureteric calculus
+General Surgery  →  Urology  →  Obstruction  →  BPH  →  Acute urinary retention  →  Chronic retention basics
+General Surgery  →  Urology  →  Other  →  Hematuria approach basics  →  Urologic malignancy red flags basics
+Vascular & Soft Tissue
+General Surgery  →  Vascular & Soft Tissue  →  Vascular  →  Varicose veins  →  DVT  →  Peripheral arterial disease basics
+General Surgery  →  Vascular & Soft Tissue  →  Skin & Soft Tissue  →  Lipoma  →  Epidermoid/sebaceous cyst  →  Abscess  →  Ulcer examination
+Surgical Oncology & Skills
+General Surgery  →  Surgical Oncology & Skills  →  Oncology  →  Biopsy principles  →  Staging principles  →  Surgical margins basics
+General Surgery  →  Surgical Oncology & Skills  →  Clinical Skills  →  Lump examination  →  Ulcer examination  →  Hernia examination  →  Breast examination  →  Thyroid examination  →  Suturing  →  Aseptic technique
+13. OBSTETRICS & GYNAECOLOGY
+Normal Pregnancy & Antenatal Care
+Obstetrics & Gynaecology  →  Normal Pregnancy & Antenatal Care  →  Pregnancy Physiology  →  Maternal physiological changes  →  Placental functions  →  Fetal growth basics
+Obstetrics & Gynaecology  →  Normal Pregnancy & Antenatal Care  →  Antenatal Care  →  Booking visit  →  Antenatal examination  →  Routine investigations  →  Gestational age  →  EDD  →  Fetal surveillance basics
+Normal & Abnormal Labour
+Obstetrics & Gynaecology  →  Normal & Abnormal Labour  →  Normal Labour  →  Onset  →  Stages  →  Mechanism of labour basics  →  Partograph  →  Conduct of normal labour
+Obstetrics & Gynaecology  →  Normal & Abnormal Labour  →  Abnormal Labour  →  Prolonged labour  →  Obstructed labour basics  →  Malpresentation  →  Malposition basics
+Obstetrics & Gynaecology  →  Normal & Abnormal Labour  →  Operative Obstetrics  →  Cesarean section indications  →  Forceps basics  →  Vacuum basics
+High-Risk Pregnancy
+Obstetrics & Gynaecology  →  High-Risk Pregnancy  →  Hypertensive Disorders  →  Gestational hypertension  →  Preeclampsia  →  Severe preeclampsia  →  Eclampsia
+Obstetrics & Gynaecology  →  High-Risk Pregnancy  →  Hemorrhage  →  Placenta previa  →  Placental abruption  →  Postpartum hemorrhage
+Obstetrics & Gynaecology  →  High-Risk Pregnancy  →  Medical Disorders  →  Gestational diabetes  →  Anemia in pregnancy  →  Heart disease in pregnancy basics
+Obstetrics & Gynaecology  →  High-Risk Pregnancy  →  Other  →  Multiple pregnancy basics  →  Preterm labour basics  →  PROM basics  →  Fetal growth restriction basics
+Puerperium & Newborn
+Obstetrics & Gynaecology  →  Puerperium & Newborn  →  Puerperium  →  Normal puerperium  →  Puerperal sepsis basics  →  Lactation
+Obstetrics & Gynaecology  →  Puerperium & Newborn  →  Newborn  →  Immediate newborn care  →  APGAR  →  Neonatal resuscitation basics
+General Gynaecology
+Obstetrics & Gynaecology  →  General Gynaecology  →  Menstrual Disorders  →  Amenorrhea basics  →  Abnormal uterine bleeding  →  Dysmenorrhea basics
+Obstetrics & Gynaecology  →  General Gynaecology  →  Infections  →  PID  →  Vaginal discharge approach basics
+Obstetrics & Gynaecology  →  General Gynaecology  →  Benign Disorders  →  Fibroid uterus  →  Endometriosis basics  →  Ovarian cysts
+Gynaecologic Oncology
+Obstetrics & Gynaecology  →  Gynaecologic Oncology  →  Cervix  →  Cervical cancer risk factors  →  Screening  →  Clinical features  →  Management principles basics
+Obstetrics & Gynaecology  →  Gynaecologic Oncology  →  Endometrium & Ovary  →  Endometrial cancer basics  →  Ovarian tumors basics
+Reproductive Medicine & Family Planning
+Obstetrics & Gynaecology  →  Reproductive Medicine & Family Planning  →  Infertility  →  Male factor basics  →  Female factor basics  →  Basic evaluation
+Obstetrics & Gynaecology  →  Reproductive Medicine & Family Planning  →  Contraception  →  Barrier methods  →  Combined pills  →  Progestin-only methods  →  IUCD  →  Emergency contraception  →  Sterilization
+OBG Clinical Skills
+Obstetrics & Gynaecology  →  OBG Clinical Skills  →  Obstetric  →  Antenatal examination  →  Fundal height  →  Fetal lie & presentation  →  Fetal heart rate  →  Partograph
+Obstetrics & Gynaecology  →  OBG Clinical Skills  →  Gynaecology  →  Pelvic examination principles  →  Speculum examination principles  →  Pap smear basics
+14. PEDIATRICS
+Growth & Development
+Pediatrics  →  Growth & Development  →  Growth  →  Weight  →  Length/height  →  Head circumference  →  Growth charts  →  Growth faltering
+Pediatrics  →  Growth & Development  →  Development  →  Gross motor  →  Fine motor  →  Language  →  Social milestones  →  Developmental delay basics
+Neonatology
+Pediatrics  →  Neonatology  →  Normal Newborn  →  Immediate care  →  APGAR  →  Thermal care  →  Breastfeeding initiation
+Pediatrics  →  Neonatology  →  Common Problems  →  Prematurity  →  Low birth weight  →  Neonatal jaundice  →  Neonatal sepsis  →  Birth asphyxia basics
+Nutrition
+Pediatrics  →  Nutrition  →  Feeding  →  Exclusive breastfeeding  →  Complementary feeding  →  IYCF principles
+Pediatrics  →  Nutrition  →  Malnutrition  →  SAM  →  MAM basics  →  Micronutrient deficiencies
+Immunization & Infections
+Pediatrics  →  Immunization & Infections  →  Immunization  →  National Immunization Schedule  →  Catch-up principles basics  →  AEFI basics
+Pediatrics  →  Immunization & Infections  →  Common Infections  →  ARI  →  Pneumonia  →  Diarrhea  →  Measles  →  Chickenpox  →  Mumps basics
+Systemic Pediatrics
+Pediatrics  →  Systemic Pediatrics  →  Respiratory  →  Bronchiolitis  →  Pneumonia  →  Childhood asthma
+Pediatrics  →  Systemic Pediatrics  →  Cardiovascular  →  VSD  →  ASD  →  PDA  →  Tetralogy of Fallot basics
+Pediatrics  →  Systemic Pediatrics  →  Renal  →  Nephrotic syndrome  →  UTI  →  Acute glomerulonephritis basics
+Pediatrics  →  Systemic Pediatrics  →  Hematology  →  Nutritional anemia  →  Thalassemia basics  →  Bleeding disorders basics
+Pediatrics  →  Systemic Pediatrics  →  Neurology  →  Febrile seizure  →  Epilepsy basics  →  Cerebral palsy  →  Meningitis basics
+Pediatric Emergencies & Skills
+Pediatrics  →  Pediatric Emergencies & Skills  →  Emergencies  →  Recognition of sick child  →  Dehydration  →  Shock basics  →  Seizure emergency basics
+Pediatrics  →  Pediatric Emergencies & Skills  →  Skills  →  Pediatric history  →  Growth plotting  →  Developmental assessment  →  General pediatric examination
+15. ORTHOPAEDICS
+Fractures & Trauma Principles
+Orthopaedics  →  Fractures & Trauma Principles  →  Fracture Basics  →  Classification  →  Clinical features  →  X-ray principles  →  Fracture healing  →  Closed reduction basics  →  Immobilization basics  →  Open fracture basics
+Orthopaedics  →  Fractures & Trauma Principles  →  Complications  →  Compartment syndrome  →  Fat embolism basics  →  Delayed union  →  Nonunion  →  Malunion
+Regional Trauma
+Orthopaedics  →  Regional Trauma  →  Upper Limb  →  Clavicle fracture  →  Shoulder dislocation  →  Supracondylar humerus fracture  →  Forearm fractures  →  Colles fracture
+Orthopaedics  →  Regional Trauma  →  Lower Limb  →  Neck of femur fracture  →  Shaft femur fracture  →  Tibia fracture  →  Ankle injuries basics
+Orthopaedics  →  Regional Trauma  →  Spine & Pelvis  →  Spinal injury recognition  →  Pelvic fracture basics
+Bone & Joint Infection
+Orthopaedics  →  Bone & Joint Infection  →  Infection  →  Acute osteomyelitis  →  Chronic osteomyelitis  →  Septic arthritis basics  →  Tuberculosis of spine  →  Tuberculosis of joint basics
+Degenerative & Inflammatory Joint Disease
+Orthopaedics  →  Degenerative & Inflammatory Joint Disease  →  Arthritis  →  Osteoarthritis  →  Rheumatoid arthritis orthopedic aspects
+Metabolic, Tumor & Pediatric Orthopaedics
+Orthopaedics  →  Metabolic, Tumor & Pediatric Orthopaedics  →  Metabolic  →  Rickets  →  Osteomalacia  →  Osteoporosis
+Orthopaedics  →  Metabolic, Tumor & Pediatric Orthopaedics  →  Tumors  →  Common benign bone tumors basics  →  Osteosarcoma basics  →  Ewing sarcoma basics  →  Giant cell tumor basics
+Orthopaedics  →  Metabolic, Tumor & Pediatric Orthopaedics  →  Pediatric  →  CTEV  →  Developmental dysplasia of hip  →  Common deformities basics
+Orthopaedic Skills
+Orthopaedics  →  Orthopaedic Skills  →  Examination  →  Gait  →  Joint examination  →  Limb examination  →  Neurovascular status
+Orthopaedics  →  Orthopaedic Skills  →  Imaging  →  Systematic fracture X-ray reading  →  Basic joint X-ray reading
+16. DERMATOLOGY, VENEREOLOGY & LEPROSY
+Approach to Skin Disease
+Dermatology, Venereology & Leprosy  →  Approach to Skin Disease  →  Skin Basics  →  Structure & function  →  History  →  Distribution  →  Primary lesions  →  Secondary lesions
+Infections & Infestations
+Dermatology, Venereology & Leprosy  →  Infections & Infestations  →  Bacterial  →  Impetigo  →  Folliculitis  →  Furuncle basics  →  Cellulitis
+Dermatology, Venereology & Leprosy  →  Infections & Infestations  →  Fungal  →  Dermatophytosis  →  Candidiasis  →  Pityriasis versicolor basics
+Dermatology, Venereology & Leprosy  →  Infections & Infestations  →  Viral  →  Herpes simplex  →  Herpes zoster  →  Warts  →  Molluscum contagiosum
+Dermatology, Venereology & Leprosy  →  Infections & Infestations  →  Infestations  →  Scabies  →  Pediculosis
+Inflammatory Skin Disease
+Dermatology, Venereology & Leprosy  →  Inflammatory Skin Disease  →  Dermatitis  →  Atopic dermatitis basics  →  Contact dermatitis  →  Seborrheic dermatitis basics
+Dermatology, Venereology & Leprosy  →  Inflammatory Skin Disease  →  Papulosquamous  →  Psoriasis  →  Lichen planus basics
+Dermatology, Venereology & Leprosy  →  Inflammatory Skin Disease  →  Allergic  →  Urticaria  →  Drug eruptions  →  Severe cutaneous drug reaction recognition basics
+Pigmentary, Autoimmune & Other
+Dermatology, Venereology & Leprosy  →  Pigmentary, Autoimmune & Other  →  Pigmentary  →  Vitiligo  →  Common hyperpigmentation basics
+Dermatology, Venereology & Leprosy  →  Pigmentary, Autoimmune & Other  →  Vesiculobullous  →  Pemphigus basics  →  Bullous pemphigoid basics
+Dermatology, Venereology & Leprosy  →  Pigmentary, Autoimmune & Other  →  Acne & Hair  →  Acne vulgaris  →  Common alopecia basics
+Leprosy & STIs
+Dermatology, Venereology & Leprosy  →  Leprosy & STIs  →  Leprosy  →  Clinical classification basics  →  Peripheral nerve involvement  →  Reactions basics  →  MDT principles
+Dermatology, Venereology & Leprosy  →  Leprosy & STIs  →  STIs  →  Syphilis  →  Gonorrhea basics  →  Genital herpes  →  Genital warts  →  Syndromic approach basics
+Dermatology Skills
+Dermatology, Venereology & Leprosy  →  Dermatology Skills  →  Skills  →  Describe a skin lesion  →  Skin examination  →  KOH mount basics  →  Tzanck smear basics  →  Sensory examination in leprosy
+17. PSYCHIATRY
+Assessment & Foundations
+Psychiatry  →  Assessment & Foundations  →  Psychiatric Assessment  →  Psychiatric history  →  Mental status examination  →  Risk assessment  →  Basic classification principles
+Mood & Anxiety Disorders
+Psychiatry  →  Mood & Anxiety Disorders  →  Mood  →  Depressive disorder  →  Bipolar disorder  →  Mania
+Psychiatry  →  Mood & Anxiety Disorders  →  Anxiety  →  Generalized anxiety disorder  →  Panic disorder  →  Phobias  →  OCD basics  →  Stress-related disorders basics
+Psychotic Disorders
+Psychiatry  →  Psychotic Disorders  →  Psychosis  →  Schizophrenia  →  Acute psychosis basics  →  Delusions  →  Hallucinations
+Substance Use
+Psychiatry  →  Substance Use  →  Substances  →  Alcohol use disorder  →  Alcohol withdrawal  →  Tobacco dependence basics  →  Opioid use disorder basics  →  Other substances overview
+Organic, Child & Other Disorders
+Psychiatry  →  Organic, Child & Other Disorders  →  Organic  →  Delirium  →  Dementia
+Psychiatry  →  Organic, Child & Other Disorders  →  Somatic/Dissociative  →  Somatic symptom disorders basics  →  Dissociative disorders basics
+Psychiatry  →  Organic, Child & Other Disorders  →  Child  →  Intellectual disability basics  →  Autism spectrum basics  →  ADHD basics
+Psychiatric Emergencies & Community
+Psychiatry  →  Psychiatric Emergencies & Community  →  Emergencies  →  Suicide risk  →  Acute agitation  →  Violence risk basics
+Psychiatry  →  Psychiatric Emergencies & Community  →  Community  →  National Mental Health Programme  →  Basic rehabilitation principles
+Psychiatry Skills
+Psychiatry  →  Psychiatry Skills  →  Skills  →  Mental status examination  →  Suicide risk assessment  →  Communication with psychiatric patient
+18. ANAESTHESIOLOGY
+Preoperative & Basic Principles
+Anaesthesiology  →  Preoperative & Basic Principles  →  Preanaesthetic Assessment  →  History  →  Airway assessment  →  ASA physical status  →  Fasting principles  →  Premedication basics
+Anaesthesiology  →  Preoperative & Basic Principles  →  Relevant Pharmacology  →  IV induction agents  →  Inhalational agents  →  Opioids  →  Muscle relaxants  →  Reversal agents basics
+Airway & General Anaesthesia
+Anaesthesiology  →  Airway & General Anaesthesia  →  Airway  →  Bag-mask ventilation  →  Oropharyngeal airway  →  Laryngoscopy basics  →  Endotracheal intubation principles
+Anaesthesiology  →  Airway & General Anaesthesia  →  General Anaesthesia  →  Induction  →  Maintenance  →  Recovery  →  Common complications basics
+Regional & Local Anaesthesia
+Anaesthesiology  →  Regional & Local Anaesthesia  →  Regional  →  Spinal anaesthesia  →  Epidural anaesthesia  →  Peripheral nerve block concept
+Anaesthesiology  →  Regional & Local Anaesthesia  →  Local  →  Local anaesthetic drugs  →  Local anaesthetic toxicity recognition basics
+Monitoring & Perioperative Care
+Anaesthesiology  →  Monitoring & Perioperative Care  →  Monitoring  →  Pulse oximetry  →  ECG  →  Blood pressure  →  Capnography basics  →  Temperature
+Anaesthesiology  →  Monitoring & Perioperative Care  →  Postoperative  →  Recovery room basics  →  Postoperative nausea/vomiting basics  →  Postoperative pain
+Resuscitation & Critical Care
+Anaesthesiology  →  Resuscitation & Critical Care  →  Life Support  →  BLS  →  CPR  →  AED  →  ALS principles basics
+Anaesthesiology  →  Resuscitation & Critical Care  →  Critical Care  →  Oxygen therapy  →  Airway emergency recognition  →  Shock basics  →  Ventilation basics
+19. RADIODIAGNOSIS
+Imaging Principles & Safety
+Radiodiagnosis  →  Imaging Principles & Safety  →  Modalities  →  Plain X-ray  →  Ultrasound  →  CT  →  MRI
+Radiodiagnosis  →  Imaging Principles & Safety  →  Safety  →  Ionizing radiation  →  Radiation protection  →  Pregnancy considerations  →  Contrast precautions basics
+Chest Imaging
+Radiodiagnosis  →  Chest Imaging  →  Chest X-ray  →  Normal CXR approach  →  Consolidation  →  Pleural effusion  →  Pneumothorax  →  Tuberculosis patterns basics  →  Cardiomegaly basics
+Abdominal Imaging
+Radiodiagnosis  →  Abdominal Imaging  →  X-ray & Ultrasound  →  Bowel obstruction  →  Pneumoperitoneum  →  Gallstones on USG basics  →  Renal stones basics  →  Hepatobiliary ultrasound basics
+Musculoskeletal Imaging
+Radiodiagnosis  →  Musculoskeletal Imaging  →  X-ray  →  Fracture  →  Dislocation  →  Basic bone lesion recognition
+Neuroimaging
+Radiodiagnosis  →  Neuroimaging  →  CT/MRI  →  Ischemic stroke basics  →  Intracranial hemorrhage  →  Head injury basics  →  Mass lesion recognition basics
+Common Clinical Imaging & Skills
+Radiodiagnosis  →  Common Clinical Imaging & Skills  →  Modality Selection  →  Trauma  →  Acute abdomen  →  Stroke  →  Pregnancy basics
+Radiodiagnosis  →  Common Clinical Imaging & Skills  →  Image Reading  →  Systematic X-ray approach  →  Basic CT orientation  →  Basic MRI orientation
+
+Developer Data Model
+Suggested fields per node: node_id | parent_id | phase | subject | level | title | display_order | is_expandable | status.
+Do not store the entire arrow string as one record. Every term separated by an arrow should be represented as a parent/child node so the roadmap can expand progressively.
+Scope Guardrails
+Undergraduate MBBS roadmap only; do not automatically append NEET-PG coaching submodules.
+AETCOM, Foundation Course, Early Clinical Exposure, electives and competency codes should be separate curriculum layers rather than mixed into the subject topic tree.
+Forensic Medicine spans Phase II and Phase III Part I in the NMC curriculum; maintain one canonical tree and expose it in both phases if desired.
+Community Medicine is longitudinally taught but its main roadmap is grouped in Phase III Part I for clean navigation.
+Allied clinical subjects remain independent roadmap trees rather than being hidden inside Medicine or Surgery.
+Regulatory Reference
+National Medical Commission, Undergraduate Medical Education Board. Competency Based Medical Education Curriculum 2024, dated 12 September 2024. NMC Phase-I alignment explicitly includes General Anatomy, upper/lower limb, abdomen, pelvis, thorax, head & neck, neuroanatomy, related embryology/histology/genetics; the NMC competency compendium reports 82 Anatomy topics and 413 Anatomy competencies, illustrating why a deeper expandable hierarchy is appropriate.

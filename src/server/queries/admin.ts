@@ -511,7 +511,7 @@ export async function getCohortMaterials(cohortId: string) {
       description: materials.description,
       type: materials.type,
       url: materials.url,
-      topicKey: materials.topicKey,
+      curriculumRef: materials.curriculumRef,
       subjectId: materials.subjectId,
       subjectName: subjects.name,
     })

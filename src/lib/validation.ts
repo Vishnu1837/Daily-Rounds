@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { resolveRef } from './curriculum';
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const isoDateSchema = z.string().regex(ISO_DATE, 'Expected a YYYY-MM-DD date');
@@ -352,13 +354,20 @@ export const materialSchema = z.object({
     .optional()
     .or(z.literal(''))
     .transform((v) => v || undefined),
-  topicKey: z
+  /**
+   * A curriculum slug path. Checked against the tree rather than merely for length, so a
+   * material can never be filed against a section that does not exist.
+   */
+  curriculumRef: z
     .string()
     .trim()
     .max(200)
     .optional()
     .or(z.literal(''))
-    .transform((v) => v || undefined),
+    .transform((v) => v || undefined)
+    .refine((v) => v === undefined || resolveRef(v) !== null, {
+      message: 'That is not a place in the curriculum.',
+    }),
   title: z.string().trim().min(2).max(200),
   description: z
     .string()

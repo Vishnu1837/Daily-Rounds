@@ -5,6 +5,7 @@ import { asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { quizQuestions, quizzes } from '@/db/schema';
 import { requireOnboardedUser } from '@/lib/auth/guards';
+import { resolveRef } from '@/lib/curriculum';
 import { getMemberContext } from '@/server/context';
 
 import { QuizScreen } from './quiz-screen';
@@ -40,7 +41,7 @@ export default async function QuizPage({ params }: { params: Promise<{ quizId: s
     <QuizScreen
       quizId={quiz.id}
       title={quiz.title}
-      topicKey={quiz.topicKey}
+      topicLabel={resolveRef(quiz.curriculumRef)?.label ?? null}
       questions={questions}
       attemptPoints={ctx.rules.quiz_attempt}
       bonusPoints={ctx.rules.quiz_bonus}

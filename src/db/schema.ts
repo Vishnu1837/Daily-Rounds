@@ -317,6 +317,12 @@ export const roadmapTopics = pgTable(
       .references(() => roadmaps.id, { onDelete: 'cascade' }),
     weekId: uuid('week_id').references(() => roadmapWeeks.id, { onDelete: 'set null' }),
     title: varchar('title', { length: 200 }).notNull(),
+    /**
+     * Where this topic sits in the MBBS curriculum, as a slug path — `anatomy/upper-limb`
+     * or `anatomy/upper-limb/wrist-and-hand`. Set when a template is applied; null for a
+     * topic an admin typed by hand. Quizzes and materials attach through it.
+     */
+    curriculumRef: varchar('curriculum_ref', { length: 200 }),
     description: text('description'),
     position: integer('position').notNull().default(0),
     status: topicStatusEnum('status').notNull().default('upcoming'),
@@ -525,14 +531,22 @@ export const studentAchievements = pgTable(
 
 /* ---------------------------------------------------------------- quizzes */
 
-export const quizzes = pgTable('quizzes', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  subjectId: uuid('subject_id').references(() => subjects.id, { onDelete: 'set null' }),
-  /** Matched against a topic title so one quiz can serve every personal roadmap. */
-  topicKey: varchar('topic_key', { length: 200 }).notNull(),
-  title: varchar('title', { length: 160 }).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const quizzes = pgTable(
+  'quizzes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    subjectId: uuid('subject_id').references(() => subjects.id, { onDelete: 'set null' }),
+    /**
+     * The place in the curriculum this quiz belongs to. One quiz serves every personal
+     * roadmap whose topics sit on the same branch, so a quiz written once for
+     * `pathology/general-pathology/inflammation` reaches every student studying it.
+     */
+    curriculumRef: varchar('curriculum_ref', { length: 200 }),
+    title: varchar('title', { length: 160 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('quizzes_curriculum_ref_idx').on(t.curriculumRef)],
+);
 
 export const quizQuestions = pgTable(
   'quiz_questions',
@@ -578,7 +592,8 @@ export const materials = pgTable(
       .notNull()
       .references(() => cohorts.id, { onDelete: 'cascade' }),
     subjectId: uuid('subject_id').references(() => subjects.id, { onDelete: 'set null' }),
-    topicKey: varchar('topic_key', { length: 200 }),
+    /** Curriculum slug path this material covers. Null = general cohort material. */
+    curriculumRef: varchar('curriculum_ref', { length: 200 }),
     title: varchar('title', { length: 200 }).notNull(),
     description: text('description'),
     type: materialTypeEnum('type').notNull().default('website'),

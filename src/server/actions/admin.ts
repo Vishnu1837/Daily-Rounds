@@ -26,7 +26,7 @@ import {
 import { requireAdminAction } from '@/lib/auth/guards';
 import { hashPassword } from '@/lib/auth/password';
 import { ledgerKey } from '@/lib/domain/points';
-import { templateList } from '@/lib/roadmap-templates';
+import { ROADMAP_TEMPLATES } from '@/lib/roadmap-templates';
 import {
   announcementSchema,
   assignmentSchema,
@@ -522,7 +522,7 @@ export async function applyRoadmapTemplateAction(
     const { user } = await adminContext(cohortId);
     await assertMemberInCohort(memberId, cohortId);
 
-    const template = templateList().find((t) => t.key === templateKey);
+    const template = ROADMAP_TEMPLATES[templateKey];
     if (!template) return fail('That template could not be found.');
 
     const [roadmap] = await db
@@ -548,6 +548,8 @@ export async function applyRoadmapTemplateAction(
           roadmapId: roadmap.id,
           weekId: weekRows[wi]!.id,
           title,
+          // Carries the week's place in the curriculum, so quizzes and materials attach.
+          curriculumRef: w.ref,
           position: wi * 100 + ti,
           status: (wi === 0 && ti === 0 ? 'in_progress' : 'upcoming') as 'in_progress' | 'upcoming',
         })),
@@ -950,7 +952,7 @@ export async function saveMaterialAction(
     const values = {
       cohortId: input.cohortId,
       subjectId: input.subjectId ?? null,
-      topicKey: input.topicKey ?? null,
+      curriculumRef: input.curriculumRef ?? null,
       title: input.title,
       description: input.description ?? null,
       type: input.type,

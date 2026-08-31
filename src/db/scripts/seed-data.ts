@@ -449,7 +449,7 @@ export const SEED_STUDENTS: SeedStudent[] = [
 export const MATERIALS = [
   {
     subject: 'pathology',
-    topicKey: 'Acute Inflammation — vascular and cellular events',
+    curriculumRef: 'pathology/general-pathology/inflammation',
     title: 'Acute Inflammation — quick notes',
     type: 'pdf' as const,
     url: 'https://drive.google.com/file/d/example-acute-inflammation-notes/view',
@@ -457,7 +457,7 @@ export const MATERIALS = [
   },
   {
     subject: 'pathology',
-    topicKey: 'Acute Inflammation — vascular and cellular events',
+    curriculumRef: 'pathology/general-pathology/inflammation',
     title: 'Robbins Basic Pathology — Chapter 3 reference',
     type: 'textbook' as const,
     url: 'https://www.elsevier.com/books/robbins-basic-pathology/9780323790185',
@@ -465,7 +465,7 @@ export const MATERIALS = [
   },
   {
     subject: 'pathology',
-    topicKey: 'Necrosis — patterns and mechanisms',
+    curriculumRef: 'pathology/general-pathology/cell-injury-and-adaptation',
     title: 'Patterns of Necrosis — annotated slides',
     type: 'drive' as const,
     url: 'https://drive.google.com/drive/folders/example-necrosis-slides',
@@ -473,7 +473,7 @@ export const MATERIALS = [
   },
   {
     subject: 'pathology',
-    topicKey: 'Neoplasia — nomenclature and characteristics',
+    curriculumRef: 'pathology/general-pathology/neoplasia',
     title: 'Neoplasia nomenclature explained',
     type: 'video' as const,
     url: 'https://www.youtube.com/watch?v=example-neoplasia',
@@ -481,7 +481,7 @@ export const MATERIALS = [
   },
   {
     subject: 'pharmacology',
-    topicKey: 'Pharmacokinetics — absorption and distribution',
+    curriculumRef: 'pharmacology/general-pharmacology/pharmacokinetics',
     title: 'ADME in one page',
     type: 'pdf' as const,
     url: 'https://drive.google.com/file/d/example-adme/view',
@@ -489,7 +489,7 @@ export const MATERIALS = [
   },
   {
     subject: 'pharmacology',
-    topicKey: 'Antitubercular Drugs',
+    curriculumRef: 'pharmacology/antimicrobial-chemotherapy/antitubercular',
     title: 'ATT regimens and side effects',
     type: 'pdf' as const,
     url: 'https://drive.google.com/file/d/example-att/view',
@@ -497,7 +497,7 @@ export const MATERIALS = [
   },
   {
     subject: 'anatomy',
-    topicKey: 'Brachial Plexus',
+    curriculumRef: 'anatomy/upper-limb/pectoral-region-and-axilla',
     title: 'Brachial plexus — draw-along video',
     type: 'video' as const,
     url: 'https://www.youtube.com/watch?v=example-brachial-plexus',
@@ -505,7 +505,7 @@ export const MATERIALS = [
   },
   {
     subject: 'physiology',
-    topicKey: 'ECG — basis and interpretation',
+    curriculumRef: 'physiology/cardiovascular-system/heart',
     title: 'ECG interpretation — systematic approach',
     type: 'website' as const,
     url: 'https://litfl.com/ecg-library/',
@@ -513,7 +513,7 @@ export const MATERIALS = [
   },
   {
     subject: 'microbiology',
-    topicKey: 'Mycobacterium tuberculosis',
+    curriculumRef: 'microbiology/bacteriology/mycobacteria',
     title: 'TB diagnostics summary',
     type: 'pdf' as const,
     url: 'https://drive.google.com/file/d/example-tb-diagnostics/view',
@@ -521,7 +521,7 @@ export const MATERIALS = [
   },
   {
     subject: 'general-medicine',
-    topicKey: 'Acute Coronary Syndrome',
+    curriculumRef: 'general-medicine/cardiovascular-medicine/ischemic-heart-disease',
     title: 'ACS — session recording',
     type: 'recording' as const,
     url: 'https://drive.google.com/file/d/example-acs-recording/view',
@@ -531,13 +531,14 @@ export const MATERIALS = [
 
 export const QUIZ_BANK: {
   subject: string;
-  topicKey: string;
+  /** Where in the curriculum the quiz is filed — see src/lib/curriculum/refs.ts. */
+  curriculumRef: string;
   title: string;
   questions: { prompt: string; options: string[]; correctIndex: number; explanation: string }[];
 }[] = [
   {
     subject: 'pathology',
-    topicKey: 'Acute Inflammation — vascular and cellular events',
+    curriculumRef: 'pathology/general-pathology/inflammation',
     title: 'Acute Inflammation — quick check',
     questions: [
       {
@@ -583,7 +584,7 @@ export const QUIZ_BANK: {
   },
   {
     subject: 'pathology',
-    topicKey: 'Necrosis — patterns and mechanisms',
+    curriculumRef: 'pathology/general-pathology/cell-injury-and-adaptation',
     title: 'Necrosis — quick check',
     questions: [
       {
@@ -627,7 +628,7 @@ export const QUIZ_BANK: {
   },
   {
     subject: 'pharmacology',
-    topicKey: 'Pharmacokinetics — absorption and distribution',
+    curriculumRef: 'pharmacology/general-pharmacology/pharmacokinetics',
     title: 'Pharmacokinetics — quick check',
     questions: [
       {
@@ -676,7 +677,7 @@ export const QUIZ_BANK: {
   },
   {
     subject: 'physiology',
-    topicKey: 'Cardiac Cycle',
+    curriculumRef: 'physiology/cardiovascular-system/heart',
     title: 'Cardiac Cycle — quick check',
     questions: [
       {

@@ -18,6 +18,7 @@ import {
 import { requireUserAction } from '@/lib/auth/guards';
 import { todayInTimezone } from '@/lib/domain/calendar';
 import { templateForSubject } from '@/lib/roadmap-templates';
+import { SUBJECTS } from '@/lib/subjects';
 import { fieldErrors, onboardingSchema, profileSchema } from '@/lib/validation';
 
 import { type Result, fail, guarded, ok } from './shared';
@@ -183,6 +184,8 @@ export async function ensureStartingRoadmap(args: {
           roadmapId: roadmap.id,
           weekId: weekRows[wi]!.id,
           title,
+          // Carries the week's place in the curriculum, so quizzes and materials attach.
+          curriculumRef: w.ref,
           position: wi * 100 + ti,
           estimatedMinutes: args.dailyMinutes,
           status: (wi === 0 && ti === 0 ? 'in_progress' : 'upcoming') as 'in_progress' | 'upcoming',
@@ -228,8 +231,25 @@ export async function updateProfileAction(_prev: unknown, formData: FormData): P
 }
 
 /** Subject list for onboarding and admin pickers. */
+/**
+ * The subject catalogue in course order, each row carrying the phase it is taught in.
+ *
+ * Ordering comes from the curriculum rather than from the database, because "Anatomy first,
+ * Radiodiagnosis last" is a fact about the MBBS course, not about our rows.
+ */
 export async function listSubjects() {
-  return db.select().from(subjects).orderBy(asc(subjects.name));
+  const rows = await db.select().from(subjects);
+  const order = new Map<string, { index: number; phaseLabel: string }>(
+    SUBJECTS.map((s, i) => [s.slug, { index: i, phaseLabel: s.phaseLabel }]),
+  );
+
+  return rows
+    .map((row) => ({
+      ...row,
+      phaseLabel: order.get(row.slug)?.phaseLabel ?? 'Other',
+      courseIndex: order.get(row.slug)?.index ?? Number.MAX_SAFE_INTEGER,
+    }))
+    .sort((a, b) => a.courseIndex - b.courseIndex || a.name.localeCompare(b.name));
 }
 
 /** Whether the signed-in user already belongs to an active cohort. */

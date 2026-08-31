@@ -68,14 +68,16 @@ type Material = {
   description: string | null;
   type: MaterialType;
   url: string;
-  topicKey: string | null;
+  curriculumRef: string | null;
+  /** The curriculum section or topic this sits under, resolved server-side. */
+  topicLabel: string | null;
   subjectName: string | null;
 };
 
 type Quiz = {
   id: string;
   title: string;
-  topicKey: string;
+  topicLabel: string | null;
   questionCount: number;
   best: { score: number; total: number } | null;
 };
@@ -95,14 +97,14 @@ export function MaterialsScreen({
       ? materials.filter(
           (m) =>
             m.title.toLowerCase().includes(q) ||
-            (m.topicKey ?? '').toLowerCase().includes(q) ||
+            (m.topicLabel ?? '').toLowerCase().includes(q) ||
             (m.subjectName ?? '').toLowerCase().includes(q),
         )
       : materials;
 
     const map = new Map<string, Material[]>();
     for (const m of filtered) {
-      const key = m.topicKey ?? m.subjectName ?? 'General';
+      const key = m.topicLabel ?? m.subjectName ?? 'General';
       const list = map.get(key) ?? [];
       list.push(m);
       map.set(key, list);
@@ -165,7 +167,7 @@ export function MaterialsScreen({
                       </div>
                       <p className="text-fg mt-3.5 text-sm font-bold">{quiz.title}</p>
                       <p className="text-fg-muted mt-auto pt-2 text-xs">
-                        {quiz.questionCount} questions · {quiz.topicKey}
+                        {quiz.questionCount} questions{quiz.topicLabel && ` · ${quiz.topicLabel}`}
                       </p>
                     </Card>
                   </Link>

@@ -12,6 +12,7 @@ import {
   todayInTimezone,
   weekStart,
 } from '@/lib/domain/calendar';
+import { bestRefMatch } from '@/lib/curriculum';
 import { DEFAULT_POINT_RULES, ledgerKey, quizPoints } from '@/lib/domain/points';
 import { hashPassword } from '@/lib/auth/password';
 
@@ -304,7 +305,7 @@ async function main() {
   console.log(`  ✓ ${userRows.length} students + 1 admin`);
 
   // ---------------------------------------------------- goals and roadmaps
-  const topicsByMember = new Map<string, { id: string; title: string }[]>();
+  const topicsByMember = new Map<string, { id: string; title: string; ref: string | null }[]>();
 
   for (const student of SEED_STUDENTS) {
     const memberId = memberByEmail.get(student.email)!;
@@ -350,6 +351,7 @@ async function main() {
         roadmapId: roadmap!.id,
         weekId: weekRows[wi]!.id,
         title,
+        curriculumRef: w.ref,
         position: wi * 100 + ti,
         estimatedMinutes: student.dailyMinutes,
       })),
@@ -358,7 +360,9 @@ async function main() {
     const topicRows = await db.insert(schema.roadmapTopics).values(topicValues).returning();
     topicsByMember.set(
       memberId,
-      topicRows.sort((a, b) => a.position - b.position).map((t) => ({ id: t.id, title: t.title })),
+      topicRows
+        .sort((a, b) => a.position - b.position)
+        .map((t) => ({ id: t.id, title: t.title, ref: t.curriculumRef })),
     );
   }
   console.log(`  ✓ ${SEED_STUDENTS.length} personal roadmaps with weeks and topics`);
@@ -430,7 +434,7 @@ async function main() {
     MATERIALS.map((m) => ({
       cohortId: cohort.id,
       subjectId: subjectBySlug.get(m.subject)?.id ?? null,
-      topicKey: m.topicKey,
+      curriculumRef: m.curriculumRef,
       title: m.title,
       description: m.description,
       type: m.type,
@@ -450,13 +454,13 @@ async function main() {
   console.log(`  ✓ ${eventValues.length} events, ${MATERIALS.length} materials, announcements`);
 
   // --------------------------------------------------------------- quizzes
-  const quizIdByTopicKey = new Map<string, string>();
+  const seededQuizzes: { id: string; curriculumRef: string }[] = [];
   for (const quiz of QUIZ_BANK) {
     const [row] = await db
       .insert(schema.quizzes)
       .values({
         subjectId: subjectBySlug.get(quiz.subject)?.id ?? null,
-        topicKey: quiz.topicKey,
+        curriculumRef: quiz.curriculumRef,
         title: quiz.title,
       })
       .returning();
@@ -469,7 +473,7 @@ async function main() {
         explanation: q.explanation,
       })),
     );
-    quizIdByTopicKey.set(quiz.topicKey, row!.id);
+    seededQuizzes.push({ id: row!.id, curriculumRef: quiz.curriculumRef });
   }
   console.log(`  ✓ ${QUIZ_BANK.length} quizzes`);
 
@@ -635,7 +639,9 @@ async function main() {
       }
 
       // ---- occasional knowledge check
-      const quizId = quizIdByTopicKey.get(topic.title);
+      // Matched through the curriculum, the same way the app does it at runtime.
+      const quiz = bestRefMatch(topic.ref, seededQuizzes);
+      const quizId = quiz?.id ?? null;
       if (quizId && !isToday && rng() < 0.25) {
         const total = 5;
         const score = 2 + Math.floor(rng() * 4);

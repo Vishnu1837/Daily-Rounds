@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { db } from '@/db/client';
 import { subjects } from '@/db/schema';
 import { requireAdmin } from '@/lib/auth/guards';
+import { refOptionsBySubject } from '@/lib/curriculum';
 import { getPrimaryCohort } from '@/server/context';
 import { getCohortMaterials } from '@/server/queries/admin';
 
@@ -27,7 +28,8 @@ export default async function MaterialsAdminPage() {
     <MaterialsAdminScreen
       cohortId={cohort.id}
       materials={materials}
-      subjects={subjectRows.map((s) => ({ id: s.id, name: s.name }))}
+      subjects={subjectRows.map((s) => ({ id: s.id, name: s.name, slug: s.slug }))}
+      refOptions={refOptionsBySubject()}
     />
   );
 }
