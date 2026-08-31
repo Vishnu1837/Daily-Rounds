@@ -2,12 +2,15 @@
 
 import { type ReactNode, useEffect, useRef } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { X } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
 
 /**
- * A bottom sheet on mobile that becomes a centred dialog on larger screens. Used for every
- * modal surface in the app so the interaction model never changes shape.
+ * A bottom sheet on mobile that becomes a centred dialog on larger screens. Every modal
+ * surface in the app is this component, so the interaction model never changes shape: it
+ * always arrives from the same direction, always closes the same way, and always traps
+ * focus identically.
  */
 export function Sheet({
   open,
@@ -74,7 +77,7 @@ export function Sheet({
             aria-label="Close"
             tabIndex={-1}
             onClick={dismissible ? onClose : undefined}
-            className="absolute inset-0 bg-ink-950/45 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-[3px]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -87,33 +90,33 @@ export function Sheet({
             aria-modal="true"
             aria-label={typeof title === 'string' ? title : 'Dialog'}
             className={cn(
-              'relative flex max-h-[92dvh] w-full flex-col overflow-hidden bg-bg-elevated',
-              'rounded-t-[1.75rem] shadow-lift sm:rounded-[1.5rem]',
+              'border-border bg-bg-elevated relative flex max-h-[92dvh] w-full flex-col overflow-hidden border',
+              'rounded-t-hero shadow-float sm:rounded-hero',
               width,
             )}
-            initial={reduce ? { opacity: 0 } : { y: 40, opacity: 0, scale: 0.98 }}
+            initial={reduce ? { opacity: 0 } : { y: 40, opacity: 0, scale: 0.985 }}
             animate={reduce ? { opacity: 1 } : { y: 0, opacity: 1, scale: 1 }}
-            exit={reduce ? { opacity: 0 } : { y: 30, opacity: 0, scale: 0.98 }}
+            exit={reduce ? { opacity: 0 } : { y: 30, opacity: 0, scale: 0.985 }}
             transition={{ duration: reduce ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
           >
             <div className="flex justify-center pt-3 sm:hidden">
-              <span className="h-1.5 w-10 rounded-full bg-border-strong" aria-hidden />
+              <span className="bg-border-strong h-1.5 w-10 rounded-full" aria-hidden />
             </div>
 
             {(title || dismissible) && (
-              <div className="flex items-start justify-between gap-4 px-5 pt-4 pb-2 sm:pt-5">
+              <div className="flex items-start justify-between gap-4 px-5 pt-4 pb-2 sm:pt-6">
                 <div className="min-w-0">
-                  {title && <h2 className="text-lg font-bold text-fg">{title}</h2>}
-                  {description && <p className="mt-1 text-sm text-fg-muted">{description}</p>}
+                  {title && <h2 className="text-fg text-lg font-bold">{title}</h2>}
+                  {description && <p className="text-fg-muted mt-1 text-sm">{description}</p>}
                 </div>
                 {dismissible && (
                   <button
                     type="button"
                     onClick={onClose}
                     aria-label="Close"
-                    className="tap -mt-1 grid size-9 shrink-0 place-items-center rounded-xl text-fg-subtle transition-colors hover:bg-bg-sunken hover:text-fg"
+                    className="tap rounded-field text-fg-subtle hover:bg-bg-sunken hover:text-fg -mt-1 grid size-9 shrink-0 place-items-center transition-colors"
                   >
-                    ✕
+                    <X className="size-4.5" aria-hidden />
                   </button>
                 )}
               </div>
@@ -122,7 +125,7 @@ export function Sheet({
             <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">{children}</div>
 
             {footer && (
-              <div className="border-t border-border bg-bg-elevated px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <div className="border-border bg-bg-elevated border-t px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 {footer}
               </div>
             )}

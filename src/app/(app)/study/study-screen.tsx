@@ -10,8 +10,9 @@ import {
   CelebrationModal,
   type CelebrationPayload,
 } from '@/components/gamification/celebration';
+import { LiveDot } from '@/components/ui/badge';
 import { Button, LinkButton } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardAurora } from '@/components/ui/card';
 import { LiveRegion } from '@/components/ui/feedback';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/cn';
@@ -120,8 +121,7 @@ export function StudySessionScreen({
         toast.error('Could not save your session', result.message);
         return;
       }
-      const { qualified, minutes, requiredMinutes, milestone, pointsAwarded, streak } =
-        result.data;
+      const { qualified, minutes, requiredMinutes, milestone, pointsAwarded, streak } = result.data;
 
       setFinished(true);
       setSession({ ...session, status: 'completed', resumedAt: null });
@@ -175,53 +175,106 @@ export function StudySessionScreen({
     });
   }, [toast, router]);
 
+  const statusLabel = finished
+    ? shortBlock
+      ? 'Too short to count'
+      : 'Block logged'
+    : running
+      ? reachedTarget
+        ? 'Target reached — keep going or finish'
+        : 'In progress'
+      : session
+        ? 'Paused'
+        : 'Ready when you are';
+
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-2xl space-y-4">
       <CelebrationModal payload={celebration} onClose={() => setCelebration(null)} />
 
       <Link
         href="/"
-        className="tap inline-flex items-center gap-1.5 px-1 py-2 text-sm font-semibold text-fg-muted hover:text-fg"
+        className="tap text-fg-muted hover:text-fg inline-flex items-center gap-1.5 rounded-lg px-1 py-2 text-sm font-semibold transition-colors"
       >
         <ArrowLeft className="size-4" aria-hidden />
         Back to today
       </Link>
 
-      <Card className="relative overflow-hidden">
-        <div
-          className={cn(
-            'pointer-events-none absolute inset-0 transition-opacity duration-700',
-            running
-              ? 'bg-linear-to-br from-pulse-500/14 via-transparent to-iris-500/10 opacity-100'
-              : 'opacity-0',
-          )}
-          aria-hidden
-        />
+      {/*
+        The timer takes the whole surface and goes dark while a session runs.
+        Dimming the rest of the interface is the only honest way to signal "you are meant to
+        be doing something else right now" — an app that stays bright and busy while asking
+        for ninety minutes of focus is arguing with itself.
+      */}
+      <Card
+        variant={running ? 'solid' : 'surface'}
+        tone="neutral"
+        padding="none"
+        className={cn(
+          'relative overflow-hidden transition-colors duration-700',
+          running && 'text-white',
+        )}
+      >
+        {running && <CardAurora tone="pulse" />}
 
-        <div className="relative flex flex-col items-center px-5 py-8 text-center">
+        <div className="relative flex flex-col items-center px-5 py-9 text-center sm:py-11">
           {subjectName && (
-            <p className="text-sm font-semibold text-iris-600 dark:text-iris-300">{subjectName}</p>
+            <p
+              className={cn(
+                'text-2xs font-bold tracking-[0.16em] uppercase',
+                running ? 'text-white/60' : 'text-iris-700 dark:text-iris-300',
+              )}
+            >
+              {subjectName}
+            </p>
           )}
-          <h1 className="mt-1 max-w-sm text-xl font-extrabold text-balance text-fg">
+          <h1
+            className={cn(
+              'mt-2 max-w-md text-xl font-extrabold text-balance sm:text-2xl',
+              running ? 'text-white' : 'text-fg',
+            )}
+          >
             {topicTitle ?? 'Free study block'}
           </h1>
-          <p className="mt-1.5 text-sm text-fg-muted">Planned: {plannedMinutes} minutes</p>
+          <p className={cn('mt-2 text-sm', running ? 'text-white/65' : 'text-fg-muted')}>
+            Planned: {plannedMinutes} minutes
+          </p>
 
-          {/* ------------------------------------------------------ timer */}
-          <div className="relative mt-7 grid place-items-center">
-            <svg width="224" height="224" className="-rotate-90" aria-hidden>
-              <circle cx="112" cy="112" r="100" fill="none" stroke="var(--bg-sunken)" strokeWidth="12" />
+          {/* -------------------------------------------------------- timer */}
+          <div className="relative mt-9 grid place-items-center">
+            <svg width="248" height="248" className="-rotate-90" aria-hidden>
+              <defs>
+                <linearGradient id="dr-timer" x1="0" y1="0" x2="1" y2="1">
+                  <stop
+                    offset="0%"
+                    stopColor={reachedTarget ? 'var(--color-success)' : 'var(--color-citrus-300)'}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={
+                      reachedTarget ? 'var(--color-success-strong)' : 'var(--color-pulse-400)'
+                    }
+                  />
+                </linearGradient>
+              </defs>
               <circle
-                cx="112"
-                cy="112"
-                r="100"
+                cx="124"
+                cy="124"
+                r="110"
                 fill="none"
-                stroke={reachedTarget ? 'var(--color-success)' : 'var(--color-pulse-500)'}
-                strokeWidth="12"
+                strokeWidth="14"
+                className={running ? 'stroke-white/15' : 'stroke-bg-inset'}
+              />
+              <circle
+                cx="124"
+                cy="124"
+                r="110"
+                fill="none"
+                stroke="url(#dr-timer)"
+                strokeWidth="14"
                 strokeLinecap="round"
-                strokeDasharray={2 * Math.PI * 100}
-                strokeDashoffset={2 * Math.PI * 100 * (1 - pct / 100)}
-                className="transition-[stroke-dashoffset,stroke] duration-700 ease-out motion-reduce:transition-none"
+                strokeDasharray={2 * Math.PI * 110}
+                strokeDashoffset={2 * Math.PI * 110 * (1 - pct / 100)}
+                className="ease-out-soft transition-[stroke-dashoffset] duration-700 motion-reduce:transition-none"
               />
             </svg>
 
@@ -229,33 +282,31 @@ export function StudySessionScreen({
               <div>
                 <p
                   className={cn(
-                    'font-display text-5xl font-extrabold tabular-nums transition-colors',
-                    reachedTarget ? 'text-success' : 'text-fg',
+                    'stat-num text-stat-lg transition-colors',
+                    running
+                      ? 'text-white'
+                      : reachedTarget
+                        ? 'text-success-strong dark:text-success'
+                        : 'text-fg',
                   )}
                 >
                   {formatClock(elapsed)}
                 </p>
-                <p className="mt-1 text-sm font-semibold text-fg-muted">
-                  {finished
-                    ? shortBlock
-                      ? 'Too short to count'
-                      : 'Block logged'
-                    : running
-                      ? reachedTarget
-                        ? 'Target reached — keep going or finish'
-                        : 'In progress'
-                      : session
-                        ? 'Paused'
-                        : 'Ready when you are'}
+                <p
+                  className={cn(
+                    'mt-2 text-sm font-semibold',
+                    running ? 'text-white/65' : 'text-fg-muted',
+                  )}
+                >
+                  {statusLabel}
                 </p>
               </div>
             </div>
 
             {running && (
-              <span
-                className="absolute -top-1 right-4 size-3 rounded-full bg-pulse-500 animate-ring"
-                aria-hidden
-              />
+              <span className="absolute top-1 right-6">
+                <LiveDot />
+              </span>
             )}
           </div>
 
@@ -269,16 +320,15 @@ export function StudySessionScreen({
                   : 'Study session not started.'}
           </LiveRegion>
 
-          {/* ---------------------------------------------------- controls */}
-          <div className="mt-8 w-full max-w-xs space-y-2.5">
+          {/* ------------------------------------------------------ controls */}
+          <div className="mt-9 w-full max-w-xs space-y-2.5">
             {finished && shortBlock ? (
               <div className="space-y-2.5">
-                <div className="rounded-2xl bg-warning/12 p-4 text-center">
-                  <p className="text-sm font-bold text-fg">Too short to count</p>
-                  <p className="mt-1 text-sm text-fg-muted">
-                    You studied {shortBlock.minutes} minutes. A block needs{' '}
-                    {shortBlock.required} to earn points — start again when you have a real
-                    stretch of time.
+                <div className="rounded-panel bg-warning/14 ring-warning/25 p-4 text-center ring-1 ring-inset">
+                  <p className="text-fg text-sm font-bold">Too short to count</p>
+                  <p className="text-fg-muted mt-1 text-sm">
+                    You studied {shortBlock.minutes} minutes. A block needs {shortBlock.required} to
+                    earn XP — start again when you have a real stretch of time.
                   </p>
                 </div>
                 <Button
@@ -292,35 +342,41 @@ export function StudySessionScreen({
                     start();
                   }}
                 >
-                  <Play className="size-4" aria-hidden />
+                  <Play className="size-4 fill-current" aria-hidden />
                   Start another block
                 </Button>
               </div>
             ) : finished ? (
-              <div className="flex items-center justify-center gap-2.5 rounded-2xl bg-success/10 p-4 text-success">
+              <div className="rounded-panel bg-success/12 text-success-strong ring-success/25 dark:text-success flex items-center justify-center gap-2.5 p-4 ring-1 ring-inset">
                 <AnimatedCheck size={22} />
                 <span className="font-bold">Study block complete</span>
               </div>
             ) : !session || session.status === 'completed' ? (
               <Button size="xl" fullWidth loading={pending} onClick={start}>
-                <Play className="size-5" aria-hidden />
+                <Play className="size-5 fill-current" aria-hidden />
                 Start studying
               </Button>
             ) : running ? (
               <>
-                <Button size="xl" fullWidth loading={pending} onClick={finish}>
-                  <Square className="size-4" aria-hidden />
+                <Button variant="inverse" size="xl" fullWidth loading={pending} onClick={finish}>
+                  <Square className="size-4 fill-current" aria-hidden />
                   Finish block
                 </Button>
-                <Button variant="outline" size="lg" fullWidth loading={pending} onClick={pause}>
-                  <Pause className="size-4" aria-hidden />
+                <Button
+                  variant="inverse-soft"
+                  size="lg"
+                  fullWidth
+                  loading={pending}
+                  onClick={pause}
+                >
+                  <Pause className="size-4 fill-current" aria-hidden />
                   Pause
                 </Button>
               </>
             ) : (
               <>
                 <Button size="xl" fullWidth loading={pending} onClick={start}>
-                  <Play className="size-5" aria-hidden />
+                  <Play className="size-5 fill-current" aria-hidden />
                   Resume
                 </Button>
                 <Button variant="outline" size="lg" fullWidth loading={pending} onClick={finish}>
@@ -330,27 +386,35 @@ export function StudySessionScreen({
             )}
           </div>
 
-          <p className="mt-5 max-w-xs text-xs leading-relaxed text-fg-subtle">
+          <p
+            className={cn(
+              'mt-6 max-w-xs text-xs leading-relaxed',
+              running ? 'text-white/50' : 'text-fg-subtle',
+            )}
+          >
             Daily Rounds doesn&apos;t try to prove you studied. It records what you committed to and
             what you actually did — the honesty is the point.
           </p>
         </div>
       </Card>
 
-      {/* ---------------------------------------------------- next steps */}
+      {/* -------------------------------------------------------- next steps */}
       {finished && !shortBlock && (
-        <Card className="p-5">
-          <h2 className="text-2xs font-bold tracking-[0.14em] text-fg-subtle uppercase">
-            Finish the day
-          </h2>
+        <Card padding="lg" className="animate-rise">
+          <p className="eyebrow">Finish the day</p>
           <div className="mt-4 space-y-2.5">
-            {!targetComplete && (
-              <Button variant="outline" size="lg" fullWidth loading={pending} onClick={completeTarget}>
+            {!targetComplete ? (
+              <Button
+                variant="outline"
+                size="lg"
+                fullWidth
+                loading={pending}
+                onClick={completeTarget}
+              >
                 Mark today&apos;s target complete
               </Button>
-            )}
-            {targetComplete && (
-              <div className="flex items-center gap-2.5 rounded-2xl bg-success/10 p-3.5 text-sm font-bold text-success">
+            ) : (
+              <div className="rounded-panel bg-success/12 text-success-strong dark:text-success flex items-center gap-2.5 p-3.5 text-sm font-bold">
                 <AnimatedCheck size={18} />
                 Target complete
               </div>
@@ -360,7 +424,12 @@ export function StudySessionScreen({
                 Take the 5-question knowledge check
               </LinkButton>
             )}
-            <LinkButton href="/check-in" size="lg" fullWidth variant={checkedIn ? 'outline' : 'primary'}>
+            <LinkButton
+              href="/check-in"
+              size="lg"
+              fullWidth
+              variant={checkedIn ? 'outline' : 'primary'}
+            >
               {checkedIn ? 'Update your check-in' : 'Do your 60-second check-in'}
             </LinkButton>
           </div>

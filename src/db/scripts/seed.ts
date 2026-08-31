@@ -277,7 +277,7 @@ async function main() {
         email: s.email,
         passwordHash: studentHash,
         fullName: s.fullName,
-        whatsapp: `+91 9${String(4000000000 + (s.email.length * 7919) % 999999999).slice(0, 9)}`,
+        whatsapp: `+91 9${String(4000000000 + ((s.email.length * 7919) % 999999999)).slice(0, 9)}`,
         university: s.university,
         mbbsYear: s.mbbsYear,
         role: 'student' as const,
@@ -358,9 +358,7 @@ async function main() {
     const topicRows = await db.insert(schema.roadmapTopics).values(topicValues).returning();
     topicsByMember.set(
       memberId,
-      topicRows
-        .sort((a, b) => a.position - b.position)
-        .map((t) => ({ id: t.id, title: t.title })),
+      topicRows.sort((a, b) => a.position - b.position).map((t) => ({ id: t.id, title: t.title })),
     );
   }
   console.log(`  ✓ ${SEED_STUDENTS.length} personal roadmaps with weeks and topics`);
@@ -382,7 +380,8 @@ async function main() {
       cohortId: cohort.id,
       type: 'guest_session',
       title: 'Guest Session — Life as an Intern',
-      description: 'A recent graduate on what the first six months of internship actually look like.',
+      description:
+        'A recent graduate on what the first six months of internship actually look like.',
       date: addDays(startDate, 19),
       startTime: '19:00',
       endTime: '20:00',
@@ -683,8 +682,7 @@ async function main() {
         weekStart: ws,
         whatWentWell:
           'Morning study room kept me honest — the days I joined it, I finished the block.',
-        whatStopped:
-          OBSTACLE_NOTES[student.obstacle] ?? 'Lost momentum in the middle of the week.',
+        whatStopped: OBSTACLE_NOTES[student.obstacle] ?? 'Lost momentum in the middle of the week.',
         whatToChange: 'Cutting the daily target by 15 minutes so I actually finish it.',
         subjectConfidence: Math.min(5, student.baselineConfidence + 1 + (w > 1 ? 1 : 0)),
       });

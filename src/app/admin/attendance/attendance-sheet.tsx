@@ -10,9 +10,11 @@ import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/feedback';
 import { TextInput } from '@/components/ui/form';
 import { useToast } from '@/components/ui/toast';
+import { PageHeader } from '@/components/ui/page-header';
 import { cn } from '@/lib/cn';
 import { addDays } from '@/lib/domain/calendar';
 import { markAttendanceAction } from '@/server/actions/admin';
+import { Search } from 'lucide-react';
 
 type Status = 'present' | 'late' | 'absent';
 
@@ -28,8 +30,7 @@ const OPTIONS: { value: Status; label: string; className: string }[] = [
   {
     value: 'present',
     label: 'Present',
-    className:
-      'data-[on=true]:bg-success data-[on=true]:text-white data-[on=true]:border-success',
+    className: 'data-[on=true]:bg-success data-[on=true]:text-white data-[on=true]:border-success',
   },
   {
     value: 'late',
@@ -105,7 +106,10 @@ export function AttendanceSheet({
         toast.error('Attendance not saved', result.message);
         return;
       }
-      toast.success('Attendance saved', `${result.data.marked} students updated, points recalculated`);
+      toast.success(
+        'Attendance saved',
+        `${result.data.marked} students updated, points recalculated`,
+      );
       router.refresh();
     });
   }
@@ -118,34 +122,33 @@ export function AttendanceSheet({
   });
 
   return (
-    <div className="space-y-4">
-      <header className="px-1 pt-2">
-        <h1 className="text-2xl font-extrabold tracking-tight text-fg">Attendance</h1>
-        <p className="mt-1 text-sm text-fg-muted">
-          Marking attendance awards or withdraws study-room points immediately.
-        </p>
-      </header>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Study room"
+        title="Attendance"
+        description="Marking attendance awards or withdraws study-room points immediately."
+      />
 
       <Card className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <a
               href={`/admin/attendance?date=${addDays(date, -1)}`}
-              className="tap grid size-9 place-items-center rounded-xl text-fg-muted hover:bg-bg-sunken hover:text-fg"
+              className="tap text-fg-muted hover:bg-bg-sunken hover:text-fg grid size-9 place-items-center rounded-xl"
               aria-label="Previous day"
             >
               ‹
             </a>
             <div>
-              <p className="font-bold text-fg">{dateLabel}</p>
-              <p className="text-xs text-fg-subtle">
+              <p className="text-fg font-bold">{dateLabel}</p>
+              <p className="text-fg-subtle text-xs">
                 {date === today ? 'Today' : date}
                 {!isActiveDay && ' · not an active study day'}
               </p>
             </div>
             <a
               href={`/admin/attendance?date=${addDays(date, 1)}`}
-              className="tap grid size-9 place-items-center rounded-xl text-fg-muted hover:bg-bg-sunken hover:text-fg"
+              className="tap text-fg-muted hover:bg-bg-sunken hover:text-fg grid size-9 place-items-center rounded-xl"
               aria-label="Next day"
             >
               ›
@@ -154,7 +157,7 @@ export function AttendanceSheet({
           {date !== today && (
             <a
               href="/admin/attendance"
-              className="text-sm font-semibold text-pulse-700 dark:text-pulse-400"
+              className="text-pulse-700 dark:text-pulse-400 text-sm font-semibold"
             >
               Jump to today
             </a>
@@ -162,7 +165,7 @@ export function AttendanceSheet({
         </div>
 
         {!isActiveDay && (
-          <p className="mt-3 rounded-2xl bg-warning/10 p-3.5 text-sm text-fg-muted">
+          <p className="bg-warning/10 text-fg-muted mt-3 rounded-2xl p-3.5 text-sm">
             This is a rest day or holiday. You can still record attendance for an ad-hoc session —
             it will not affect anyone&apos;s streak.
           </p>
@@ -196,13 +199,13 @@ export function AttendanceSheet({
       {filtered.length === 0 ? (
         <Card>
           <EmptyState
-            emoji="🔍"
+            icon={<Search className="size-6" aria-hidden />}
             title="No students matched"
             description="Try a different name, or clear the search."
           />
         </Card>
       ) : (
-        <Card className="divide-y divide-border p-0">
+        <Card className="divide-border divide-y p-0">
           {/*
             Rows stack on phones so a 27-name roster stays readable: three status buttons
             plus a name do not fit on one 375px row without truncating the name, and the
@@ -213,8 +216,8 @@ export function AttendanceSheet({
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <Avatar name={row.name} size="sm" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-fg">{row.name}</p>
-                  <p className="truncate text-xs text-fg-subtle">
+                  <p className="text-fg truncate text-sm font-bold">{row.name}</p>
+                  <p className="text-fg-subtle truncate text-xs">
                     {row.mbbsYear ? `Year ${row.mbbsYear}` : '—'}
                     {row.status && ` · saved as ${row.status}`}
                   </p>
@@ -238,7 +241,7 @@ export function AttendanceSheet({
                         setDraft((prev) => ({ ...prev, [row.memberId]: option.value }))
                       }
                       className={cn(
-                        'tap h-10 rounded-xl border border-border px-3 text-xs font-bold transition-all',
+                        'tap border-border h-10 rounded-xl border px-3 text-xs font-bold transition-all',
                         'active:scale-95 motion-reduce:active:scale-100',
                         !on && 'bg-bg-elevated text-fg-muted hover:border-border-strong',
                         option.className,
@@ -256,8 +259,8 @@ export function AttendanceSheet({
 
       {/* Sticky save bar — marking 27 students should never mean scrolling to find a button. */}
       <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+4.25rem)] z-20 lg:bottom-4">
-        <Card className="flex items-center justify-between gap-3 p-3 shadow-lift">
-          <p className="text-sm text-fg-muted">
+        <Card className="shadow-lift flex items-center justify-between gap-3 p-3">
+          <p className="text-fg-muted text-sm">
             {dirty ? 'You have unsaved changes' : 'Everything is saved'}
           </p>
           <Button size="md" loading={pending} disabled={!dirty} onClick={save}>

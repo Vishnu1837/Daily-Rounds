@@ -5,8 +5,6 @@ export { ROADMAP_TEMPLATES, type RoadmapKey } from '@/lib/roadmap-templates';
 
 import type { RoadmapKey } from '@/lib/roadmap-templates';
 
-
-
 /** Behaviour archetype drives how the seeded history is generated. */
 export type Archetype =
   | 'exemplary' // near-perfect, long streak
@@ -602,12 +600,7 @@ export const QUIZ_BANK: {
       },
       {
         prompt: 'Fat necrosis with saponification is typical of:',
-        options: [
-          'Acute pancreatitis',
-          'Chronic gastritis',
-          'Viral hepatitis',
-          'Rheumatic fever',
-        ],
+        options: ['Acute pancreatitis', 'Chronic gastritis', 'Viral hepatitis', 'Rheumatic fever'],
         correctIndex: 0,
         explanation:
           'Released lipases digest fat; the fatty acids bind calcium to form chalky deposits.',

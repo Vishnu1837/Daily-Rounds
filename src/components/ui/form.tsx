@@ -8,14 +8,23 @@ import {
   forwardRef,
   useId,
 } from 'react';
+import { Check, ChevronDown } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
 
+/*
+ * One control skin, everywhere.
+ *
+ * The focus treatment is a colour change plus a soft ring rather than a hard outline: at
+ * four pixels of low-opacity indigo it reads as the field "waking up", which is legible at
+ * a glance without the boxed-in look that makes long forms feel like paperwork.
+ */
 const CONTROL =
-  'w-full rounded-2xl border border-border bg-bg-elevated px-4 py-3 text-fg ' +
-  'placeholder:text-fg-subtle transition-[border-color,box-shadow] duration-150 ' +
-  'focus:border-pulse-500 focus:outline-none focus:ring-4 focus:ring-pulse-500/15 ' +
-  'disabled:cursor-not-allowed disabled:opacity-60 ' +
+  'w-full rounded-panel border border-border bg-bg-elevated px-4 py-3 text-fg ' +
+  'placeholder:text-fg-subtle transition-[border-color,box-shadow,background-color] duration-150 ' +
+  'hover:border-border-strong ' +
+  'focus:border-pulse-500 focus:outline-none focus:ring-4 focus:ring-pulse-500/16 ' +
+  'disabled:cursor-not-allowed disabled:bg-bg-sunken disabled:opacity-60 ' +
   'aria-[invalid=true]:border-danger aria-[invalid=true]:ring-danger/15';
 
 export function Field({
@@ -37,22 +46,22 @@ export function Field({
 }) {
   return (
     <div className={cn('space-y-1.5', className)}>
-      <label htmlFor={htmlFor} className="block text-sm font-semibold text-fg">
+      <label htmlFor={htmlFor} className="text-fg block text-sm font-semibold">
         {label}
         {required && (
-          <span className="ml-1 text-danger" aria-hidden>
+          <span className="text-danger ml-1" aria-hidden>
             *
           </span>
         )}
       </label>
       {children}
       {error ? (
-        <p className="flex items-start gap-1.5 text-sm font-medium text-danger" role="alert">
+        <p className="text-danger flex items-start gap-1.5 text-sm font-medium" role="alert">
           <span aria-hidden>⚠</span>
           {error}
         </p>
       ) : hint ? (
-        <p className="text-sm text-fg-subtle">{hint}</p>
+        <p className="text-fg-subtle text-sm">{hint}</p>
       ) : null}
     </div>
   );
@@ -62,24 +71,36 @@ export type TextInputProps = InputHTMLAttributes<HTMLInputElement> & {
   label?: ReactNode;
   error?: string;
   hint?: ReactNode;
+  /** Rendered inside the field, before the text. Icons only — keep it to one glyph. */
+  leading?: ReactNode;
 };
 
 export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function TextInput(
-  { label, error, hint, className, id, required, ...props },
+  { label, error, hint, className, id, required, leading, ...props },
   ref,
 ) {
   const generated = useId();
   const inputId = id ?? generated;
   const input = (
-    <input
-      ref={ref}
-      id={inputId}
-      required={required}
-      aria-invalid={error ? true : undefined}
-      aria-describedby={error ? `${inputId}-error` : undefined}
-      className={cn(CONTROL, className)}
-      {...props}
-    />
+    <div className={cn(leading && 'relative')}>
+      {leading && (
+        <span
+          className="text-fg-subtle pointer-events-none absolute top-1/2 left-4 -translate-y-1/2"
+          aria-hidden
+        >
+          {leading}
+        </span>
+      )}
+      <input
+        ref={ref}
+        id={inputId}
+        required={required}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${inputId}-error` : undefined}
+        className={cn(CONTROL, leading && 'pl-11', className)}
+        {...props}
+      />
+    </div>
   );
 
   if (!label) return input;
@@ -140,17 +161,15 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         id={inputId}
         required={required}
         aria-invalid={error ? true : undefined}
-        className={cn(CONTROL, 'appearance-none pr-10', className)}
+        className={cn(CONTROL, 'appearance-none pr-11', className)}
         {...props}
       >
         {children}
       </select>
-      <span
-        className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-fg-subtle"
+      <ChevronDown
+        className="text-fg-subtle pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2"
         aria-hidden
-      >
-        ▾
-      </span>
+      />
     </div>
   );
   if (!label) return field;
@@ -161,7 +180,13 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   );
 });
 
-/** Large tap-friendly choice chips — used heavily in onboarding and the check-in. */
+/**
+ * Large tap-friendly choice cards — used heavily in onboarding and the check-in.
+ *
+ * The selected state changes three things at once (border, fill, and a filled tick) because
+ * a single one of them is easy to miss on a phone held at arm's length in a corridor, which
+ * is where most check-ins actually happen.
+ */
 export function ChoiceGroup<T extends string>({
   name,
   value,
@@ -182,7 +207,7 @@ export function ChoiceGroup<T extends string>({
       role="radiogroup"
       aria-label={name}
       className={cn(
-        'grid gap-2',
+        'grid gap-2.5',
         columns === 2 && 'grid-cols-2',
         columns === 3 && 'grid-cols-3',
         className,
@@ -198,11 +223,11 @@ export function ChoiceGroup<T extends string>({
             aria-checked={selected}
             onClick={() => onChange(option.value)}
             className={cn(
-              'tap flex items-center gap-3 rounded-2xl border p-3.5 text-left transition-all duration-150',
-              'active:scale-[0.98] motion-reduce:active:scale-100',
+              'tap group rounded-panel relative flex items-center gap-3 overflow-hidden border p-3.5 text-left',
+              'ease-out-soft transition-all duration-200 active:scale-[0.985] motion-reduce:active:scale-100',
               selected
-                ? 'border-pulse-500 bg-pulse-500/10 ring-2 ring-pulse-500/25'
-                : 'border-border bg-bg-elevated hover:border-border-strong hover:bg-bg-sunken',
+                ? 'border-pulse-500 bg-pulse-500/10 shadow-glow-pulse'
+                : 'border-border bg-bg-elevated hover:border-pulse-300 hover:shadow-soft hover:-translate-y-0.5 motion-reduce:hover:translate-y-0',
             )}
           >
             {option.emoji && (
@@ -220,17 +245,19 @@ export function ChoiceGroup<T extends string>({
                 {option.label}
               </span>
               {option.description && (
-                <span className="mt-0.5 block text-xs text-fg-muted">{option.description}</span>
+                <span className="text-fg-muted mt-0.5 block text-xs">{option.description}</span>
               )}
             </span>
             <span
               className={cn(
-                'grid size-5 shrink-0 place-items-center rounded-full border-2 transition-colors',
-                selected ? 'border-pulse-500 bg-pulse-500' : 'border-border-strong',
+                'grid size-5 shrink-0 place-items-center rounded-full border-2 transition-all duration-200',
+                selected
+                  ? 'border-pulse-500 bg-pulse-500 scale-110 text-white'
+                  : 'border-border-strong text-transparent',
               )}
               aria-hidden
             >
-              {selected && <span className="size-1.5 rounded-full bg-white" />}
+              <Check className="size-3" strokeWidth={3.5} />
             </span>
           </button>
         );
@@ -257,7 +284,7 @@ export function RatingScale({
 }) {
   return (
     <div className="space-y-2">
-      <div role="radiogroup" aria-label={name} className="flex gap-1.5">
+      <div role="radiogroup" aria-label={name} className="flex gap-2">
         {Array.from({ length: max }, (_, i) => i + 1).map((n) => {
           const selected = value === n;
           return (
@@ -269,11 +296,11 @@ export function RatingScale({
               aria-label={`${n} out of ${max}`}
               onClick={() => onChange(n)}
               className={cn(
-                'tap h-12 flex-1 rounded-xl border text-sm font-bold transition-all duration-150',
+                'tap rounded-field ease-out-soft h-13 flex-1 border text-base font-bold transition-all duration-200',
                 'active:scale-95 motion-reduce:active:scale-100',
                 selected
-                  ? 'border-pulse-500 bg-pulse-600 text-white shadow-soft dark:bg-pulse-500 dark:text-ink-950'
-                  : 'border-border bg-bg-elevated text-fg-muted hover:border-border-strong hover:bg-bg-sunken',
+                  ? 'from-pulse-500 to-pulse-600 shadow-glow-pulse scale-105 border-transparent bg-linear-to-b text-white'
+                  : 'border-border bg-bg-elevated text-fg-muted hover:border-pulse-300 hover:text-fg',
               )}
             >
               {n}
@@ -282,7 +309,7 @@ export function RatingScale({
         })}
       </div>
       {(lowLabel || highLabel) && (
-        <div className="flex justify-between text-xs text-fg-subtle">
+        <div className="text-fg-subtle flex justify-between text-xs">
           <span>{lowLabel}</span>
           <span>{highLabel}</span>
         </div>
@@ -297,7 +324,7 @@ export function FormError({ children }: { children?: ReactNode }) {
   return (
     <div
       role="alert"
-      className="flex items-start gap-2.5 rounded-2xl border border-danger/30 bg-danger/8 p-3.5 text-sm font-medium text-danger"
+      className="animate-rise rounded-panel border-danger/30 bg-danger/8 text-danger flex items-start gap-2.5 border p-3.5 text-sm font-medium"
     >
       <span aria-hidden>⚠</span>
       <span>{children}</span>
@@ -310,9 +337,9 @@ export function FormSuccess({ children }: { children?: ReactNode }) {
   return (
     <div
       role="status"
-      className="flex items-start gap-2.5 rounded-2xl border border-success/30 bg-success/8 p-3.5 text-sm font-medium text-success"
+      className="animate-rise rounded-panel border-success/30 bg-success/8 text-success-strong dark:text-success flex items-start gap-2.5 border p-3.5 text-sm font-medium"
     >
-      <span aria-hidden>✓</span>
+      <Check className="mt-0.5 size-4 shrink-0" aria-hidden />
       <span>{children}</span>
     </div>
   );

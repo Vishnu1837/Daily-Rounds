@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, Outfit } from 'next/font/google';
+import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 
 import { ToastProvider } from '@/components/ui/toast';
 
@@ -11,7 +11,12 @@ const inter = Inter({
   display: 'swap',
 });
 
-const outfit = Outfit({
+/*
+ * A separate display face for headings and statistics. Its wider apertures and taller
+ * x-height are what let a 72px streak number carry a card on its own — Inter at that size
+ * reads as body copy that happened to be scaled up.
+ */
+const display = Plus_Jakarta_Sans({
   subsets: ['latin'],
   weight: ['600', '700', '800'],
   variable: '--font-display',
@@ -35,14 +40,19 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: 'cover',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#fbfcfe' },
-    { media: '(prefers-color-scheme: dark)', color: '#131a26' },
+    { media: '(prefers-color-scheme: light)', color: '#f6f6fb' },
+    { media: '(prefers-color-scheme: dark)', color: '#101019' },
   ],
 };
 
 /**
  * Applies the saved theme before first paint so there is no flash of the wrong scheme.
  * Kept inline and tiny on purpose.
+ *
+ * It stays a raw `<script>` in `<head>` rather than going through `next/script`. Every
+ * `next/script` strategy available in the App Router defers execution until after
+ * hydration begins, which is precisely one frame too late: the point of this script is to
+ * have decided the theme before anything is painted.
  */
 const THEME_SCRIPT = `
 (function(){try{
@@ -54,14 +64,14 @@ const THEME_SCRIPT = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${outfit.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${display.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className="min-h-dvh antialiased">
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-[100] focus:rounded-xl focus:bg-pulse-600 focus:px-4 focus:py-2 focus:font-semibold focus:text-white"
+          className="focus:bg-pulse-600 sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-[100] focus:rounded-xl focus:px-4 focus:py-2 focus:font-semibold focus:text-white"
         >
           Skip to content
         </a>

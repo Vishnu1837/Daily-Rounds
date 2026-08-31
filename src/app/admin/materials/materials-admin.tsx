@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ExternalLink, Pencil, Plus, Trash2 } from 'lucide-react';
+import { BookOpen, ExternalLink, Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/feedback';
 import { FormError, Select, TextArea, TextInput } from '@/components/ui/form';
 import { Sheet } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/toast';
+import { PageHeader } from '@/components/ui/page-header';
 import type { MaterialType } from '@/db/schema';
 import { deleteMaterialAction, saveMaterialAction } from '@/server/actions/admin';
 
@@ -53,38 +54,37 @@ export function MaterialsAdminScreen({
   const [confirming, setConfirming] = useState<string | null>(null);
 
   return (
-    <div className="space-y-4">
-      <header className="flex flex-wrap items-end justify-between gap-3 px-1 pt-2">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-fg">Materials</h1>
-          <p className="mt-1 text-sm text-fg-muted">
-            External links only — no file hosting, by design.
-          </p>
-        </div>
-        <Button size="md" onClick={() => setSheet({ open: true, material: null })}>
-          <Plus className="size-4" aria-hidden />
-          Add material
-        </Button>
-      </header>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Library"
+        title="Materials"
+        description="External links only — no file hosting, by design."
+        actions={
+          <Button size="md" onClick={() => setSheet({ open: true, material: null })}>
+            <Plus className="size-4" aria-hidden />
+            Add material
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader title={`${materials.length} resources`} />
         {materials.length === 0 ? (
           <EmptyState
-            emoji="📚"
+            icon={<BookOpen className="size-6" aria-hidden />}
             title="No materials yet"
             description="Add a link and tag it with a topic — it will appear under that topic for every student."
           />
         ) : (
-          <ul className="mt-2 divide-y divide-border">
+          <ul className="divide-border mt-2 divide-y">
             {materials.map((m) => (
               <li key={m.id} className="flex items-start gap-3 p-4">
                 <span className="text-xl" aria-hidden>
                   {TYPES.find((t) => t.value === m.type)?.emoji ?? '🔗'}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-fg">{m.title}</p>
-                  {m.description && <p className="text-xs text-fg-muted">{m.description}</p>}
+                  <p className="text-fg text-sm font-bold">{m.title}</p>
+                  {m.description && <p className="text-fg-muted text-xs">{m.description}</p>}
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     {m.subjectName && <Badge tone="iris">{m.subjectName}</Badge>}
                     {m.topicKey && <Badge>{m.topicKey}</Badge>}
@@ -92,7 +92,7 @@ export function MaterialsAdminScreen({
                       href={m.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-pulse-700 hover:underline dark:text-pulse-400"
+                      className="text-pulse-700 dark:text-pulse-400 inline-flex items-center gap-1 text-xs font-semibold hover:underline"
                     >
                       Open <ExternalLink className="size-3" aria-hidden />
                       <span className="sr-only">(opens in a new tab)</span>
@@ -104,7 +104,7 @@ export function MaterialsAdminScreen({
                     type="button"
                     onClick={() => setSheet({ open: true, material: m })}
                     aria-label={`Edit ${m.title}`}
-                    className="tap grid size-8 place-items-center rounded-lg text-fg-subtle hover:bg-bg-sunken hover:text-fg"
+                    className="tap text-fg-subtle hover:bg-bg-sunken hover:text-fg grid size-8 place-items-center rounded-lg"
                   >
                     <Pencil className="size-3.5" aria-hidden />
                   </button>
@@ -138,7 +138,7 @@ export function MaterialsAdminScreen({
                       type="button"
                       onClick={() => setConfirming(m.id)}
                       aria-label={`Delete ${m.title}`}
-                      className="tap grid size-8 place-items-center rounded-lg text-fg-subtle hover:bg-danger/10 hover:text-danger"
+                      className="tap text-fg-subtle hover:bg-danger/10 hover:text-danger grid size-8 place-items-center rounded-lg"
                     >
                       <Trash2 className="size-3.5" aria-hidden />
                     </button>

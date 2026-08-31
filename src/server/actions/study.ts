@@ -4,7 +4,13 @@ import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 import { db } from '@/db/client';
-import { dailyAssignments, roadmapTopics, roadmaps, studentAchievements, studySessions } from '@/db/schema';
+import {
+  dailyAssignments,
+  roadmapTopics,
+  roadmaps,
+  studentAchievements,
+  studySessions,
+} from '@/db/schema';
 import { requireUserAction } from '@/lib/auth/guards';
 import { ledgerKey } from '@/lib/domain/points';
 import { getMemberContext } from '@/server/context';
@@ -89,7 +95,10 @@ export async function startSessionAction(): Promise<Result<StudySessionState>> {
     }
 
     const assignment = await db
-      .select({ topicId: dailyAssignments.topicId, plannedMinutes: dailyAssignments.plannedMinutes })
+      .select({
+        topicId: dailyAssignments.topicId,
+        plannedMinutes: dailyAssignments.plannedMinutes,
+      })
       .from(dailyAssignments)
       .where(and(eq(dailyAssignments.memberId, ctx.memberId), eq(dailyAssignments.date, ctx.today)))
       .limit(1);
@@ -212,7 +221,7 @@ export async function finishSessionAction(sessionId: string): Promise<Result<Fin
       minutes: Math.round(elapsed / 60),
       requiredMinutes: Math.ceil(requiredSeconds / 60),
     });
-  }, "We could not save your study block. Your points have not changed — please try again.");
+  }, 'We could not save your study block. Your points have not changed — please try again.');
 }
 
 /** Marks today's assigned topic complete and advances the roadmap. */

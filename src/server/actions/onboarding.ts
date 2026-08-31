@@ -185,9 +185,7 @@ export async function ensureStartingRoadmap(args: {
           title,
           position: wi * 100 + ti,
           estimatedMinutes: args.dailyMinutes,
-          status: (wi === 0 && ti === 0 ? 'in_progress' : 'upcoming') as
-            | 'in_progress'
-            | 'upcoming',
+          status: (wi === 0 && ti === 0 ? 'in_progress' : 'upcoming') as 'in_progress' | 'upcoming',
         })),
       ),
     )
@@ -207,10 +205,7 @@ export async function ensureStartingRoadmap(args: {
     .onConflictDoNothing({ target: [dailyAssignments.memberId, dailyAssignments.date] });
 }
 
-export async function updateProfileAction(
-  _prev: unknown,
-  formData: FormData,
-): Promise<Result> {
+export async function updateProfileAction(_prev: unknown, formData: FormData): Promise<Result> {
   return guarded(async () => {
     const user = await requireUserAction();
     const parsed = profileSchema.safeParse(Object.fromEntries(formData));

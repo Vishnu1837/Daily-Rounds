@@ -6,10 +6,12 @@ import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/feedback';
+import { PageHeader } from '@/components/ui/page-header';
 import { requireAdmin } from '@/lib/auth/guards';
 import { OBSTACLE_LABELS } from '@/lib/validation';
 import { getCohortContext, getPrimaryCohort } from '@/server/context';
 import { getRecentCheckIns } from '@/server/queries/admin';
+import { ClipboardList } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'Check-ins' };
 export const dynamic = 'force-dynamic';
@@ -40,13 +42,12 @@ export default async function CheckInsPage() {
   const topObstacles = [...obstacleCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
 
   return (
-    <div className="space-y-4">
-      <header className="px-1 pt-2">
-        <h1 className="text-2xl font-extrabold tracking-tight text-fg">Check-ins</h1>
-        <p className="mt-1 text-sm text-fg-muted">
-          What students actually did, and what stopped them.
-        </p>
-      </header>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Daily reports"
+        title="Check-ins"
+        description="What students actually did, and what stopped them."
+      />
 
       {topObstacles.length > 0 && (
         <Card>
@@ -69,7 +70,7 @@ export default async function CheckInsPage() {
       {byDate.size === 0 ? (
         <Card>
           <EmptyState
-            emoji="📝"
+            icon={<ClipboardList className="size-6" aria-hidden />}
             title="No check-ins yet"
             description="Once students start checking in, their answers will appear here newest first."
           />
@@ -77,17 +78,17 @@ export default async function CheckInsPage() {
       ) : (
         [...byDate.entries()].map(([date, entries]) => (
           <section key={date} className="space-y-2">
-            <h2 className="px-1 text-2xs font-bold tracking-[0.14em] text-fg-subtle uppercase">
+            <h2 className="eyebrow px-1">
               {date === ctx.today ? `Today · ${date}` : date} · {entries.length} check-ins
             </h2>
-            <Card className="divide-y divide-border p-0">
+            <Card className="divide-border divide-y p-0">
               {entries.map((c) => (
                 <article key={c.id} className="p-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <Avatar name={c.name} size="xs" />
                     <Link
                       href={`/admin/students/${c.memberId}`}
-                      className="text-sm font-bold text-fg hover:underline"
+                      className="text-fg text-sm font-bold hover:underline"
                     >
                       {c.name}
                     </Link>
@@ -103,29 +104,29 @@ export default async function CheckInsPage() {
                       {c.completion}
                     </Badge>
                     <Badge>{c.actualMinutes} min</Badge>
-                    <span className="text-xs text-fg-subtle" title={`${c.satisfaction} out of 5`}>
+                    <span className="text-fg-subtle text-xs" title={`${c.satisfaction} out of 5`}>
                       {'★'.repeat(c.satisfaction)}
                       {'☆'.repeat(5 - c.satisfaction)}
                     </span>
                     {c.isComeback && <Badge tone="flame">Comeback</Badge>}
                   </div>
 
-                  <p className="mt-2 text-sm text-fg">{c.whatStudied}</p>
+                  <p className="text-fg mt-2 text-sm">{c.whatStudied}</p>
 
                   {c.obstacle !== 'none' && (
-                    <p className="mt-1.5 text-sm text-fg-muted">
+                    <p className="text-fg-muted mt-1.5 text-sm">
                       <strong className="text-fg">Blocked by:</strong>{' '}
                       {OBSTACLE_LABELS[c.obstacle] ?? c.obstacle}
                       {c.obstacleNote ? ` — ${c.obstacleNote}` : ''}
                     </p>
                   )}
                   {c.tomorrowTarget && (
-                    <p className="mt-1.5 text-sm text-fg-muted">
+                    <p className="text-fg-muted mt-1.5 text-sm">
                       <strong className="text-fg">Tomorrow:</strong> {c.tomorrowTarget}
                     </p>
                   )}
                   {c.reflection && (
-                    <p className="mt-1.5 text-sm text-fg-subtle italic">“{c.reflection}”</p>
+                    <p className="text-fg-subtle mt-1.5 text-sm italic">“{c.reflection}”</p>
                   )}
                 </article>
               ))}

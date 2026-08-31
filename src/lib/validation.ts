@@ -92,7 +92,12 @@ export const onboardingSchema = z.object({
   timezone: z.string().trim().min(3).max(64).default('Asia/Kolkata'),
 
   primarySubjectId: z.string().uuid('Choose a primary subject'),
-  secondarySubjectId: z.string().uuid().optional().or(z.literal('')).transform((v) => v || undefined),
+  secondarySubjectId: z
+    .string()
+    .uuid()
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
   cohortGoal: z
     .string()
     .trim()
@@ -103,14 +108,29 @@ export const onboardingSchema = z.object({
     .int()
     .min(15, 'Commit to at least 15 minutes')
     .max(720, 'That is more than 12 hours — pick something realistic'),
-  examName: z.string().trim().max(160).optional().or(z.literal('')).transform((v) => v || undefined),
-  examDate: isoDateSchema.optional().or(z.literal('')).transform((v) => v || undefined),
+  examName: z
+    .string()
+    .trim()
+    .max(160)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  examDate: isoDateSchema
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
 
   baselineDaysStudiedLastWeek: z.coerce.number().int().min(0).max(7),
   baselineConsistencyRating: z.coerce.number().int().min(1).max(10),
   baselineConfidence: z.coerce.number().int().min(1).max(5),
   biggestObstacle: z.enum(obstacleValues),
-  obstacleNote: z.string().trim().max(300).optional().or(z.literal('')).transform((v) => v || undefined),
+  obstacleNote: z
+    .string()
+    .trim()
+    .max(300)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
 });
 
 export type OnboardingInput = z.infer<typeof onboardingSchema>;
@@ -127,11 +147,35 @@ export const checkInSchema = z.object({
     .max(1440, 'A day only has 1440 minutes'),
   whatStudied: z.string().trim().min(3, 'A few words is enough').max(500),
   obstacle: z.enum([...obstacleValues, 'none']),
-  obstacleNote: z.string().trim().max(300).optional().or(z.literal('')).transform((v) => v || undefined),
-  tomorrowTarget: z.string().trim().max(500).optional().or(z.literal('')).transform((v) => v || undefined),
+  obstacleNote: z
+    .string()
+    .trim()
+    .max(300)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  tomorrowTarget: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
   satisfaction: z.coerce.number().int().min(1).max(5),
-  reflection: z.string().trim().max(1000).optional().or(z.literal('')).transform((v) => v || undefined),
-  comebackReason: z.string().trim().max(500).optional().or(z.literal('')).transform((v) => v || undefined),
+  reflection: z
+    .string()
+    .trim()
+    .max(1000)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  comebackReason: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
 });
 
 export type CheckInInput = z.infer<typeof checkInSchema>;
@@ -148,7 +192,11 @@ export const sessionIdSchema = z.object({ sessionId: z.string().uuid() });
 export const finishSessionSchema = z.object({
   sessionId: z.string().uuid(),
   /** Client-reported elapsed seconds; the server clamps it against wall-clock time. */
-  elapsedSeconds: z.coerce.number().int().min(0).max(24 * 3600),
+  elapsedSeconds: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 3600),
 });
 
 /* ------------------------------------------------------------ weekly review */
@@ -170,25 +218,34 @@ export const quizSubmissionSchema = z.object({
 
 /* ----------------------------------------------------------------- admin */
 
-export const cohortSettingsSchema = z.object({
-  cohortId: z.string().uuid(),
-  name: z.string().trim().min(2).max(120),
-  timezone: z.string().trim().min(3).max(64),
-  startDate: isoDateSchema,
-  endDate: isoDateSchema,
-  activeWeekdays: z.array(z.coerce.number().int().min(1).max(7)).min(1, 'Pick at least one day'),
-  streakThresholdPct: z.coerce.number().int().min(1).max(100),
-  meetUrl: z.string().trim().url('Enter a full URL').max(500).optional().or(z.literal('')).transform((v) => v || undefined),
-  meetStartTime: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:MM'),
-  meetEndTime: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:MM'),
-  atRiskMissedDays: z.coerce.number().int().min(1).max(30),
-  interventionMissedDays: z.coerce.number().int().min(1).max(30),
-  atRiskConsistencyDropPct: z.coerce.number().int().min(1).max(100),
-  minConsistencyPct: z.coerce.number().int().min(0).max(100),
-}).refine((v) => v.endDate >= v.startDate, {
-  message: 'End date must be after the start date',
-  path: ['endDate'],
-});
+export const cohortSettingsSchema = z
+  .object({
+    cohortId: z.string().uuid(),
+    name: z.string().trim().min(2).max(120),
+    timezone: z.string().trim().min(3).max(64),
+    startDate: isoDateSchema,
+    endDate: isoDateSchema,
+    activeWeekdays: z.array(z.coerce.number().int().min(1).max(7)).min(1, 'Pick at least one day'),
+    streakThresholdPct: z.coerce.number().int().min(1).max(100),
+    meetUrl: z
+      .string()
+      .trim()
+      .url('Enter a full URL')
+      .max(500)
+      .optional()
+      .or(z.literal(''))
+      .transform((v) => v || undefined),
+    meetStartTime: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:MM'),
+    meetEndTime: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:MM'),
+    atRiskMissedDays: z.coerce.number().int().min(1).max(30),
+    interventionMissedDays: z.coerce.number().int().min(1).max(30),
+    atRiskConsistencyDropPct: z.coerce.number().int().min(1).max(100),
+    minConsistencyPct: z.coerce.number().int().min(0).max(100),
+  })
+  .refine((v) => v.endDate >= v.startDate, {
+    message: 'End date must be after the start date',
+    path: ['endDate'],
+  });
 
 export const holidaySchema = z.object({
   cohortId: z.string().uuid(),
@@ -219,7 +276,13 @@ export const roadmapSchema = z.object({
   memberId: z.string().uuid(),
   subjectId: z.string().uuid(),
   title: z.string().trim().min(2).max(160),
-  track: z.string().trim().max(160).optional().or(z.literal('')).transform((v) => v || undefined),
+  track: z
+    .string()
+    .trim()
+    .max(160)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
 });
 
 export const roadmapWeekSchema = z.object({
@@ -230,9 +293,20 @@ export const roadmapWeekSchema = z.object({
 
 export const topicSchema = z.object({
   roadmapId: z.string().uuid(),
-  weekId: z.string().uuid().optional().or(z.literal('')).transform((v) => v || undefined),
+  weekId: z
+    .string()
+    .uuid()
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
   title: z.string().trim().min(2).max(200),
-  description: z.string().trim().max(1000).optional().or(z.literal('')).transform((v) => v || undefined),
+  description: z
+    .string()
+    .trim()
+    .max(1000)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
   estimatedMinutes: z.coerce.number().int().min(5).max(720),
 });
 
@@ -246,9 +320,20 @@ export const topicReorderSchema = z.object({
 export const assignmentSchema = z.object({
   memberId: z.string().uuid(),
   date: isoDateSchema,
-  topicId: z.string().uuid().optional().or(z.literal('')).transform((v) => v || undefined),
+  topicId: z
+    .string()
+    .uuid()
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
   plannedMinutes: z.coerce.number().int().min(5).max(720),
-  note: z.string().trim().max(500).optional().or(z.literal('')).transform((v) => v || undefined),
+  note: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
 });
 
 export const bulkAssignmentSchema = z.object({
@@ -261,10 +346,27 @@ export const bulkAssignmentSchema = z.object({
 
 export const materialSchema = z.object({
   cohortId: z.string().uuid(),
-  subjectId: z.string().uuid().optional().or(z.literal('')).transform((v) => v || undefined),
-  topicKey: z.string().trim().max(200).optional().or(z.literal('')).transform((v) => v || undefined),
+  subjectId: z
+    .string()
+    .uuid()
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  topicKey: z
+    .string()
+    .trim()
+    .max(200)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
   title: z.string().trim().min(2).max(200),
-  description: z.string().trim().max(500).optional().or(z.literal('')).transform((v) => v || undefined),
+  description: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
   type: z.enum(['pdf', 'drive', 'video', 'textbook', 'website', 'recording']),
   url: z.string().trim().url('Enter a full URL including https://').max(1000),
 });
@@ -273,11 +375,24 @@ export const eventSchema = z.object({
   cohortId: z.string().uuid(),
   type: z.enum(['study_room', 'workshop', 'guest_session', 'weekly_review', 'assessment', 'other']),
   title: z.string().trim().min(2).max(160),
-  description: z.string().trim().max(1000).optional().or(z.literal('')).transform((v) => v || undefined),
+  description: z
+    .string()
+    .trim()
+    .max(1000)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
   date: isoDateSchema,
   startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:MM'),
   endTime: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:MM'),
-  meetUrl: z.string().trim().url('Enter a full URL').max(500).optional().or(z.literal('')).transform((v) => v || undefined),
+  meetUrl: z
+    .string()
+    .trim()
+    .url('Enter a full URL')
+    .max(500)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
 });
 
 export const announcementSchema = z.object({
@@ -303,8 +418,20 @@ export const studentAdminSchema = z.object({
   userId: z.string().uuid(),
   fullName: z.string().trim().min(2).max(120),
   email: emailSchema,
-  whatsapp: z.string().trim().max(32).optional().or(z.literal('')).transform((v) => v || undefined),
-  university: z.string().trim().max(160).optional().or(z.literal('')).transform((v) => v || undefined),
+  whatsapp: z
+    .string()
+    .trim()
+    .max(32)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  university: z
+    .string()
+    .trim()
+    .max(160)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
   mbbsYear: z.coerce.number().int().min(1).max(5).optional(),
   role: z.enum(['student', 'admin']),
   status: z.enum(['active', 'paused', 'left']),
@@ -316,13 +443,31 @@ export const createStudentSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   mbbsYear: z.coerce.number().int().min(1).max(5).optional(),
-  university: z.string().trim().max(160).optional().or(z.literal('')).transform((v) => v || undefined),
+  university: z
+    .string()
+    .trim()
+    .max(160)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
 });
 
 export const profileSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
-  whatsapp: z.string().trim().max(32).optional().or(z.literal('')).transform((v) => v || undefined),
-  university: z.string().trim().max(160).optional().or(z.literal('')).transform((v) => v || undefined),
+  whatsapp: z
+    .string()
+    .trim()
+    .max(32)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  university: z
+    .string()
+    .trim()
+    .max(160)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
   mbbsYear: z.coerce.number().int().min(1).max(5).optional(),
   timezone: z.string().trim().min(3).max(64),
 });

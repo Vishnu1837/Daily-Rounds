@@ -64,8 +64,8 @@ export function ResetPasswordForm({ token }: { token: string }) {
         Update password
       </Button>
 
-      <p className="text-center text-sm text-fg-muted">
-        <Link href="/login" className="font-semibold text-pulse-700 dark:text-pulse-400">
+      <p className="text-fg-muted text-center text-sm">
+        <Link href="/login" className="text-pulse-700 dark:text-pulse-400 font-semibold">
           Back to sign in
         </Link>
       </p>

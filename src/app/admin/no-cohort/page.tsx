@@ -4,6 +4,7 @@ import { Logo } from '@/components/brand/logo';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/feedback';
 import { requireAdmin } from '@/lib/auth/guards';
+import { Building2 } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'No cohort' };
 export const dynamic = 'force-dynamic';
@@ -16,14 +17,14 @@ export default async function AdminNoCohortPage() {
       <div className="mb-6 flex justify-center">
         <Logo />
       </div>
-      <Card>
+      <Card variant="outline">
         <EmptyState
-          emoji="🏗️"
+          icon={<Building2 className="size-6" aria-hidden />}
           title="No cohort exists yet"
           description="Daily Rounds is organised around cohorts. Create one with `npm run db:seed` in development, or run the documented production bootstrap to open your first cohort."
         />
         <div className="px-6 pb-6">
-          <pre className="overflow-x-auto rounded-2xl bg-bg-sunken p-4 text-xs text-fg-muted">
+          <pre className="rounded-panel bg-bg-sunken text-fg-muted overflow-x-auto p-4 font-mono text-xs">
             npm run db:migrate{'\n'}npm run db:seed
           </pre>
         </div>

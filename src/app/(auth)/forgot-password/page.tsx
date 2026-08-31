@@ -13,24 +13,29 @@ export default function ForgotPasswordPage() {
   const [state, action, pending] = useActionState(forgotPasswordAction, initial);
 
   return (
-    <div>
-      <h1 className="text-3xl font-extrabold tracking-tight text-fg">Reset your password</h1>
-      <p className="mt-2 text-sm text-fg-muted">
+    <div className="animate-rise">
+      <p className="eyebrow">Account recovery</p>
+      <h1 className="text-fg mt-2 text-3xl font-extrabold tracking-tight">Reset your password</h1>
+      <p className="text-fg-muted mt-2.5 text-sm">
         Enter the email you signed up with and we&apos;ll send you a reset link.
       </p>
 
-      <form action={action} className="mt-7 space-y-4" noValidate>
-        {state.ok ? <FormSuccess>{state.message}</FormSuccess> : <FormError>{state.message}</FormError>}
+      <form action={action} className="mt-8 space-y-4" noValidate>
+        {state.ok ? (
+          <FormSuccess>{state.message}</FormSuccess>
+        ) : (
+          <FormError>{state.message}</FormError>
+        )}
 
         {state.devResetUrl && (
-          <div className="rounded-2xl border border-warning/40 bg-warning/10 p-3.5 text-sm">
-            <p className="font-semibold text-fg">Development mode</p>
-            <p className="mt-1 text-fg-muted">
+          <div className="rounded-panel border-warning/40 bg-warning/12 border p-3.5 text-sm">
+            <p className="text-fg font-semibold">Development mode</p>
+            <p className="text-fg-muted mt-1">
               No mail provider is configured, so here is the link directly:
             </p>
             <Link
               href={state.devResetUrl}
-              className="mt-2 inline-block font-semibold break-all text-pulse-700 underline dark:text-pulse-400"
+              className="text-pulse-700 dark:text-pulse-400 mt-2 inline-block font-semibold break-all underline"
             >
               {state.devResetUrl}
             </Link>
@@ -53,8 +58,8 @@ export default function ForgotPasswordPage() {
         </Button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-fg-muted">
-        <Link href="/login" className="font-semibold text-pulse-700 dark:text-pulse-400">
+      <p className="text-fg-muted mt-6 text-center text-sm">
+        <Link href="/login" className="text-pulse-700 dark:text-pulse-400 font-semibold">
           Back to sign in
         </Link>
       </p>

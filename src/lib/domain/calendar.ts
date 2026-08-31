@@ -158,11 +158,7 @@ export function isActiveStudyDay(cal: CohortCalendar, date: ISODate): boolean {
 }
 
 /** Inclusive list of active study days in `[from, to]`, clamped to the cohort range. */
-export function activeStudyDaysBetween(
-  cal: CohortCalendar,
-  from: ISODate,
-  to: ISODate,
-): ISODate[] {
+export function activeStudyDaysBetween(cal: CohortCalendar, from: ISODate, to: ISODate): ISODate[] {
   const start = maxDate(from, cal.startDate);
   const end = minDate(to, cal.endDate);
   if (start > end) return [];

@@ -43,42 +43,82 @@ export function ThemeToggle({ className }: { className?: string }) {
       onClick={toggle}
       aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
       className={cn(
-        'tap grid size-10 place-items-center rounded-xl text-fg-muted transition-colors hover:bg-bg-sunken hover:text-fg',
+        'tap rounded-field text-fg-muted hover:bg-bg-sunken hover:text-fg grid size-9.5 place-items-center transition-colors',
         className,
       )}
     >
-      {dark ? <Moon className="size-[18px]" aria-hidden /> : <Sun className="size-[18px]" aria-hidden />}
+      {dark ? (
+        <Moon className="size-[18px]" aria-hidden />
+      ) : (
+        <Sun className="size-[18px]" aria-hidden />
+      )}
     </button>
   );
 }
 
+/**
+ * The header.
+ *
+ * It carries the two numbers a student should never have to navigate to find — the live
+ * streak and the XP total — because both are the reason to come back tomorrow, and burying
+ * them one tap deep is how a habit product loses the habit.
+ */
 export function TopBar({
   name,
   streak,
+  xp,
+  level,
   href = '/profile',
   right,
+  subtitle,
 }: {
   name: string;
   streak?: number;
+  xp?: number;
+  level?: number;
   href?: string;
   right?: React.ReactNode;
+  /** Small line under the wordmark on desktop — usually the date and cohort. */
+  subtitle?: React.ReactNode;
 }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-[var(--nav-bg)] backdrop-blur-xl">
-      <div className="mx-auto flex h-14 max-w-2xl items-center justify-between gap-3 px-4 lg:max-w-none lg:px-6">
+    <header className="sticky top-0 z-30 border-b border-[var(--nav-border)] bg-[var(--nav-bg)] backdrop-blur-xl">
+      <div className="mx-auto flex h-15 max-w-7xl items-center justify-between gap-3 px-4 lg:px-8">
         <Link href="/" className="lg:hidden" aria-label="Daily Rounds home">
-          <Logo size={28} />
+          <Logo size={30} />
         </Link>
-        <div className="hidden lg:block" />
 
-        <div className="flex items-center gap-1">
+        <div className="hidden min-w-0 lg:block">
+          {subtitle && <p className="text-fg-muted truncate text-sm font-medium">{subtitle}</p>}
+        </div>
+
+        <div className="flex items-center gap-1.5">
           {right}
+
+          {typeof level === 'number' && typeof xp === 'number' && (
+            <span
+              className="rounded-pill bg-bg-sunken hidden items-center gap-2 py-1 pr-3 pl-1 sm:inline-flex"
+              title={`Level ${level} · ${xp.toLocaleString()} XP`}
+            >
+              <span
+                className="stat-num from-citrus-300 to-citrus-500 text-2xs text-ink-950 grid size-7 place-items-center rounded-full bg-linear-to-br"
+                aria-hidden
+              >
+                {level}
+              </span>
+              <span className="text-fg text-sm font-bold tabular-nums">
+                {xp.toLocaleString()}
+                <span className="text-2xs text-fg-subtle ml-1 font-bold">XP</span>
+              </span>
+            </span>
+          )}
+
           {typeof streak === 'number' && (
             <span
               className={cn(
-                'mr-1 inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-sm font-bold',
+                'rounded-pill inline-flex items-center gap-1 py-1 pr-3 pl-2 text-sm font-bold tabular-nums',
                 streak > 0
-                  ? 'bg-flame-500/12 text-flame-600 dark:text-flame-300'
+                  ? 'bg-flame-500/12 text-flame-700 dark:text-flame-300'
                   : 'bg-bg-sunken text-fg-subtle',
               )}
               title={`${streak} study-day streak`}
@@ -87,9 +127,11 @@ export function TopBar({
               {streak}
             </span>
           )}
+
           <ThemeToggle />
+
           <Link href={href} aria-label="Your profile" className="tap ml-0.5">
-            <Avatar name={name} size="sm" />
+            <Avatar name={name} size="sm" ring />
           </Link>
         </div>
       </div>

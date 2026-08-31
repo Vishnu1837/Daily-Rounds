@@ -18,7 +18,7 @@ export default async function OnboardingPage() {
   return (
     <div className="relative min-h-dvh">
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-linear-to-b from-pulse-500/12 to-transparent"
+        className="from-pulse-500/12 pointer-events-none absolute inset-x-0 top-0 h-72 bg-linear-to-b to-transparent"
         aria-hidden
       />
       <main id="main" className="relative mx-auto max-w-lg px-4 py-8 sm:py-12">

@@ -11,7 +11,12 @@ import type { SubjectSlug } from './subjects';
 /** Roadmap templates: a track plus week-by-week topics, as an admin would build them. */
 export const ROADMAP_TEMPLATES: Record<
   string,
-  { subject: SubjectSlug; title: string; track: string; weeks: { title: string; topics: string[] }[] }
+  {
+    subject: SubjectSlug;
+    title: string;
+    track: string;
+    weeks: { title: string; topics: string[] }[];
+  }
 > = {
   general_pathology: {
     subject: 'pathology',

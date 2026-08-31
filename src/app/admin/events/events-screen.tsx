@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { CalendarDays, Megaphone, Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/feedback';
 import { FormError, Select, TextArea, TextInput } from '@/components/ui/form';
 import { Sheet } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/toast';
+import { PageHeader } from '@/components/ui/page-header';
 import type { EventType } from '@/db/schema';
 import {
   deleteAnnouncementAction,
@@ -62,13 +63,12 @@ export function EventsScreen({
   }>({ open: false, announcement: null });
 
   return (
-    <div className="space-y-4">
-      <header className="px-1 pt-2">
-        <h1 className="text-2xl font-extrabold tracking-tight text-fg">Events &amp; announcements</h1>
-        <p className="mt-1 text-sm text-fg-muted">
-          Everything here appears on the student calendar and home screen.
-        </p>
-      </header>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Cohort comms"
+        title="Events & announcements"
+        description="Everything here appears on the student calendar and home screen."
+      />
 
       <Card>
         <CardHeader
@@ -86,20 +86,20 @@ export function EventsScreen({
         />
         {announcements.length === 0 ? (
           <EmptyState
-            emoji="📣"
+            icon={<Megaphone className="size-6" aria-hidden />}
             title="No announcements"
             description="Post one when something changes — a new meet time, a schedule shift, a nudge."
           />
         ) : (
-          <ul className="mt-2 divide-y divide-border">
+          <ul className="divide-border mt-2 divide-y">
             {announcements.map((a) => (
               <li key={a.id} className="flex items-start gap-3 p-4">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-bold text-fg">{a.title}</p>
+                    <p className="text-fg text-sm font-bold">{a.title}</p>
                     {a.isPinned && <Badge tone="pulse">Pinned</Badge>}
                   </div>
-                  <p className="mt-1 text-sm text-fg-muted">{a.body}</p>
+                  <p className="text-fg-muted mt-1 text-sm">{a.body}</p>
                 </div>
                 <RowActions
                   onEdit={() => setAnnouncementSheet({ open: true, announcement: a })}
@@ -125,25 +125,23 @@ export function EventsScreen({
         />
         {events.length === 0 ? (
           <EmptyState
-            emoji="📅"
+            icon={<CalendarDays className="size-6" aria-hidden />}
             title="No events scheduled"
             description="Add a workshop or guest session and it will show up on every student's calendar."
           />
         ) : (
-          <ul className="mt-2 divide-y divide-border">
+          <ul className="divide-border mt-2 divide-y">
             {events.map((e) => (
               <li key={e.id} className="flex items-start gap-3 p-4">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-bold text-fg">{e.title}</p>
+                    <p className="text-fg text-sm font-bold">{e.title}</p>
                     <Badge>{EVENT_TYPES.find((t) => t.value === e.type)?.label ?? e.type}</Badge>
                   </div>
-                  <p className="mt-1 text-xs text-fg-muted">
+                  <p className="text-fg-muted mt-1 text-xs">
                     {e.date} · {e.startTime}–{e.endTime}
                   </p>
-                  {e.description && (
-                    <p className="mt-1 text-sm text-fg-muted">{e.description}</p>
-                  )}
+                  {e.description && <p className="text-fg-muted mt-1 text-sm">{e.description}</p>}
                 </div>
                 <RowActions
                   onEdit={() => setEventSheet({ open: true, event: e })}
@@ -204,7 +202,7 @@ function RowActions({
         type="button"
         onClick={onEdit}
         aria-label={`Edit ${label}`}
-        className="tap grid size-8 place-items-center rounded-lg text-fg-subtle hover:bg-bg-sunken hover:text-fg"
+        className="tap text-fg-subtle hover:bg-bg-sunken hover:text-fg grid size-8 place-items-center rounded-lg"
       >
         <Pencil className="size-3.5" aria-hidden />
       </button>
@@ -238,7 +236,7 @@ function RowActions({
           type="button"
           onClick={() => setConfirming(true)}
           aria-label={`Delete ${label}`}
-          className="tap grid size-8 place-items-center rounded-lg text-fg-subtle hover:bg-danger/10 hover:text-danger"
+          className="tap text-fg-subtle hover:bg-danger/10 hover:text-danger grid size-8 place-items-center rounded-lg"
         >
           <Trash2 className="size-3.5" aria-hidden />
         </button>
@@ -285,7 +283,13 @@ function EventForm({
     >
       <input type="hidden" name="cohortId" value={cohortId} />
       <FormError>{message}</FormError>
-      <TextInput label="Title" name="title" defaultValue={event?.title ?? ''} required error={errors.title} />
+      <TextInput
+        label="Title"
+        name="title"
+        defaultValue={event?.title ?? ''}
+        required
+        error={errors.title}
+      />
       <Select label="Type" name="type" defaultValue={event?.type ?? 'workshop'}>
         {EVENT_TYPES.map((t) => (
           <option key={t.value} value={t.value}>
@@ -299,7 +303,14 @@ function EventForm({
         defaultValue={event?.description ?? ''}
         error={errors.description}
       />
-      <TextInput label="Date" name="date" type="date" defaultValue={event?.date ?? ''} required error={errors.date} />
+      <TextInput
+        label="Date"
+        name="date"
+        type="date"
+        defaultValue={event?.date ?? ''}
+        required
+        error={errors.date}
+      />
       <div className="grid grid-cols-2 gap-3">
         <TextInput
           label="Start"
@@ -384,12 +395,12 @@ function AnnouncementForm({
         required
         error={errors.body}
       />
-      <label className="flex items-center gap-2.5 text-sm font-semibold text-fg">
+      <label className="text-fg flex items-center gap-2.5 text-sm font-semibold">
         <input
           type="checkbox"
           name="isPinned"
           defaultChecked={announcement?.isPinned ?? false}
-          className="size-5 rounded border-border-strong accent-[var(--color-pulse-600)]"
+          className="border-border-strong size-5 rounded accent-[var(--color-pulse-600)]"
         />
         Pin to the top of every home screen
       </label>

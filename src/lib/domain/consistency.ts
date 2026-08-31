@@ -140,11 +140,16 @@ export function calculateImprovement(weeks: WeekProgress[]): {
   deltaPct: number;
 } {
   const representative = weeks.filter((w) => w.activeDays >= MIN_DAYS_FOR_COMPARISON);
-  const scored = representative.length >= 2 ? representative : weeks.filter((w) => w.activeDays > 0);
+  const scored =
+    representative.length >= 2 ? representative : weeks.filter((w) => w.activeDays > 0);
   const first = scored[0];
   const latest = scored[scored.length - 1];
   if (!first || !latest || scored.length < 2) {
-    return { firstPct: first?.consistencyPct ?? 0, latestPct: latest?.consistencyPct ?? 0, deltaPct: 0 };
+    return {
+      firstPct: first?.consistencyPct ?? 0,
+      latestPct: latest?.consistencyPct ?? 0,
+      deltaPct: 0,
+    };
   }
   return {
     firstPct: first.consistencyPct,

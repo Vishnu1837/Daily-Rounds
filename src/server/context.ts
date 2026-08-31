@@ -13,7 +13,13 @@ import {
   pointRules,
 } from '@/db/schema';
 import type { SessionUser } from '@/lib/auth/session';
-import { type CohortCalendar, type ISODate, buildCalendar, formatInTimezone, todayInTimezone } from '@/lib/domain/calendar';
+import {
+  type CohortCalendar,
+  type ISODate,
+  buildCalendar,
+  formatInTimezone,
+  todayInTimezone,
+} from '@/lib/domain/calendar';
 import { DEFAULT_POINT_RULES, type PointRules } from '@/lib/domain/points';
 import { DEFAULT_RISK_THRESHOLDS, type RiskThresholds } from '@/lib/domain/risk';
 
@@ -78,35 +84,33 @@ export function thresholdsFor(cohort: Cohort): RiskThresholds {
 }
 
 /** The student's active membership plus everything needed to score their day. */
-export const getMemberContext = cache(
-  async (user: SessionUser): Promise<MemberContext | null> => {
-    const rows = await db
-      .select({ member: cohortMembers, cohort: cohorts })
-      .from(cohortMembers)
-      .innerJoin(cohorts, eq(cohorts.id, cohortMembers.cohortId))
-      .where(and(eq(cohortMembers.userId, user.id), eq(cohortMembers.status, 'active')))
-      .limit(1);
+export const getMemberContext = cache(async (user: SessionUser): Promise<MemberContext | null> => {
+  const rows = await db
+    .select({ member: cohortMembers, cohort: cohorts })
+    .from(cohortMembers)
+    .innerJoin(cohorts, eq(cohorts.id, cohortMembers.cohortId))
+    .where(and(eq(cohortMembers.userId, user.id), eq(cohortMembers.status, 'active')))
+    .limit(1);
 
-    const row = rows[0];
-    if (!row) return null;
+  const row = rows[0];
+  if (!row) return null;
 
-    const [calendar, rules] = await Promise.all([
-      loadCalendar(row.cohort),
-      loadPointRules(row.cohort.id),
-    ]);
+  const [calendar, rules] = await Promise.all([
+    loadCalendar(row.cohort),
+    loadPointRules(row.cohort.id),
+  ]);
 
-    return {
-      user,
-      memberId: row.member.id,
-      cohort: row.cohort,
-      calendar,
-      rules,
-      thresholds: thresholdsFor(row.cohort),
-      today: todayInTimezone(row.cohort.timezone),
-      joinedOn: formatInTimezone(row.member.joinedAt, row.cohort.timezone),
-    };
-  },
-);
+  return {
+    user,
+    memberId: row.member.id,
+    cohort: row.cohort,
+    calendar,
+    rules,
+    thresholds: thresholdsFor(row.cohort),
+    today: todayInTimezone(row.cohort.timezone),
+    joinedOn: formatInTimezone(row.member.joinedAt, row.cohort.timezone),
+  };
+});
 
 /** Cohort-level context for admin screens. */
 export const getCohortContext = cache(async (cohortId: string) => {

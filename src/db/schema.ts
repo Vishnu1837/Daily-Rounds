@@ -40,7 +40,11 @@ export const sessionStatusEnum = pgEnum('study_session_status', [
   'abandoned',
 ]);
 export const attendanceStatusEnum = pgEnum('attendance_status', ['present', 'late', 'absent']);
-export const checkInCompletionEnum = pgEnum('check_in_completion', ['completed', 'partial', 'none']);
+export const checkInCompletionEnum = pgEnum('check_in_completion', [
+  'completed',
+  'partial',
+  'none',
+]);
 export const obstacleEnum = pgEnum('obstacle', [
   'procrastination',
   'social_media',

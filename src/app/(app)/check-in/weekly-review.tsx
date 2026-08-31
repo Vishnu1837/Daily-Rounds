@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { AnimatedCheck } from '@/components/gamification/celebration';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardAurora } from '@/components/ui/card';
 import { FormError, RatingScale, TextArea } from '@/components/ui/form';
 import { Sheet } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/toast';
@@ -14,7 +14,12 @@ import { submitWeeklyReviewAction } from '@/server/actions/check-in';
 
 export type WeeklyReviewData = {
   weekStart: string;
-  current: { consistencyPct: number; completedDays: number; activeDays: number; studyMinutes: number };
+  current: {
+    consistencyPct: number;
+    completedDays: number;
+    activeDays: number;
+    studyMinutes: number;
+  };
   previous: { consistencyPct: number };
   deltaPct: number;
   streak: number;
@@ -62,7 +67,12 @@ export function WeeklyReviewCard({ review }: { review: WeeklyReviewData }) {
 
   if (done) {
     return (
-      <Card className="flex items-center gap-3 p-5 text-success">
+      <Card
+        variant="wash"
+        tone="success"
+        padding="md"
+        className="text-success-strong dark:text-success flex items-center gap-3"
+      >
         <AnimatedCheck size={20} />
         <p className="text-sm font-bold">Weekly review submitted. Enjoy the weekend.</p>
       </Card>
@@ -71,38 +81,42 @@ export function WeeklyReviewCard({ review }: { review: WeeklyReviewData }) {
 
   return (
     <>
-      <Card className="overflow-hidden">
-        <div className="bg-linear-to-br from-iris-500/12 to-transparent p-5">
-          <h2 className="text-2xs font-bold tracking-[0.14em] text-fg-subtle uppercase">
-            Your week
-          </h2>
-          <p className="mt-2 text-3xl font-extrabold text-fg">
+      <Card variant="wash" tone="iris" padding="lg" className="overflow-hidden">
+        <CardAurora tone="iris" />
+        <div className="relative">
+          <p className="eyebrow">Your week</p>
+          <p className="stat-num text-stat text-fg mt-3 flex flex-wrap items-baseline gap-3">
             {review.current.consistencyPct}%
             {review.deltaPct !== 0 && (
               <span
                 className={cn(
-                  'ml-2 text-base font-bold',
-                  review.deltaPct > 0 ? 'text-success' : 'text-danger',
+                  'rounded-pill px-2.5 py-1 text-sm font-bold tracking-normal',
+                  review.deltaPct > 0
+                    ? 'bg-success/14 text-success-strong dark:text-success'
+                    : 'bg-danger/12 text-danger',
                 )}
               >
                 {review.deltaPct > 0 ? '↑' : '↓'} {Math.abs(review.deltaPct)} pts
               </span>
             )}
           </p>
-          <p className="mt-0.5 text-sm text-fg-muted">
+          <p className="text-fg-muted mt-1.5 text-sm">
             consistency this week{' '}
             {review.previous.consistencyPct > 0 && `· last week ${review.previous.consistencyPct}%`}
           </p>
 
-          <dl className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Stat label="Showed up" value={`${review.current.completedDays}/${review.current.activeDays}`} />
+          <dl className="border-iris-500/20 mt-6 grid grid-cols-2 gap-4 border-t pt-5 sm:grid-cols-4">
+            <Stat
+              label="Showed up"
+              value={`${review.current.completedDays}/${review.current.activeDays}`}
+            />
             <Stat label="Attendance" value={`${review.attendancePresent}`} />
             <Stat label="Topics done" value={`${review.topicsCompleted}`} />
             <Stat label="Study time" value={mins ? `${hours}h ${mins}m` : `${hours}h`} />
           </dl>
 
-          <Button size="lg" fullWidth className="mt-5" onClick={() => setOpen(true)}>
-            Reflect on the week (+15)
+          <Button size="lg" fullWidth className="mt-6" onClick={() => setOpen(true)}>
+            Reflect on the week (+15 XP)
           </Button>
         </div>
       </Card>
@@ -150,7 +164,7 @@ export function WeeklyReviewCard({ review }: { review: WeeklyReviewData }) {
             placeholder="Drop the target to 60 minutes on posting days so I actually finish it."
           />
           <div>
-            <p className="mb-2 text-sm font-semibold text-fg">
+            <p className="text-fg mb-2 text-sm font-semibold">
               How confident are you in your subject now?
             </p>
             <RatingScale
@@ -170,8 +184,8 @@ export function WeeklyReviewCard({ review }: { review: WeeklyReviewData }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-2xs font-bold tracking-[0.1em] text-fg-subtle uppercase">{label}</dt>
-      <dd className="mt-1 text-lg font-extrabold text-fg">{value}</dd>
+      <dt className="eyebrow">{label}</dt>
+      <dd className="stat-num text-fg mt-1.5 text-xl">{value}</dd>
     </div>
   );
 }

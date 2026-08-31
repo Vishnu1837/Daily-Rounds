@@ -10,6 +10,7 @@ import { SignOutButton } from '@/components/nav/sign-out-button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { FormError, Select, TextInput } from '@/components/ui/form';
 import { useToast } from '@/components/ui/toast';
+import { PageHeader } from '@/components/ui/page-header';
 import { cn } from '@/lib/cn';
 import { POINT_EVENT_LABELS, type PointRules } from '@/lib/domain/points';
 import type { RiskThresholds } from '@/lib/domain/risk';
@@ -77,13 +78,12 @@ export function SettingsScreen({
   const [weekdays, setWeekdays] = useState<number[]>(cohort.activeWeekdays);
 
   return (
-    <div className="space-y-4">
-      <header className="px-1 pt-2">
-        <h1 className="text-2xl font-extrabold tracking-tight text-fg">Cohort settings</h1>
-        <p className="mt-1 text-sm text-fg-muted">
-          Everything here changes how streaks, consistency and risk are calculated.
-        </p>
-      </header>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Configuration"
+        title="Cohort settings"
+        description="Everything here changes how streaks, consistency and risk are calculated."
+      />
 
       {/* --------------------------------------------------------- cohort */}
       <form
@@ -112,7 +112,13 @@ export function SettingsScreen({
           <CardHeader title="The cohort" />
           <div className="space-y-4 p-5 pt-4">
             <FormError>{message}</FormError>
-            <TextInput label="Name" name="name" defaultValue={cohort.name} required error={errors.name} />
+            <TextInput
+              label="Name"
+              name="name"
+              defaultValue={cohort.name}
+              required
+              error={errors.name}
+            />
             <Select label="Timezone" name="timezone" defaultValue={cohort.timezone}>
               {TIMEZONES.map((tz) => (
                 <option key={tz} value={tz}>
@@ -140,8 +146,8 @@ export function SettingsScreen({
             </div>
 
             <div>
-              <p className="text-sm font-semibold text-fg">Active study days</p>
-              <p className="mt-1 text-sm text-fg-subtle">
+              <p className="text-fg text-sm font-semibold">Active study days</p>
+              <p className="text-fg-subtle mt-1 text-sm">
                 Days not selected are rest days — they never break a streak or count against
                 consistency.
               </p>
@@ -161,7 +167,7 @@ export function SettingsScreen({
                       className={cn(
                         'tap h-11 w-14 rounded-xl border text-sm font-bold transition-all active:scale-95',
                         on
-                          ? 'border-pulse-500 bg-pulse-600 text-white dark:bg-pulse-500 dark:text-ink-950'
+                          ? 'border-pulse-500 bg-pulse-600 dark:bg-pulse-500 dark:text-ink-950 text-white'
                           : 'border-border bg-bg-elevated text-fg-muted hover:border-border-strong',
                       )}
                     >
@@ -171,7 +177,7 @@ export function SettingsScreen({
                 })}
               </div>
               {weekdays.length === 0 && (
-                <p className="mt-2 text-sm font-medium text-danger">Pick at least one day.</p>
+                <p className="text-danger mt-2 text-sm font-medium">Pick at least one day.</p>
               )}
             </div>
           </div>
@@ -344,7 +350,7 @@ function PointRulesCard({ cohortId, rules }: { cohortId: string; rules: PointRul
             />
           ))}
         </div>
-        <p className="mt-4 rounded-2xl bg-bg-sunken p-3.5 text-sm text-fg-muted">
+        <p className="bg-bg-sunken text-fg-muted mt-4 rounded-2xl p-3.5 text-sm">
           Quiz points are deliberately excluded from the consistency calculation, so raising them
           cannot let quiz performance overtake showing up.
         </p>
@@ -433,18 +439,15 @@ function DayList({
 
   return (
     <div>
-      <h3 className="text-2xs font-bold tracking-[0.14em] text-fg-subtle uppercase">{title}</h3>
+      <h3 className="eyebrow">{title}</h3>
       {days.length === 0 ? (
-        <p className="mt-2 text-sm text-fg-subtle">None set.</p>
+        <p className="text-fg-subtle mt-2 text-sm">None set.</p>
       ) : (
         <ul className="mt-2 space-y-1.5">
           {days.map((d) => (
-            <li
-              key={d.id}
-              className="flex items-center gap-2 rounded-xl bg-bg-sunken px-3 py-2"
-            >
+            <li key={d.id} className="bg-bg-sunken flex items-center gap-2 rounded-xl px-3 py-2">
               <Badge tone={tone}>{d.date}</Badge>
-              <span className="min-w-0 flex-1 truncate text-sm text-fg">{d.label}</span>
+              <span className="text-fg min-w-0 flex-1 truncate text-sm">{d.label}</span>
               <button
                 type="button"
                 disabled={pending}
@@ -460,7 +463,7 @@ function DayList({
                     router.refresh();
                   })
                 }
-                className="tap grid size-7 shrink-0 place-items-center rounded-lg text-fg-subtle hover:bg-danger/10 hover:text-danger disabled:opacity-40"
+                className="tap text-fg-subtle hover:bg-danger/10 hover:text-danger grid size-7 shrink-0 place-items-center rounded-lg disabled:opacity-40"
               >
                 <Trash2 className="size-3.5" aria-hidden />
               </button>

@@ -85,7 +85,9 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
     })
     .from(authSessions)
     .innerJoin(users, eq(users.id, authSessions.userId))
-    .where(and(eq(authSessions.tokenHash, hashToken(token)), gt(authSessions.expiresAt, new Date())))
+    .where(
+      and(eq(authSessions.tokenHash, hashToken(token)), gt(authSessions.expiresAt, new Date())),
+    )
     .limit(1);
 
   return rows[0] ?? null;

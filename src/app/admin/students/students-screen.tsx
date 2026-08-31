@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { UserPlus } from 'lucide-react';
+import { Search, UserPlus } from 'lucide-react';
 
 import { StreakFlame } from '@/components/gamification/streak-flame';
 import { Avatar } from '@/components/ui/avatar';
@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/ui/feedback';
 import { FormError, Select, TextInput } from '@/components/ui/form';
 import { Sheet } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/toast';
+import { PageHeader } from '@/components/ui/page-header';
 import { cn } from '@/lib/cn';
 import { RISK_LABELS, RISK_ORDER } from '@/lib/domain/risk';
 import { createStudentAction } from '@/server/actions/admin';
@@ -69,17 +70,18 @@ export function StudentsScreen({
   }, [students, query, sort]);
 
   return (
-    <div className="space-y-4">
-      <header className="flex flex-wrap items-end justify-between gap-3 px-1 pt-2">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-fg">Students</h1>
-          <p className="mt-1 text-sm text-fg-muted">{students.length} in this cohort</p>
-        </div>
-        <Button size="md" onClick={() => setAddOpen(true)}>
-          <UserPlus className="size-4" aria-hidden />
-          Add student
-        </Button>
-      </header>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="The cohort"
+        title="Students"
+        description={`${students.length} in this cohort`}
+        actions={
+          <Button size="md" onClick={() => setAddOpen(true)}>
+            <UserPlus className="size-4" aria-hidden />
+            Add student
+          </Button>
+        }
+      />
 
       <div className="flex flex-wrap gap-2">
         <TextInput
@@ -107,7 +109,7 @@ export function StudentsScreen({
       {rows.length === 0 ? (
         <Card>
           <EmptyState
-            emoji="🔍"
+            icon={<Search className="size-6" aria-hidden />}
             title="No students matched"
             description="Try a different name or email."
           />
@@ -117,7 +119,7 @@ export function StudentsScreen({
           {/* Desktop table */}
           <table className="hidden w-full text-left lg:table">
             <thead>
-              <tr className="border-b border-border text-2xs tracking-[0.1em] text-fg-subtle uppercase">
+              <tr className="border-border text-2xs text-fg-subtle border-b tracking-[0.1em] uppercase">
                 <th scope="col" className="px-5 py-3 font-bold">
                   Student
                 </th>
@@ -141,32 +143,32 @@ export function StudentsScreen({
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-border divide-y">
               {rows.map((s) => (
-                <tr key={s.memberId} className="transition-colors hover:bg-bg-sunken">
+                <tr key={s.memberId} className="hover:bg-bg-sunken transition-colors">
                   <td className="px-5 py-3">
                     <Link
                       href={`/admin/students/${s.memberId}`}
-                      className="flex items-center gap-3 font-semibold text-fg hover:underline"
+                      className="text-fg flex items-center gap-3 font-semibold hover:underline"
                     >
                       <Avatar name={s.name} size="xs" />
                       <span>
                         {s.name}
-                        <span className="block text-xs font-normal text-fg-subtle">{s.email}</span>
+                        <span className="text-fg-subtle block text-xs font-normal">{s.email}</span>
                       </span>
                     </Link>
                   </td>
-                  <td className="px-3 py-3 text-sm text-fg-muted">{s.subjectName ?? '—'}</td>
-                  <td className="px-3 py-3 text-right text-sm font-bold text-fg tabular-nums">
+                  <td className="text-fg-muted px-3 py-3 text-sm">{s.subjectName ?? '—'}</td>
+                  <td className="text-fg px-3 py-3 text-right text-sm font-bold tabular-nums">
                     {s.consistencyPct}%
                   </td>
-                  <td className="px-3 py-3 text-right text-sm font-bold text-fg tabular-nums">
+                  <td className="text-fg px-3 py-3 text-right text-sm font-bold tabular-nums">
                     {s.streak}
                   </td>
-                  <td className="px-3 py-3 text-right text-sm text-fg-muted tabular-nums">
+                  <td className="text-fg-muted px-3 py-3 text-right text-sm tabular-nums">
                     {s.roadmapPct}%
                   </td>
-                  <td className="px-3 py-3 text-right text-sm text-fg-muted tabular-nums">
+                  <td className="text-fg-muted px-3 py-3 text-right text-sm tabular-nums">
                     {s.points}
                   </td>
                   <td className="px-5 py-3">
@@ -188,22 +190,22 @@ export function StudentsScreen({
           </table>
 
           {/* Mobile list */}
-          <ul className="divide-y divide-border lg:hidden">
+          <ul className="divide-border divide-y lg:hidden">
             {rows.map((s) => (
               <li key={s.memberId}>
                 <Link
                   href={`/admin/students/${s.memberId}`}
-                  className="tap flex items-center gap-3 p-4 transition-colors hover:bg-bg-sunken"
+                  className="tap hover:bg-bg-sunken flex items-center gap-3 p-4 transition-colors"
                 >
                   <Avatar name={s.name} size="sm" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-fg">{s.name}</p>
-                    <p className="truncate text-xs text-fg-subtle">
-                      {s.subjectName ?? 'No subject'} · {s.consistencyPct}% ·{' '}
-                      {s.roadmapPct}% roadmap
+                    <p className="text-fg truncate text-sm font-bold">{s.name}</p>
+                    <p className="text-fg-subtle truncate text-xs">
+                      {s.subjectName ?? 'No subject'} · {s.consistencyPct}% · {s.roadmapPct}%
+                      roadmap
                     </p>
                   </div>
-                  <span className="flex shrink-0 items-center gap-1 text-sm font-bold text-flame-600 tabular-nums dark:text-flame-300">
+                  <span className="text-flame-600 dark:text-flame-300 flex shrink-0 items-center gap-1 text-sm font-bold tabular-nums">
                     <StreakFlame streak={s.streak} size="sm" animated={false} />
                     {s.streak}
                   </span>

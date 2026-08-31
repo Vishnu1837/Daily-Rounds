@@ -12,105 +12,230 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Daily Rounds design system.
+ * ==========================================================================================
+ * DAILY ROUNDS — DESIGN SYSTEM
+ * ==========================================================================================
  *
- * Identity: clinical precision with real warmth. An ink-navy base gives medical
- * credibility; a mint "pulse" accent carries every action; a flame gradient is reserved
- * exclusively for streaks so the flame always means the same thing. Motion is used to
- * confirm behaviour, never for decoration.
+ * Identity: a premium consistency instrument. Deep indigo carries every action; violet marks
+ * the plan; amber is reserved exclusively for streaks so a flame always means the same thing;
+ * citrus marks earned XP. Green means "done", and nothing else.
+ *
+ * Three rules the whole system obeys:
+ *
+ *   1. Hierarchy is built from surface, then scale, then colour. A card earns colour by
+ *      being important, not by being decorative.
+ *   2. One accent per surface. A card that shouts about two things shouts about neither.
+ *   3. Motion confirms a change that actually happened. Nothing a student reads is ever
+ *      derived from animation state.
+ *
+ * Ramp names are semantic rather than hue-named — `pulse` is "the colour of acting", `flame`
+ * is "the colour of a streak" — so the whole product retunes from this block alone.
+ * ==========================================================================================
  */
 
 @theme {
-  /* ------------------------------------------------------------ palette */
-  --color-ink-50: oklch(0.97 0.005 260);
-  --color-ink-100: oklch(0.94 0.008 260);
-  --color-ink-200: oklch(0.88 0.012 260);
-  --color-ink-300: oklch(0.78 0.016 260);
-  --color-ink-400: oklch(0.63 0.022 260);
-  --color-ink-500: oklch(0.51 0.028 260);
-  --color-ink-600: oklch(0.41 0.032 262);
-  --color-ink-700: oklch(0.32 0.036 264);
-  --color-ink-800: oklch(0.24 0.036 265);
-  --color-ink-900: oklch(0.18 0.034 266);
-  --color-ink-950: oklch(0.13 0.03 266);
+  /* ------------------------------------------------------------------ neutrals */
+  /* Cool slate-navy. Carries a trace of the primary hue so greys never look muddy. */
+  --color-ink-50: oklch(0.975 0.004 280);
+  --color-ink-100: oklch(0.948 0.007 280);
+  --color-ink-200: oklch(0.895 0.011 280);
+  --color-ink-300: oklch(0.8 0.016 280);
+  --color-ink-400: oklch(0.655 0.022 280);
+  --color-ink-500: oklch(0.53 0.028 279);
+  --color-ink-600: oklch(0.425 0.032 278);
+  --color-ink-700: oklch(0.335 0.034 278);
+  --color-ink-800: oklch(0.252 0.03 278);
+  --color-ink-900: oklch(0.188 0.026 278);
+  --color-ink-950: oklch(0.132 0.022 278);
 
-  /* Mint pulse — the primary action colour. */
-  --color-pulse-50: oklch(0.97 0.03 172);
-  --color-pulse-100: oklch(0.94 0.06 172);
-  --color-pulse-200: oklch(0.88 0.1 172);
-  --color-pulse-300: oklch(0.82 0.13 170);
-  --color-pulse-400: oklch(0.76 0.15 168);
-  --color-pulse-500: oklch(0.7 0.155 166);
-  --color-pulse-600: oklch(0.61 0.14 166);
-  --color-pulse-700: oklch(0.5 0.115 167);
-  --color-pulse-800: oklch(0.4 0.09 168);
-  --color-pulse-900: oklch(0.31 0.07 169);
+  /* ------------------------------------------------------- pulse — the primary */
+  /* Electric indigo. Every primary action, active nav state and focus ring. */
+  --color-pulse-50: oklch(0.972 0.016 280);
+  --color-pulse-100: oklch(0.94 0.035 280);
+  --color-pulse-200: oklch(0.885 0.07 280);
+  --color-pulse-300: oklch(0.795 0.12 280);
+  --color-pulse-400: oklch(0.7 0.175 278);
+  --color-pulse-500: oklch(0.615 0.213 277);
+  --color-pulse-600: oklch(0.545 0.232 276);
+  --color-pulse-700: oklch(0.472 0.213 276);
+  --color-pulse-800: oklch(0.395 0.175 276);
+  --color-pulse-900: oklch(0.315 0.13 277);
 
-  /* Flame — reserved for streaks and milestones. */
-  --color-flame-300: oklch(0.86 0.14 68);
-  --color-flame-400: oklch(0.8 0.17 55);
-  --color-flame-500: oklch(0.73 0.19 42);
-  --color-flame-600: oklch(0.65 0.19 33);
+  /* --------------------------------------------------- iris — the plan colour */
+  /* Violet. Roadmaps, topics, subjects — everything that is "what you set out to do". */
+  --color-iris-50: oklch(0.975 0.018 315);
+  --color-iris-100: oklch(0.945 0.04 315);
+  --color-iris-200: oklch(0.89 0.08 315);
+  --color-iris-300: oklch(0.8 0.135 313);
+  --color-iris-400: oklch(0.712 0.185 311);
+  --color-iris-500: oklch(0.635 0.222 310);
+  --color-iris-600: oklch(0.562 0.228 309);
+  --color-iris-700: oklch(0.485 0.2 309);
+  --color-iris-800: oklch(0.402 0.163 309);
+  --color-iris-900: oklch(0.32 0.12 310);
 
-  /* Iris — secondary accent for roadmap / progress surfaces. */
-  --color-iris-300: oklch(0.8 0.12 285);
-  --color-iris-400: oklch(0.71 0.16 285);
-  --color-iris-500: oklch(0.62 0.19 285);
-  --color-iris-600: oklch(0.54 0.19 285);
+  /* ----------------------------------------------------- flame — streaks only */
+  /* Amber into orange. Never used for anything that is not a streak or a milestone. */
+  --color-flame-50: oklch(0.978 0.018 75);
+  --color-flame-100: oklch(0.952 0.045 78);
+  --color-flame-200: oklch(0.905 0.09 78);
+  --color-flame-300: oklch(0.855 0.135 72);
+  --color-flame-400: oklch(0.795 0.165 60);
+  --color-flame-500: oklch(0.732 0.183 46);
+  --color-flame-600: oklch(0.658 0.19 36);
+  --color-flame-700: oklch(0.565 0.172 32);
+  --color-flame-800: oklch(0.462 0.135 33);
+  --color-flame-900: oklch(0.372 0.1 36);
 
-  --color-success: oklch(0.68 0.16 155);
-  --color-warning: oklch(0.79 0.15 78);
-  --color-danger: oklch(0.62 0.2 22);
+  /* ------------------------------------------------------- citrus — XP, energy */
+  /* The high-visibility highlight. Levels, XP, "you earned this" moments. */
+  --color-citrus-200: oklch(0.955 0.11 108);
+  --color-citrus-300: oklch(0.918 0.155 110);
+  --color-citrus-400: oklch(0.875 0.18 112);
+  --color-citrus-500: oklch(0.825 0.19 116);
+  --color-citrus-600: oklch(0.735 0.175 118);
+  --color-citrus-700: oklch(0.6 0.145 120);
 
-  /* -------------------------------------------------------- typography */
+  /* ----------------------------------------------------------- chart-only hues */
+  --color-aqua-300: oklch(0.855 0.11 200);
+  --color-aqua-400: oklch(0.78 0.135 205);
+  --color-aqua-500: oklch(0.7 0.145 210);
+  --color-blush-300: oklch(0.83 0.11 358);
+  --color-blush-400: oklch(0.745 0.16 356);
+  --color-blush-500: oklch(0.668 0.196 354);
+
+  /* --------------------------------------------------------------- semantics */
+  --color-success: oklch(0.7 0.165 150);
+  --color-success-strong: oklch(0.585 0.16 152);
+  --color-warning: oklch(0.79 0.16 78);
+  --color-warning-strong: oklch(0.68 0.16 62);
+  --color-danger: oklch(0.635 0.212 20);
+  --color-danger-strong: oklch(0.555 0.205 20);
+  --color-info: oklch(0.7 0.145 235);
+
+  /* -------------------------------------------------------------- typography */
   --font-sans:
     var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-display:
-    var(--font-display), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
 
+  /*
+   * Two scales, on purpose.
+   *
+   * The text scale is ordinary prose and UI copy. The `stat` scale is for numbers that are
+   * the point of a card — a streak, a percentage, a level. Statistics get their own steps
+   * with far tighter tracking, because a 56px number set with body tracking reads as an
+   * accident rather than a decision.
+   */
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
+  --text-2xs--letter-spacing: 0.01em;
 
-  /* ------------------------------------------------------------ shape */
-  --radius-card: 1.25rem;
+  --text-stat-sm: 1.75rem;
+  --text-stat-sm--line-height: 1;
+  --text-stat-sm--letter-spacing: -0.03em;
+  --text-stat: 2.5rem;
+  --text-stat--line-height: 0.95;
+  --text-stat--letter-spacing: -0.04em;
+  --text-stat-lg: 3.5rem;
+  --text-stat-lg--line-height: 0.92;
+  --text-stat-lg--letter-spacing: -0.045em;
+  --text-stat-xl: 4.5rem;
+  --text-stat-xl--line-height: 0.9;
+  --text-stat-xl--letter-spacing: -0.05em;
+
+  /*
+   * ------------------------------------------------------------------- shape
+   *
+   * Tailwind's own radius scale is left alone and these are *added* alongside it. Silently
+   * redefining `rounded-2xl` would resize every corner in the admin console at the same
+   * time, which is a lot of blast radius for a shape token.
+   */
+  --radius-field: 0.875rem; /* inputs, chips, small controls */
+  --radius-panel: 1.25rem; /* wells and groups inside a card */
+  --radius-card: 1.5rem; /* the card itself */
+  --radius-hero: 1.875rem; /* hero surfaces and sheets */
   --radius-pill: 999px;
 
-  --shadow-soft: 0 1px 2px oklch(0.2 0.03 266 / 0.06), 0 8px 24px oklch(0.2 0.03 266 / 0.06);
-  --shadow-lift: 0 2px 4px oklch(0.2 0.03 266 / 0.08), 0 18px 40px oklch(0.2 0.03 266 / 0.12);
+  /* ----------------------------------------------------------------- shadows */
+  /* Tinted with the primary hue rather than pure black — black shadows read as dirt. */
+  --shadow-xs: 0 1px 2px oklch(0.19 0.026 278 / 0.06);
+  --shadow-soft:
+    0 1px 2px oklch(0.19 0.026 278 / 0.05), 0 6px 16px -4px oklch(0.19 0.026 278 / 0.07);
+  --shadow-lift:
+    0 2px 4px oklch(0.19 0.026 278 / 0.06), 0 14px 32px -8px oklch(0.19 0.026 278 / 0.13);
+  --shadow-float:
+    0 4px 8px oklch(0.19 0.026 278 / 0.07), 0 28px 60px -16px oklch(0.19 0.026 278 / 0.22);
+  --shadow-glow-pulse: 0 8px 28px -8px oklch(0.545 0.232 276 / 0.55);
+  --shadow-glow-flame: 0 8px 28px -8px oklch(0.658 0.19 36 / 0.5);
+  --shadow-glow-success: 0 8px 28px -8px oklch(0.585 0.16 152 / 0.45);
 
-  /* ----------------------------------------------------------- motion */
+  /* ------------------------------------------------------------------ motion */
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out-smooth: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --duration-instant: 90ms;
+  --duration-fast: 160ms;
+  --duration-base: 240ms;
+  --duration-slow: 420ms;
+  --duration-reveal: 700ms;
 }
 
-/* ------------------------------------------------------- semantic tokens */
+/* --------------------------------------------------------- semantic surfaces */
 
 :root {
-  --bg: oklch(0.985 0.004 250);
+  /* A canvas with a trace of the brand hue, so white cards read as lifted rather than flat. */
+  --bg: oklch(0.973 0.006 285);
   --bg-elevated: oklch(1 0 0);
-  --bg-sunken: oklch(0.96 0.006 255);
-  --fg: oklch(0.2 0.03 266);
-  --fg-muted: oklch(0.48 0.025 262);
-  --fg-subtle: oklch(0.62 0.02 262);
-  --border: oklch(0.9 0.008 258);
-  --border-strong: oklch(0.83 0.012 258);
+  --bg-sunken: oklch(0.951 0.009 285);
+  --bg-inset: oklch(0.925 0.012 285);
+  --bg-inverse: oklch(0.188 0.026 278);
+  --fg-inverse: oklch(0.975 0.004 280);
+
+  --fg: oklch(0.196 0.028 278);
+  --fg-muted: oklch(0.48 0.028 278);
+  --fg-subtle: oklch(0.615 0.024 278);
+
+  --border: oklch(0.906 0.009 285);
+  --border-strong: oklch(0.842 0.014 285);
   --ring: var(--color-pulse-600);
-  --nav-bg: oklch(1 0 0 / 0.86);
+
+  --nav-bg: oklch(1 0 0 / 0.78);
+  --nav-border: oklch(0.906 0.009 285 / 0.9);
+  --scrim: oklch(0.132 0.022 278 / 0.5);
+
+  /* Ambient washes used behind hero surfaces. Defined once so every page agrees. */
+  --wash-pulse: oklch(0.615 0.213 277 / 0.1);
+  --wash-iris: oklch(0.635 0.222 310 / 0.09);
+  --wash-flame: oklch(0.732 0.183 46 / 0.11);
 
   color-scheme: light;
 }
 
 .dark {
-  --bg: oklch(0.15 0.028 266);
-  --bg-elevated: oklch(0.196 0.03 266);
-  --bg-sunken: oklch(0.125 0.026 266);
-  --fg: oklch(0.96 0.006 250);
-  --fg-muted: oklch(0.74 0.018 255);
-  --fg-subtle: oklch(0.6 0.02 258);
-  --border: oklch(0.28 0.028 265);
-  --border-strong: oklch(0.36 0.03 265);
+  --bg: oklch(0.142 0.021 278);
+  --bg-elevated: oklch(0.192 0.024 278);
+  --bg-sunken: oklch(0.121 0.019 278);
+  --bg-inset: oklch(0.243 0.026 278);
+  --bg-inverse: oklch(0.965 0.005 280);
+  --fg-inverse: oklch(0.16 0.024 278);
+
+  --fg: oklch(0.968 0.006 280);
+  --fg-muted: oklch(0.745 0.02 280);
+  --fg-subtle: oklch(0.6 0.022 280);
+
+  --border: oklch(0.268 0.024 278);
+  --border-strong: oklch(0.362 0.028 278);
   --ring: var(--color-pulse-400);
-  --nav-bg: oklch(0.196 0.03 266 / 0.9);
+
+  --nav-bg: oklch(0.192 0.024 278 / 0.82);
+  --nav-border: oklch(0.268 0.024 278 / 0.9);
+  --scrim: oklch(0.09 0.018 278 / 0.66);
+
+  --wash-pulse: oklch(0.7 0.175 278 / 0.16);
+  --wash-iris: oklch(0.712 0.185 311 / 0.14);
+  --wash-flame: oklch(0.795 0.165 60 / 0.16);
 
   color-scheme: dark;
 }
@@ -119,14 +244,17 @@
   --color-bg: var(--bg);
   --color-bg-elevated: var(--bg-elevated);
   --color-bg-sunken: var(--bg-sunken);
+  --color-bg-inset: var(--bg-inset);
+  --color-bg-inverse: var(--bg-inverse);
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
   --color-fg-subtle: var(--fg-subtle);
+  --color-fg-inverse: var(--fg-inverse);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
 }
 
-/* ------------------------------------------------------------- base */
+/* -------------------------------------------------------------------- base */
 
 @layer base {
   * {
@@ -152,7 +280,7 @@
   h3,
   h4 {
     font-family: var(--font-display);
-    letter-spacing: -0.02em;
+    letter-spacing: -0.025em;
     font-weight: 700;
   }
 
@@ -160,12 +288,12 @@
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
-    border-radius: 0.5rem;
+    border-radius: 0.625rem;
   }
 
   ::selection {
-    background: var(--color-pulse-200);
-    color: var(--color-ink-900);
+    background: var(--color-pulse-500);
+    color: white;
   }
 
   /* Inputs never zoom the viewport on iOS. */
@@ -184,12 +312,45 @@
   }
 }
 
-/* --------------------------------------------------------- utilities */
+/* --------------------------------------------------------------- utilities */
 
+/* The default card skin. Everything that is "a thing on the canvas" starts here. */
 @utility surface {
   background-color: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
+}
+
+/* A recessed panel inside a card — lists, wells, secondary groupings. */
+@utility surface-sunken {
+  background-color: var(--bg-sunken);
+  border-radius: var(--radius-panel);
+}
+
+/* Frosted surface for anything that floats over content (nav bars, popovers). */
+@utility surface-glass {
+  background-color: var(--nav-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-color: var(--nav-border);
+}
+
+/* The uppercase micro-label used above a card's content. */
+@utility eyebrow {
+  font-size: var(--text-2xs);
+  line-height: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+
+/* Big numbers. Display face, tight tracking, tabular so they never wobble. */
+@utility stat-num {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
 }
 
 @utility text-balance-tight {
@@ -210,7 +371,15 @@
   touch-action: manipulation;
 }
 
-/* --------------------------------------------------------- animations */
+/*
+ * Fades the far edge of a horizontally scrolling rail so a cut-off card reads as
+ * "there is more" rather than as a layout bug.
+ */
+@utility fade-edge-r {
+  mask-image: linear-gradient(to right, black calc(100% - 2.5rem), transparent);
+}
+
+/* ------------------------------------------------------------------ motion */
 
 @keyframes dr-flicker {
   0%,
@@ -256,18 +425,58 @@
   }
 }
 
+@keyframes dr-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes dr-ring {
   0% {
-    box-shadow: 0 0 0 0 oklch(0.7 0.155 166 / 0.5);
+    box-shadow: 0 0 0 0 oklch(0.615 0.213 277 / 0.45);
   }
   100% {
-    box-shadow: 0 0 0 14px oklch(0.7 0.155 166 / 0);
+    box-shadow: 0 0 0 14px oklch(0.615 0.213 277 / 0);
+  }
+}
+
+@keyframes dr-ring-live {
+  0% {
+    box-shadow: 0 0 0 0 oklch(0.635 0.212 20 / 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 10px oklch(0.635 0.212 20 / 0);
   }
 }
 
 @keyframes dr-draw {
   to {
     stroke-dashoffset: 0;
+  }
+}
+
+@keyframes dr-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, -12px, 0) scale(1.06);
+  }
+}
+
+@keyframes dr-sheen {
+  0% {
+    transform: translateX(-120%) skewX(-18deg);
+  }
+  55%,
+  100% {
+    transform: translateX(240%) skewX(-18deg);
   }
 }
 
@@ -290,8 +499,36 @@
   animation: dr-step-in 0.26s var(--ease-out-soft) both;
 }
 
+/*
+ * Card and page entrances. Same rule as above: the content is rendered and correct on the
+ * first paint and the animation only decorates it, so a stalled animation can never hide
+ * something a student needs. Delays are capped by the component that applies them.
+ */
+.animate-rise {
+  animation: dr-rise 0.42s var(--ease-out-soft) both;
+}
+
 .animate-ring {
   animation: dr-ring 1.6s var(--ease-out-soft) infinite;
+}
+
+.animate-ring-live {
+  animation: dr-ring-live 1.9s var(--ease-out-soft) infinite;
+}
+
+/* The slow-moving colour blobs behind hero surfaces. */
+.animate-drift {
+  animation: dr-drift 14s ease-in-out infinite;
+}
+
+/* A single pass of light across a surface — used on completion and level-up states. */
+.animate-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.28), transparent);
+  animation: dr-sheen 2.6s var(--ease-out-soft) infinite;
+  pointer-events: none;
 }
 
 .skeleton {
@@ -305,12 +542,7 @@
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background-image: linear-gradient(
-    90deg,
-    transparent,
-    oklch(1 0 0 / 0.14),
-    transparent
-  );
+  background-image: linear-gradient(90deg, transparent, oklch(0.615 0.213 277 / 0.1), transparent);
   animation: dr-shimmer 1.6s infinite;
 }
 
@@ -320,7 +552,7 @@
   animation: dr-draw 0.45s var(--ease-out-soft) 0.1s forwards;
 }
 
-/* ------------------------------------------------------ reduced motion */
+/* ---------------------------------------------------------- reduced motion */
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -332,7 +564,8 @@
     scroll-behavior: auto !important;
   }
 
-  .skeleton::after {
+  .skeleton::after,
+  .animate-sheen::after {
     display: none;
   }
 

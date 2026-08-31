@@ -38,7 +38,7 @@ export function LoginForm() {
           error={state.errors?.password}
         />
         <div className="mt-2 text-right">
-          <Link href="/forgot-password" className="text-sm font-medium text-fg-muted underline">
+          <Link href="/forgot-password" className="text-fg-muted text-sm font-medium underline">
             Forgot your password?
           </Link>
         </div>

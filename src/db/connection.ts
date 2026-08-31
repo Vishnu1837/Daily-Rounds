@@ -82,8 +82,7 @@ export function createDatabase(): CreatedDatabase {
     execute: async (raw: string) => {
       await client.exec(raw);
     },
-    query: async <T = Record<string, unknown>>(raw: string) =>
-      (await client.query<T>(raw)).rows,
+    query: async <T = Record<string, unknown>>(raw: string) => (await client.query<T>(raw)).rows,
     close: async () => {
       await client.close();
     },

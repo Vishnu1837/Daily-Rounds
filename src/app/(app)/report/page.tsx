@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, BarChart3 } from 'lucide-react';
 
 import { CohortReport } from '@/components/report/cohort-report';
 import { Card } from '@/components/ui/card';
@@ -33,14 +33,14 @@ export default async function ReportPage() {
       <div className="space-y-4">
         <Link
           href="/progress"
-          className="tap inline-flex items-center gap-1.5 px-1 py-2 text-sm font-semibold text-fg-muted hover:text-fg"
+          className="tap text-fg-muted hover:text-fg inline-flex items-center gap-1.5 px-1 py-2 text-sm font-semibold"
         >
           <ArrowLeft className="size-4" aria-hidden />
           Progress
         </Link>
         <Card>
           <EmptyState
-            emoji="📊"
+            icon={<BarChart3 className="size-6" aria-hidden />}
             title="Your report is not ready yet"
             description={`It unlocks when the cohort finishes on ${ctx.calendar.endDate}. Until then, everything you do still counts toward it.`}
           />
@@ -53,7 +53,7 @@ export default async function ReportPage() {
     <div className="space-y-4">
       <Link
         href="/progress"
-        className="tap inline-flex items-center gap-1.5 px-1 py-2 text-sm font-semibold text-fg-muted hover:text-fg"
+        className="tap text-fg-muted hover:text-fg inline-flex items-center gap-1.5 px-1 py-2 text-sm font-semibold"
       >
         <ArrowLeft className="size-4" aria-hidden />
         Progress

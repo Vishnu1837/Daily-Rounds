@@ -31,7 +31,7 @@ export default async function AdminReportPage({
     <div className="space-y-4">
       <Link
         href={`/admin/students/${memberId}`}
-        className="tap inline-flex items-center gap-1.5 px-1 py-2 text-sm font-semibold text-fg-muted hover:text-fg"
+        className="tap text-fg-muted hover:text-fg inline-flex items-center gap-1.5 px-1 py-2 text-sm font-semibold"
       >
         <ArrowLeft className="size-4" aria-hidden />
         Back to student

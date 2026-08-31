@@ -42,9 +42,7 @@ export function calculateCurrentStreak(
   today: ISODate,
 ): StreakResult {
   let cursor: ISODate | null =
-    isActiveStudyDay(cal, today) && showedUp(today)
-      ? today
-      : previousActiveStudyDay(cal, today);
+    isActiveStudyDay(cal, today) && showedUp(today) ? today : previousActiveStudyDay(cal, today);
 
   // A date after the cohort ended still reports the final streak.
   if (cursor === null) cursor = currentOrPreviousActiveStudyDay(cal, today);

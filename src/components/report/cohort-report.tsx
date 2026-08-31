@@ -2,7 +2,7 @@ import { ActivityHeatmap } from '@/components/charts/heatmap';
 import { WeekBars } from '@/components/charts/week-bars';
 import { StreakFlame } from '@/components/gamification/streak-flame';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardHeader } from '@/components/ui/card';
+import { Card, CardAurora, CardHeader } from '@/components/ui/card';
 import { ProgressRing } from '@/components/ui/progress';
 import type { DayBand } from '@/db/schema';
 import { cn } from '@/lib/cn';
@@ -26,7 +26,12 @@ export type ReportData = {
   topicsCompleted: number;
   topicsTotal: number;
   subjectName: string | null;
-  weeks: { weekNumber: number; consistencyPct: number; completedDays: number; activeDays: number }[];
+  weeks: {
+    weekNumber: number;
+    consistencyPct: number;
+    completedDays: number;
+    activeDays: number;
+  }[];
   improvement: { firstPct: number; latestPct: number; deltaPct: number };
   heatmap: { date: string; band: DayBand; isActiveDay: boolean; points: number }[];
   baseline: {
@@ -50,28 +55,37 @@ export function CohortReport({ data }: { data: ReportData }) {
 
   return (
     <div className="space-y-4">
-      <Card className="overflow-hidden">
-        <div className="bg-linear-to-br from-pulse-500/14 via-iris-500/8 to-transparent p-7 text-center">
-          <p className="text-2xs font-bold tracking-[0.2em] text-fg-subtle uppercase">
+      <Card
+        variant="solid"
+        tone="pulse"
+        padding="lg"
+        glow
+        className="overflow-hidden text-center text-white"
+      >
+        <CardAurora tone="pulse" />
+        <div className="relative py-3">
+          <p className="text-2xs font-bold tracking-[0.2em] text-white/60 uppercase">
             Daily Rounds — {data.cohortName}
           </p>
-          <h1 className="mt-2 text-2xl font-extrabold text-fg">{data.name}</h1>
-          <p className="mt-1 text-sm text-fg-muted">
+          <h1 className="mt-3 text-3xl font-extrabold tracking-tight">{data.name}</h1>
+          <p className="mt-1.5 text-sm text-white/65">
             {data.cohortStart} → {data.cohortEnd}
           </p>
 
-          <div className="mt-6 flex justify-center">
+          <div className="mt-7 flex justify-center">
             <ProgressRing
               value={data.overall.consistencyPct}
-              size={132}
-              stroke={11}
+              size={148}
+              stroke={12}
+              tone="citrus"
+              trackClassName="stroke-white/20"
               label="Overall consistency"
             >
               <div className="text-center">
-                <span className="block text-3xl leading-none font-extrabold text-fg">
+                <span className="stat-num text-stat-sm block text-white">
                   {data.overall.consistencyPct}%
                 </span>
-                <span className="text-2xs font-bold tracking-wide text-fg-subtle uppercase">
+                <span className="text-2xs font-bold tracking-wide text-white/60 uppercase">
                   consistency
                 </span>
               </div>
@@ -129,10 +143,8 @@ export function CohortReport({ data }: { data: ReportData }) {
             description="Recorded at onboarding, before any of this happened."
           />
           <div className="grid gap-4 p-5 pt-4 sm:grid-cols-2">
-            <div className="rounded-2xl bg-bg-sunken p-5">
-              <p className="text-2xs font-bold tracking-[0.14em] text-fg-subtle uppercase">
-                Before
-              </p>
+            <div className="bg-bg-sunken rounded-2xl p-5">
+              <p className="eyebrow">Before</p>
               <dl className="mt-4 space-y-3">
                 <Compare
                   label="Studied properly"
@@ -144,7 +156,7 @@ export function CohortReport({ data }: { data: ReportData }) {
                 />
                 <Compare label="Subject confidence" value={`${data.baseline.confidence}/5`} />
                 <div>
-                  <dt className="text-xs text-fg-muted">Biggest obstacle</dt>
+                  <dt className="text-fg-muted text-xs">Biggest obstacle</dt>
                   <dd className="mt-0.5">
                     <Badge tone="warning">
                       {OBSTACLE_LABELS[data.baseline.obstacle] ?? data.baseline.obstacle}
@@ -154,8 +166,8 @@ export function CohortReport({ data }: { data: ReportData }) {
               </dl>
             </div>
 
-            <div className="rounded-2xl bg-pulse-500/10 p-5">
-              <p className="text-2xs font-bold tracking-[0.14em] text-pulse-700 uppercase dark:text-pulse-300">
+            <div className="bg-pulse-500/10 rounded-2xl p-5">
+              <p className="text-2xs text-pulse-700 dark:text-pulse-300 font-bold tracking-[0.14em] uppercase">
                 After
               </p>
               <dl className="mt-4 space-y-3">
@@ -184,7 +196,7 @@ export function CohortReport({ data }: { data: ReportData }) {
           </div>
 
           <div className="px-5 pb-5">
-            <p className="rounded-2xl bg-bg-sunken p-4 text-sm leading-relaxed text-fg-muted">
+            <p className="bg-bg-sunken text-fg-muted rounded-2xl p-4 text-sm leading-relaxed">
               {verdict(data)}
             </p>
           </div>
@@ -225,14 +237,12 @@ function Stat({
 }) {
   return (
     <Card className="p-4">
-      <p className="text-2xs leading-tight font-bold tracking-[0.1em] text-fg-subtle uppercase">
-        {label}
-      </p>
-      <p className="mt-1.5 flex items-center gap-1.5 text-xl font-extrabold text-fg">
+      <p className="eyebrow">{label}</p>
+      <p className="text-fg mt-1.5 flex items-center gap-1.5 text-xl font-extrabold">
         {icon}
         {value}
       </p>
-      {sub && <p className="text-xs text-fg-subtle">{sub}</p>}
+      {sub && <p className="text-fg-subtle text-xs">{sub}</p>}
     </Card>
   );
 }
@@ -248,7 +258,7 @@ function Compare({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <dt className="text-xs text-fg-muted">{label}</dt>
+      <dt className="text-fg-muted text-xs">{label}</dt>
       <dd
         className={cn(
           'text-sm font-extrabold tabular-nums',

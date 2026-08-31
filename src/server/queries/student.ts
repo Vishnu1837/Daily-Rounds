@@ -47,7 +47,12 @@ import {
   calculateWeeklyProgress,
 } from '@/lib/domain/consistency';
 import { BEHAVIOUR_EVENTS, maxDailyBehaviourPoints } from '@/lib/domain/points';
-import { calculateBestStreak, calculateCurrentStreak, calculateComebackState, nextMilestone } from '@/lib/domain/streak';
+import {
+  calculateBestStreak,
+  calculateCurrentStreak,
+  calculateComebackState,
+  nextMilestone,
+} from '@/lib/domain/streak';
 import type { MemberContext } from '@/server/context';
 import { loadActivity, totalPoints } from '@/server/scoring';
 
@@ -84,7 +89,12 @@ export type HomeData = {
     resumedAt: string | null;
     plannedMinutes: number;
   } | null;
-  studyRoom: { url: string | null; startTime: string; endTime: string; attended: AttendanceStatus | null };
+  studyRoom: {
+    url: string | null;
+    startTime: string;
+    endTime: string;
+    attended: AttendanceStatus | null;
+  };
   tasks: TodayTask[];
   todayPoints: number;
   maxDailyPoints: number;
@@ -94,7 +104,14 @@ export type HomeData = {
   rank: number | null;
   cohortSize: number;
   checkedIn: boolean;
-  upcoming: { id: string; title: string; type: string; date: ISODate; startTime: string; meetUrl: string | null }[];
+  upcoming: {
+    id: string;
+    title: string;
+    type: string;
+    date: ISODate;
+    startTime: string;
+    meetUrl: string | null;
+  }[];
   announcement: { id: string; title: string; body: string } | null;
   unseenAchievements: { code: string; name: string; description: string; emoji: string }[];
 };
@@ -169,7 +186,9 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
         meetUrl: events.meetUrl,
       })
       .from(events)
-      .where(and(eq(events.cohortId, cohort.id), gte(events.date, today), ne(events.type, 'study_room')))
+      .where(
+        and(eq(events.cohortId, cohort.id), gte(events.date, today), ne(events.type, 'study_room')),
+      )
       .orderBy(asc(events.date), asc(events.startTime))
       .limit(3),
     db
@@ -436,9 +455,7 @@ export async function getLeaderboard(
   // Consistency first, then points, then name — deterministic ties.
   rows.sort(
     (a, b) =>
-      b.consistencyPct - a.consistencyPct ||
-      b.points - a.points ||
-      a.name.localeCompare(b.name),
+      b.consistencyPct - a.consistencyPct || b.points - a.points || a.name.localeCompare(b.name),
   );
 
   const mostConsistent = rows[0] ?? null;
@@ -490,7 +507,9 @@ export async function getLeaderboard(
   };
 }
 
-async function getRankFor(ctx: MemberContext): Promise<{ rank: number | null; cohortSize: number }> {
+async function getRankFor(
+  ctx: MemberContext,
+): Promise<{ rank: number | null; cohortSize: number }> {
   const { rows } = await getLeaderboard(ctx);
   const index = rows.findIndex((r) => r.memberId === ctx.memberId);
   return { rank: index === -1 ? null : index + 1, cohortSize: rows.length };
@@ -624,10 +643,7 @@ export type CalendarDay = {
   holidayLabel: string | null;
 };
 
-export async function getCalendarMonth(
-  ctx: MemberContext,
-  month: ISODate,
-): Promise<CalendarDay[]> {
+export async function getCalendarMonth(ctx: MemberContext, month: ISODate): Promise<CalendarDay[]> {
   const { memberId, calendar, today, cohort } = ctx;
   const first = `${month.slice(0, 7)}-01`;
   const firstAnchor = new Date(`${first}T12:00:00Z`);
@@ -704,7 +720,8 @@ export async function getCalendarMonth(
       isToday: date === today,
       isFuture: date > today,
       inCohort: date >= calendar.startDate && date <= calendar.endDate,
-      band: activity?.band ?? (isActiveStudyDay(calendar, date) && date <= today ? 'missed' : 'off'),
+      band:
+        activity?.band ?? (isActiveStudyDay(calendar, date) && date <= today ? 'missed' : 'off'),
       points: activity?.points ?? 0,
       studyMinutes: activity?.studyMinutes ?? 0,
       showedUp: activity?.showedUp ?? false,
@@ -806,22 +823,23 @@ export async function getProgressData(ctx: MemberContext): Promise<ProgressData>
   const weeks = calculateWeeklyProgress(calendar, activity.lookup, upTo);
   const earnedBy = new Map(achievementRows.map((r) => [r.code, r.earnedOn]));
 
-  const heatmap = datesBetween(calendar.startDate, minDate(addDays(today, 6), calendar.endDate)).map(
-    (date) => {
-      const rec = activity.lookup(date);
-      const active = isActiveStudyDay(calendar, date);
-      return {
-        date,
-        band: (rec
-          ? bandOf(rec.score, active)
-          : active && date <= today
-            ? 'missed'
-            : 'off') as DayBand,
-        isActiveDay: active,
-        points: rec?.points ?? 0,
-      };
-    },
-  );
+  const heatmap = datesBetween(
+    calendar.startDate,
+    minDate(addDays(today, 6), calendar.endDate),
+  ).map((date) => {
+    const rec = activity.lookup(date);
+    const active = isActiveStudyDay(calendar, date);
+    return {
+      date,
+      band: (rec
+        ? bandOf(rec.score, active)
+        : active && date <= today
+          ? 'missed'
+          : 'off') as DayBand,
+      isActiveDay: active,
+      points: rec?.points ?? 0,
+    };
+  });
 
   const topics = topicRows[0] ?? { total: 0, completed: 0, subjectName: null };
 
@@ -922,7 +940,12 @@ export async function getCheckInContext(ctx: MemberContext): Promise<CheckInCont
         .select({ topicTitle: roadmapTopics.title })
         .from(dailyAssignments)
         .leftJoin(roadmapTopics, eq(roadmapTopics.id, dailyAssignments.topicId))
-        .where(and(eq(dailyAssignments.memberId, memberId), gte(dailyAssignments.date, addDays(today, 1))))
+        .where(
+          and(
+            eq(dailyAssignments.memberId, memberId),
+            gte(dailyAssignments.date, addDays(today, 1)),
+          ),
+        )
         .orderBy(asc(dailyAssignments.date))
         .limit(1),
       db
@@ -948,9 +971,7 @@ export async function getCheckInContext(ctx: MemberContext): Promise<CheckInCont
     plannedMinutes: assignmentRows[0]?.plannedMinutes ?? 90,
     nextTopicTitle: nextAssignmentRows[0]?.topicTitle ?? null,
     comeback: { isComeback: comeback.isComeback, missedDays: comeback.missedDays },
-    sessionMinutes: Math.round(
-      sessionRows.reduce((s, r) => s + r.elapsedSeconds, 0) / 60,
-    ),
+    sessionMinutes: Math.round(sessionRows.reduce((s, r) => s + r.elapsedSeconds, 0) / 60),
     isActiveDay: isActiveStudyDay(calendar, today),
   };
 }
@@ -986,21 +1007,30 @@ export async function getAvailableQuizzes(ctx: MemberContext) {
   const titles = topicTitles.map((t) => t.title);
   if (titles.length === 0) return [];
 
-  const [quizRows, attemptRows] = await Promise.all([
+  /*
+   * The question count is a grouped join rather than a correlated subquery.
+   *
+   * The subquery this replaces aliased `quiz_questions` inside its own scope while
+   * correlating on the outer `quizzes.id`, and returned zero for every row — so the
+   * materials screen advertised every knowledge check as "0 questions" while the quiz
+   * itself happily rendered five. A left join and a group-by cannot go wrong in that way.
+   */
+  const [quizRows, countRows, attemptRows] = await Promise.all([
     db
-      .select({
-        id: quizzes.id,
-        title: quizzes.title,
-        topicKey: quizzes.topicKey,
-        questionCount: sql<number>`(SELECT count(*) FROM ${quizQuestions} q WHERE q.quiz_id = ${quizzes.id})::int`,
-      })
+      .select({ id: quizzes.id, title: quizzes.title, topicKey: quizzes.topicKey })
       .from(quizzes)
       .where(inArray(quizzes.topicKey, titles)),
+    db
+      .select({ quizId: quizQuestions.quizId, n: sql<number>`count(*)::int` })
+      .from(quizQuestions)
+      .groupBy(quizQuestions.quizId),
     db
       .select({ quizId: quizAttempts.quizId, score: quizAttempts.score, total: quizAttempts.total })
       .from(quizAttempts)
       .where(eq(quizAttempts.memberId, ctx.memberId)),
   ]);
+
+  const countBy = new Map(countRows.map((r) => [r.quizId, r.n]));
 
   const bestBy = new Map<string, { score: number; total: number }>();
   for (const a of attemptRows) {
@@ -1008,7 +1038,11 @@ export async function getAvailableQuizzes(ctx: MemberContext) {
     if (!prev || a.score > prev.score) bestBy.set(a.quizId, { score: a.score, total: a.total });
   }
 
-  return quizRows.map((q) => ({ ...q, best: bestBy.get(q.id) ?? null }));
+  return quizRows.map((q) => ({
+    ...q,
+    questionCount: countBy.get(q.id) ?? 0,
+    best: bestBy.get(q.id) ?? null,
+  }));
 }
 
 /* --------------------------------------------------------- weekly review */
@@ -1070,9 +1104,7 @@ export async function getWeeklyReviewContext(ctx: MemberContext) {
 
 /* ------------------------------------------------------------- cohort feed */
 
-export async function getCohortPulse(
-  ctx: Pick<MemberContext, 'cohort' | 'calendar' | 'today'>,
-) {
+export async function getCohortPulse(ctx: Pick<MemberContext, 'cohort' | 'calendar' | 'today'>) {
   const { cohort, calendar, today } = ctx;
   const upTo = minDate(today, calendar.endDate);
 

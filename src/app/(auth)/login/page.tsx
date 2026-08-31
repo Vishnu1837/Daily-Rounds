@@ -13,19 +13,20 @@ export default async function LoginPage() {
   if (user) redirect(user.role === 'admin' ? '/admin' : '/');
 
   return (
-    <div>
-      <h1 className="text-3xl font-extrabold tracking-tight text-fg">Welcome back</h1>
-      <p className="mt-2 text-sm text-fg-muted">
-        Sign in to see today&apos;s topic and keep your streak alive.
+    <div className="animate-rise">
+      <p className="eyebrow">Sign in</p>
+      <h1 className="text-fg mt-2 text-3xl font-extrabold tracking-tight">Welcome back</h1>
+      <p className="text-fg-muted mt-2.5 text-sm">
+        See today&apos;s topic and keep your streak alive.
       </p>
 
-      <div className="mt-7">
+      <div className="mt-8">
         <LoginForm />
       </div>
 
-      <p className="mt-6 text-center text-sm text-fg-muted">
+      <p className="text-fg-muted mt-6 text-center text-sm">
         New here?{' '}
-        <Link href="/signup" className="font-semibold text-pulse-700 dark:text-pulse-400">
+        <Link href="/signup" className="text-pulse-700 dark:text-pulse-300 font-semibold">
           Create an account
         </Link>
       </p>

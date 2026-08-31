@@ -1,14 +1,23 @@
 import { cn } from '@/lib/cn';
 
+/**
+ * Avatars are generated, never uploaded — this is a study cohort, not a social network, and
+ * asking two dozen students for a photo is friction that buys nothing.
+ *
+ * The gradient is chosen deterministically from the name, so a given person is the same
+ * colour on the leaderboard, in the admin console and on their own profile. Palettes are
+ * drawn from the brand ramps rather than random hues so a list of thirty students still
+ * looks like one product.
+ */
 const PALETTES = [
-  'from-pulse-400 to-pulse-600',
-  'from-iris-400 to-iris-600',
+  'from-pulse-400 to-iris-600',
+  'from-iris-400 to-blush-500',
   'from-flame-400 to-flame-600',
-  'from-sky-400 to-sky-600',
-  'from-emerald-400 to-emerald-600',
-  'from-rose-400 to-rose-600',
-  'from-amber-400 to-amber-600',
-  'from-violet-400 to-violet-600',
+  'from-aqua-400 to-pulse-600',
+  'from-success to-aqua-500',
+  'from-blush-400 to-iris-600',
+  'from-citrus-400 to-flame-500',
+  'from-pulse-500 to-aqua-400',
 ];
 
 function paletteFor(seed: string): string {
@@ -29,31 +38,80 @@ export function Avatar({
   size = 'md',
   className,
   ring,
+  /** A coloured halo behind the avatar. Used to mark the viewer in a list of other people. */
+  glow,
 }: {
   name: string;
-  size?: 'xs' | 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
   ring?: boolean;
+  glow?: boolean;
 }) {
   const dims = {
     xs: 'size-7 text-2xs',
     sm: 'size-9 text-xs',
     md: 'size-11 text-sm',
     lg: 'size-16 text-lg',
+    xl: 'size-20 text-2xl',
   }[size];
 
   return (
     <span
       className={cn(
-        'grid shrink-0 place-items-center rounded-full bg-linear-to-br font-bold text-white select-none',
+        'relative grid shrink-0 place-items-center rounded-full bg-linear-to-br font-bold text-white select-none',
         paletteFor(name),
         dims,
-        ring && 'ring-2 ring-bg-elevated',
+        ring && 'ring-bg-elevated ring-2',
+        glow && 'shadow-glow-pulse',
         className,
       )}
       aria-hidden
     >
       {initialsOf(name)}
     </span>
+  );
+}
+
+/**
+ * Overlapping avatars for "these people did this". Caps the visible faces and shows the
+ * remainder as a count, so the row cannot grow unbounded on a large cohort.
+ */
+export function AvatarStack({
+  names,
+  max = 4,
+  size = 'sm',
+  className,
+}: {
+  names: string[];
+  max?: number;
+  size?: 'xs' | 'sm';
+  className?: string;
+}) {
+  const shown = names.slice(0, max);
+  const rest = names.length - shown.length;
+  const dims = size === 'xs' ? 'size-7 text-2xs' : 'size-9 text-xs';
+
+  return (
+    <div className={cn('flex items-center', className)}>
+      {shown.map((name, i) => (
+        <Avatar
+          key={`${name}-${i}`}
+          name={name}
+          size={size}
+          ring
+          className={i > 0 ? '-ml-2.5' : undefined}
+        />
+      ))}
+      {rest > 0 && (
+        <span
+          className={cn(
+            'bg-bg-inset text-fg-muted ring-bg-elevated -ml-2.5 grid shrink-0 place-items-center rounded-full font-bold ring-2',
+            dims,
+          )}
+        >
+          +{rest}
+        </span>
+      )}
+    </div>
   );
 }

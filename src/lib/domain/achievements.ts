@@ -7,7 +7,12 @@
  */
 import type { CohortCalendar, ISODate } from './calendar';
 import { addDays, weekStart } from './calendar';
-import { type DayLookup, calculateConsistency, calculateImprovement, calculateWeeklyProgress } from './consistency';
+import {
+  type DayLookup,
+  calculateConsistency,
+  calculateImprovement,
+  calculateWeeklyProgress,
+} from './consistency';
 import { type ShowedUp, calculateBestStreak, calculateCurrentStreak } from './streak';
 
 export type AchievementTier = 'bronze' | 'silver' | 'gold';
@@ -108,8 +113,8 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     emoji: '📈',
     tier: 'silver',
     earned: (ctx) =>
-      calculateImprovement(calculateWeeklyProgress(ctx.calendar, ctx.lookup, ctx.today))
-        .deltaPct >= 15,
+      calculateImprovement(calculateWeeklyProgress(ctx.calendar, ctx.lookup, ctx.today)).deltaPct >=
+      15,
   },
   {
     code: 'ten_check_ins',

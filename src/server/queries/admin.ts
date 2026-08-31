@@ -24,7 +24,13 @@ import {
   users,
   weeklyReviews,
 } from '@/db/schema';
-import { type ISODate, activeStudyDaysBetween, addDays, minDate, weekStart } from '@/lib/domain/calendar';
+import {
+  type ISODate,
+  activeStudyDaysBetween,
+  addDays,
+  minDate,
+  weekStart,
+} from '@/lib/domain/calendar';
 import {
   calculateConsistency,
   calculateImprovement,
@@ -32,7 +38,11 @@ import {
   calculateWeeklyProgress,
 } from '@/lib/domain/consistency';
 import { RISK_ORDER, calculateRiskStatus } from '@/lib/domain/risk';
-import { calculateBestStreak, calculateCohortStreak, calculateCurrentStreak } from '@/lib/domain/streak';
+import {
+  calculateBestStreak,
+  calculateCohortStreak,
+  calculateCurrentStreak,
+} from '@/lib/domain/streak';
 import type { getCohortContext } from '@/server/context';
 
 type CohortCtx = NonNullable<Awaited<ReturnType<typeof getCohortContext>>>;
@@ -240,7 +250,9 @@ export async function getCohortOverview(
       and(
         inArray(
           dailyActivity.memberId,
-          active.length > 0 ? active.map((s) => s.memberId) : ['00000000-0000-0000-0000-000000000000'],
+          active.length > 0
+            ? active.map((s) => s.memberId)
+            : ['00000000-0000-0000-0000-000000000000'],
         ),
         gte(dailyActivity.date, calendar.startDate),
         lte(dailyActivity.date, upTo),
@@ -295,10 +307,7 @@ export async function getAttendanceSheet(ctx: CohortCtx, date: ISODate) {
     })
     .from(cohortMembers)
     .innerJoin(users, eq(users.id, cohortMembers.userId))
-    .leftJoin(
-      attendance,
-      and(eq(attendance.memberId, cohortMembers.id), eq(attendance.date, date)),
-    )
+    .leftJoin(attendance, and(eq(attendance.memberId, cohortMembers.id), eq(attendance.date, date)))
     .where(and(eq(cohortMembers.cohortId, ctx.cohort.id), eq(cohortMembers.status, 'active')))
     .orderBy(asc(users.fullName));
 

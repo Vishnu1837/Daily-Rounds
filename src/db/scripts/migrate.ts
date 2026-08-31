@@ -11,9 +11,12 @@ loadEnv();
  * Drizzle migrators so that the exact same code path runs against Supabase and PGlite.
  */
 async function main() {
-  const { dbDriver, dbExecute: execute, dbQuery: query, closeDb: close } = await import(
-    '../client'
-  );
+  const {
+    dbDriver,
+    dbExecute: execute,
+    dbQuery: query,
+    closeDb: close,
+  } = await import('../client');
 
   console.log(`→ migrating (driver: ${dbDriver()})`);
 
@@ -38,7 +41,9 @@ async function main() {
     if (applied.has(file)) continue;
     const sql = readFileSync(join(dir, file), 'utf8').replaceAll('--> statement-breakpoint', '');
     await execute(sql);
-    await execute(`INSERT INTO __drizzle_migrations (name) VALUES ('${file.replaceAll("'", "''")}')`);
+    await execute(
+      `INSERT INTO __drizzle_migrations (name) VALUES ('${file.replaceAll("'", "''")}')`,
+    );
     console.log(`  ✓ ${file}`);
     ran += 1;
   }

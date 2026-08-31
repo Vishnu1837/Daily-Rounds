@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ClipboardList } from 'lucide-react';
 
 import { ActivityHeatmap } from '@/components/charts/heatmap';
 import { WeekBars } from '@/components/charts/week-bars';
@@ -45,20 +45,20 @@ export function StudentDetailScreen({
     <div className="space-y-4">
       <Link
         href="/admin/students"
-        className="tap inline-flex items-center gap-1.5 px-1 py-2 text-sm font-semibold text-fg-muted hover:text-fg"
+        className="tap text-fg-muted hover:text-fg inline-flex items-center gap-1.5 px-1 py-2 text-sm font-semibold"
       >
         <ArrowLeft className="size-4" aria-hidden />
         All students
       </Link>
 
       {/* ------------------------------------------------------------ header */}
-      <Card className="p-5">
-        <div className="flex flex-wrap items-start gap-4">
-          <Avatar name={member.name} size="lg" />
+      <Card padding="lg">
+        <div className="flex flex-wrap items-start gap-5">
+          <Avatar name={member.name} size="lg" ring />
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-extrabold text-fg">{member.name}</h1>
-            <p className="truncate text-sm text-fg-muted">{member.email}</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <h1 className="text-fg text-2xl font-extrabold tracking-tight">{member.name}</h1>
+            <p className="text-fg-muted truncate text-sm">{member.email}</p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
               <StatusPill
                 tone={
                   risk.level === 'needs_intervention'
@@ -86,9 +86,9 @@ export function StudentDetailScreen({
         </div>
 
         {risk.reasons.length > 0 && (
-          <ul className="mt-4 space-y-1.5 rounded-2xl bg-warning/10 p-3.5">
+          <ul className="rounded-panel bg-warning/12 ring-warning/25 mt-5 space-y-1.5 p-4 ring-1 ring-inset">
             {risk.reasons.map((reason) => (
-              <li key={reason} className="text-sm font-medium text-fg">
+              <li key={reason} className="text-fg text-sm font-medium">
                 • {reason}
               </li>
             ))}
@@ -96,8 +96,8 @@ export function StudentDetailScreen({
         )}
 
         {member.whatsapp && (
-          <p className="mt-3 text-sm text-fg-muted">
-            WhatsApp: <span className="font-semibold text-fg">{member.whatsapp}</span>
+          <p className="text-fg-muted mt-3 text-sm">
+            WhatsApp: <span className="text-fg font-semibold">{member.whatsapp}</span>
           </p>
         )}
       </Card>
@@ -165,10 +165,7 @@ export function StudentDetailScreen({
                 label="Studied last week"
                 value={`${goals.baselineDaysStudiedLastWeek}/7 days`}
               />
-              <Row
-                label="Self-rated consistency"
-                value={`${goals.baselineConsistencyRating}/10`}
-              />
+              <Row label="Self-rated consistency" value={`${goals.baselineConsistencyRating}/10`} />
               <Row label="Subject confidence" value={`${goals.baselineConfidence}/5`} />
               <Row
                 label="Biggest obstacle"
@@ -193,16 +190,16 @@ export function StudentDetailScreen({
         <CardHeader title="Recent check-ins" description="Most recent first." />
         {detail.checkIns.length === 0 ? (
           <EmptyState
-            emoji="📝"
+            icon={<ClipboardList className="size-6" aria-hidden />}
             title="No check-ins yet"
             description="This student has not submitted a daily check-in."
           />
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className="divide-border divide-y">
             {detail.checkIns.map((c) => (
               <li key={c.id} className="p-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-bold text-fg">{c.date}</span>
+                  <span className="text-fg text-sm font-bold">{c.date}</span>
                   <Badge
                     tone={
                       c.completion === 'completed'
@@ -218,21 +215,21 @@ export function StudentDetailScreen({
                   <Badge>{'★'.repeat(c.satisfaction)}</Badge>
                   {c.isComeback && <Badge tone="flame">Comeback</Badge>}
                 </div>
-                <p className="mt-2 text-sm text-fg">{c.whatStudied}</p>
+                <p className="text-fg mt-2 text-sm">{c.whatStudied}</p>
                 {c.obstacle !== 'none' && (
-                  <p className="mt-1.5 text-sm text-fg-muted">
+                  <p className="text-fg-muted mt-1.5 text-sm">
                     <strong className="text-fg">Blocked by:</strong>{' '}
                     {OBSTACLE_LABELS[c.obstacle] ?? c.obstacle}
                     {c.obstacleNote ? ` — ${c.obstacleNote}` : ''}
                   </p>
                 )}
                 {c.tomorrowTarget && (
-                  <p className="mt-1.5 text-sm text-fg-muted">
+                  <p className="text-fg-muted mt-1.5 text-sm">
                     <strong className="text-fg">Tomorrow:</strong> {c.tomorrowTarget}
                   </p>
                 )}
                 {c.reflection && (
-                  <p className="mt-1.5 text-sm text-fg-subtle italic">“{c.reflection}”</p>
+                  <p className="text-fg-subtle mt-1.5 text-sm italic">“{c.reflection}”</p>
                 )}
               </li>
             ))}
@@ -244,10 +241,10 @@ export function StudentDetailScreen({
       {detail.reviews.length > 0 && (
         <Card>
           <CardHeader title="Weekly reviews" />
-          <ul className="divide-y divide-border">
+          <ul className="divide-border divide-y">
             {detail.reviews.map((r) => (
               <li key={r.id} className="p-4">
-                <p className="text-sm font-bold text-fg">Week of {r.weekStart}</p>
+                <p className="text-fg text-sm font-bold">Week of {r.weekStart}</p>
                 <dl className="mt-2 space-y-1.5 text-sm">
                   <Row label="Went well" value={r.whatWentWell} />
                   <Row label="Got in the way" value={r.whatStopped} />
@@ -263,14 +260,14 @@ export function StudentDetailScreen({
       {/* ------------------------------------------------------------ ledger */}
       <Card>
         <CardHeader title="Points ledger" description="Append-only. Corrections are new rows." />
-        <ul className="divide-y divide-border">
+        <ul className="divide-border divide-y">
           {detail.ledger.map((entry) => (
             <li key={entry.id} className="flex items-start justify-between gap-3 px-5 py-2.5">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-fg">
+                <p className="text-fg text-sm font-medium">
                   {POINT_EVENT_LABELS[entry.event] ?? entry.event}
                 </p>
-                <p className="text-xs text-fg-subtle">
+                <p className="text-fg-subtle text-xs">
                   {entry.occurredOn}
                   {entry.reason ? ` · ${entry.reason}` : ''}
                 </p>
@@ -290,11 +287,7 @@ export function StudentDetailScreen({
       </Card>
 
       <Sheet open={editOpen} onClose={() => setEditOpen(false)} title="Edit student">
-        <EditStudentForm
-          cohortId={cohortId}
-          member={member}
-          onDone={() => setEditOpen(false)}
-        />
+        <EditStudentForm cohortId={cohortId} member={member} onDone={() => setEditOpen(false)} />
       </Sheet>
 
       <Sheet
@@ -326,15 +319,13 @@ function Stat({
   icon?: React.ReactNode;
 }) {
   return (
-    <Card className="p-4">
-      <p className="text-2xs leading-tight font-bold tracking-[0.1em] text-fg-subtle uppercase">
-        {label}
-      </p>
-      <p className="mt-1.5 flex items-center gap-1.5 text-lg font-extrabold text-fg">
+    <Card padding="sm">
+      <p className="eyebrow leading-tight">{label}</p>
+      <p className="stat-num text-fg mt-2 flex items-center gap-1.5 text-xl">
         {icon}
         {value}
       </p>
-      {sub && <p className="text-xs text-fg-subtle">{sub}</p>}
+      {sub && <p className="text-fg-subtle mt-0.5 text-xs">{sub}</p>}
     </Card>
   );
 }
@@ -342,8 +333,8 @@ function Stat({
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-2xs font-bold tracking-[0.1em] text-fg-subtle uppercase">{label}</dt>
-      <dd className="mt-0.5 text-sm text-fg">{value}</dd>
+      <dt className="eyebrow">{label}</dt>
+      <dd className="text-fg mt-0.5 text-sm">{value}</dd>
     </div>
   );
 }

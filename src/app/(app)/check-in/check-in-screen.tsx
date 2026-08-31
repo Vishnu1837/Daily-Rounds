@@ -9,10 +9,12 @@ import {
   type CelebrationPayload,
 } from '@/components/gamification/celebration';
 import { Button, LinkButton } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardAurora } from '@/components/ui/card';
 import { ChoiceGroup, FormError, RatingScale, TextArea, TextInput } from '@/components/ui/form';
+import { PageHeader } from '@/components/ui/page-header';
 import { ProgressBar } from '@/components/ui/progress';
 import { useToast } from '@/components/ui/toast';
+import { cn } from '@/lib/cn';
 import { OBSTACLE_LABELS, obstacleValues } from '@/lib/validation';
 import { submitCheckInAction } from '@/server/actions/check-in';
 import type { CheckInContext } from '@/server/queries/student';
@@ -157,23 +159,32 @@ export function CheckInScreen({
 
   if (submitted) {
     return (
-      <div className="space-y-4">
+      <div className="mx-auto max-w-xl space-y-4">
         <CelebrationModal payload={celebration} onClose={() => setCelebration(null)} />
-        <Card className="p-8 text-center">
-          <div className="mx-auto grid size-16 place-items-center rounded-3xl bg-success/12 text-success">
-            <AnimatedCheck size={34} />
-          </div>
-          <h1 className="mt-5 text-2xl font-extrabold text-fg">Check-in complete</h1>
-          <p className="mt-2 text-sm text-fg-muted">
-            That&apos;s today recorded. Nothing else is asked of you until tomorrow.
-          </p>
-          <div className="mt-6 space-y-2.5">
-            <LinkButton href="/" size="lg" fullWidth>
-              Back to today
-            </LinkButton>
-            <LinkButton href="/progress" variant="outline" size="lg" fullWidth>
-              See your progress
-            </LinkButton>
+        <Card
+          variant="solid"
+          tone="success"
+          padding="lg"
+          glow
+          className="animate-rise overflow-hidden text-center text-white"
+        >
+          <CardAurora tone="citrus" />
+          <div className="relative py-4">
+            <div className="mx-auto grid size-18 place-items-center rounded-3xl bg-white/18 text-white ring-1 ring-white/25 ring-inset">
+              <AnimatedCheck size={38} />
+            </div>
+            <h1 className="mt-6 text-2xl font-extrabold">Check-in complete</h1>
+            <p className="mx-auto mt-2 max-w-xs text-sm text-balance text-white/80">
+              That&apos;s today recorded. Nothing else is asked of you until tomorrow.
+            </p>
+            <div className="mx-auto mt-7 max-w-xs space-y-2.5">
+              <LinkButton href="/" variant="inverse" size="lg" fullWidth>
+                Back to today
+              </LinkButton>
+              <LinkButton href="/progress" variant="inverse-soft" size="lg" fullWidth>
+                See your progress
+              </LinkButton>
+            </div>
           </div>
         </Card>
         {weeklyReview && <WeeklyReviewCard review={weeklyReview} />}
@@ -182,29 +193,49 @@ export function CheckInScreen({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-xl space-y-4">
       <CelebrationModal payload={celebration} onClose={() => setCelebration(null)} />
 
-      <header className="px-1 pt-2">
-        <h1 className="text-2xl font-extrabold tracking-tight text-fg">Daily check-in</h1>
-        <p className="mt-1 text-sm text-fg-muted">
-          {context.existing
-            ? 'You already checked in today. Updating your answers will not award points twice.'
-            : 'About 45 seconds. Honest answers are worth more than flattering ones.'}
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="The 45-second ritual"
+        title="Daily check-in"
+        description={
+          context.existing
+            ? 'You already checked in today. Updating your answers will not award XP twice.'
+            : 'Honest answers are worth more than flattering ones. Nothing here is shown to other students.'
+        }
+      />
 
-      <Card className="overflow-hidden">
+      <Card padding="none" className="overflow-hidden">
+        {/*
+          A dot per step rather than a bar alone. The bar says how far through you are; the
+          dots say how much is left, and "three small questions" is a much easier thing to
+          start than "a form".
+        */}
         <div className="px-5 pt-5">
-          <div className="flex items-center justify-between text-2xs font-bold tracking-[0.14em] text-fg-subtle uppercase">
-            <span>
+          <div className="flex items-center justify-between gap-3">
+            <span className="eyebrow">
               Step {step + 1} of {steps.length}
             </span>
-            <span>{Math.round(((step + 1) / steps.length) * 100)}%</span>
+            <ol className="flex items-center gap-1.5" aria-hidden>
+              {steps.map((key, i) => (
+                <li
+                  key={key}
+                  className={cn(
+                    'size-2 rounded-full transition-all duration-300',
+                    i < step
+                      ? 'bg-success'
+                      : i === step
+                        ? 'from-pulse-500 to-pulse-600 w-5 bg-linear-to-r'
+                        : 'bg-bg-inset',
+                  )}
+                />
+              ))}
+            </ol>
           </div>
           <ProgressBar
             value={((step + 1) / steps.length) * 100}
-            className="mt-2"
+            className="mt-3"
             height="sm"
             label="Check-in progress"
           />
@@ -220,187 +251,202 @@ export function CheckInScreen({
             advanced. The content must never depend on an animation completing.
           */}
           <div key={current} className="animate-step-in min-h-[19rem]">
-              {current === 'comeback' && (
-                <Step
-                  title={
-                    context.comeback.missedDays.length === 1
-                      ? 'Yesterday was missed. Today is your comeback.'
-                      : `You missed ${context.comeback.missedDays.length} study days. Today is your comeback.`
-                  }
-                  hint="No judgement — naming it makes it less likely to repeat."
-                >
-                  <TextArea
-                    label="What happened?"
-                    value={comebackReason}
-                    onChange={(e) => setComebackReason(e.target.value)}
-                    placeholder="Postings ran late and I never restarted."
-                    rows={3}
-                  />
-                </Step>
-              )}
+            {current === 'comeback' && (
+              <Step
+                title={
+                  context.comeback.missedDays.length === 1
+                    ? 'Yesterday was missed. Today is your comeback.'
+                    : `You missed ${context.comeback.missedDays.length} study days. Today is your comeback.`
+                }
+                hint="No judgement — naming it makes it less likely to repeat."
+              >
+                <TextArea
+                  label="What happened?"
+                  value={comebackReason}
+                  onChange={(e) => setComebackReason(e.target.value)}
+                  placeholder="Postings ran late and I never restarted."
+                  rows={3}
+                />
+              </Step>
+            )}
 
-              {current === 'completion' && (
-                <Step title="Did you complete today's target?">
-                  <ChoiceGroup
-                    name="Completion"
-                    value={completion}
-                    onChange={(v) => setCompletion(v)}
-                    options={[
-                      { value: 'completed', label: 'Completed', emoji: '✅', description: 'Finished what I planned.' },
-                      { value: 'partial', label: 'Partially', emoji: '🌗', description: 'Made a start, did not finish.' },
-                      { value: 'none', label: 'No', emoji: '⭕', description: "Didn't get to it today." },
-                    ]}
-                  />
-                </Step>
-              )}
+            {current === 'completion' && (
+              <Step title="Did you complete today's target?">
+                <ChoiceGroup
+                  name="Completion"
+                  value={completion}
+                  onChange={(v) => setCompletion(v)}
+                  options={[
+                    {
+                      value: 'completed',
+                      label: 'Completed',
+                      emoji: '✅',
+                      description: 'Finished what I planned.',
+                    },
+                    {
+                      value: 'partial',
+                      label: 'Partially',
+                      emoji: '🌗',
+                      description: 'Made a start, did not finish.',
+                    },
+                    {
+                      value: 'none',
+                      label: 'No',
+                      emoji: '⭕',
+                      description: "Didn't get to it today.",
+                    },
+                  ]}
+                />
+              </Step>
+            )}
 
-              {current === 'time' && (
-                <Step
-                  title="How long did you actually study?"
-                  hint={
-                    context.sessionMinutes > 0
-                      ? `Your tracked session was ${context.sessionMinutes} minutes — adjust if that is not the whole picture.`
-                      : undefined
-                  }
-                >
-                  <TextInput
-                    label="Minutes"
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    max={1440}
-                    value={minutes}
-                    onChange={(e) => setMinutes(e.target.value)}
-                    error={errors.actualMinutes}
-                    placeholder="90"
-                  />
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {[30, 45, 60, 90, 120].map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => setMinutes(String(m))}
-                        className="tap rounded-pill border border-border bg-bg-elevated px-3.5 py-1.5 text-sm font-semibold text-fg-muted transition-colors hover:border-border-strong hover:text-fg"
-                      >
-                        {m}m
-                      </button>
-                    ))}
-                  </div>
-                </Step>
-              )}
-
-              {current === 'what' && (
-                <Step
-                  title="What did you study?"
-                  hint={context.topicTitle ? `Today's topic was ${context.topicTitle}.` : undefined}
-                >
-                  <TextArea
-                    label="A sentence is plenty"
-                    value={whatStudied}
-                    onChange={(e) => setWhatStudied(e.target.value)}
-                    placeholder="Acute inflammation — read the chapter and drew the mediator flowchart from memory."
-                    rows={4}
-                    error={errors.whatStudied}
-                  />
-                </Step>
-              )}
-
-              {current === 'obstacle' && (
-                <Step
-                  title={
-                    completion === 'completed'
-                      ? 'Anything that nearly stopped you?'
-                      : 'What stopped you?'
-                  }
-                  hint="This is the single most useful thing you record. Patterns show up fast."
-                >
-                  {completion === 'completed' ? (
-                    <div className="rounded-2xl bg-success/10 p-4 text-sm font-medium text-success">
-                      You finished today — nothing to record here. Tap continue.
-                    </div>
-                  ) : (
-                    <>
-                      <ChoiceGroup
-                        name="Obstacle"
-                        value={obstacle === 'none' ? null : obstacle}
-                        onChange={(v) => setObstacle(v)}
-                        options={OBSTACLE_OPTIONS}
-                        columns={2}
-                      />
-                      {obstacle === 'other' && (
-                        <TextInput
-                          className="mt-3"
-                          label="Tell us more"
-                          value={obstacleNote}
-                          onChange={(e) => setObstacleNote(e.target.value)}
-                          placeholder="What got in the way?"
-                        />
-                      )}
-                    </>
-                  )}
-                </Step>
-              )}
-
-              {current === 'tomorrow' && (
-                <Step
-                  title="What's tomorrow's target?"
-                  hint="Planning tomorrow is worth points because it is the single best predictor of showing up."
-                >
-                  <TextArea
-                    label="Tomorrow's plan"
-                    value={tomorrowTarget}
-                    onChange={(e) => setTomorrowTarget(e.target.value)}
-                    placeholder="Chronic inflammation — 90 minutes, 6 AM study room."
-                    rows={3}
-                  />
-                  {context.nextTopicTitle && (
+            {current === 'time' && (
+              <Step
+                title="How long did you actually study?"
+                hint={
+                  context.sessionMinutes > 0
+                    ? `Your tracked session was ${context.sessionMinutes} minutes — adjust if that is not the whole picture.`
+                    : undefined
+                }
+              >
+                <TextInput
+                  label="Minutes"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={1440}
+                  value={minutes}
+                  onChange={(e) => setMinutes(e.target.value)}
+                  error={errors.actualMinutes}
+                  placeholder="90"
+                />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {[30, 45, 60, 90, 120].map((m) => (
                     <button
+                      key={m}
                       type="button"
-                      onClick={() => setTomorrowTarget(context.nextTopicTitle!)}
-                      className="tap mt-2.5 rounded-pill border border-border bg-bg-elevated px-3.5 py-1.5 text-sm font-semibold text-fg-muted hover:text-fg"
+                      onClick={() => setMinutes(String(m))}
+                      className="tap rounded-pill border-border bg-bg-elevated text-fg-muted hover:border-border-strong hover:text-fg border px-3.5 py-1.5 text-sm font-semibold transition-colors"
                     >
-                      Use next roadmap topic
+                      {m}m
                     </button>
-                  )}
-                </Step>
-              )}
+                  ))}
+                </div>
+              </Step>
+            )}
 
-              {current === 'satisfaction' && (
-                <Step title="How satisfied are you with today?">
-                  <div className="mb-4 flex justify-center gap-2" aria-hidden>
-                    {SATISFACTION_EMOJI.map((emoji, i) => (
-                      <span
-                        key={emoji}
-                        className={`text-3xl transition-all duration-200 ${
-                          satisfaction === i + 1 ? 'scale-125' : 'scale-90 opacity-35'
-                        }`}
-                      >
-                        {emoji}
-                      </span>
-                    ))}
+            {current === 'what' && (
+              <Step
+                title="What did you study?"
+                hint={context.topicTitle ? `Today's topic was ${context.topicTitle}.` : undefined}
+              >
+                <TextArea
+                  label="A sentence is plenty"
+                  value={whatStudied}
+                  onChange={(e) => setWhatStudied(e.target.value)}
+                  placeholder="Acute inflammation — read the chapter and drew the mediator flowchart from memory."
+                  rows={4}
+                  error={errors.whatStudied}
+                />
+              </Step>
+            )}
+
+            {current === 'obstacle' && (
+              <Step
+                title={
+                  completion === 'completed'
+                    ? 'Anything that nearly stopped you?'
+                    : 'What stopped you?'
+                }
+                hint="This is the single most useful thing you record. Patterns show up fast."
+              >
+                {completion === 'completed' ? (
+                  <div className="bg-success/10 text-success rounded-2xl p-4 text-sm font-medium">
+                    You finished today — nothing to record here. Tap continue.
                   </div>
-                  <RatingScale
-                    name="Satisfaction"
-                    value={satisfaction}
-                    onChange={setSatisfaction}
-                    lowLabel="Not at all"
-                    highLabel="Very"
-                  />
-                  <div className="mt-5">
-                    <TextArea
-                      label="Anything worth remembering? (optional, +10 points)"
-                      value={reflection}
-                      onChange={(e) => setReflection(e.target.value)}
-                      placeholder="The 6 AM slot works far better than evenings. Keep it."
-                      rows={3}
+                ) : (
+                  <>
+                    <ChoiceGroup
+                      name="Obstacle"
+                      value={obstacle === 'none' ? null : obstacle}
+                      onChange={(v) => setObstacle(v)}
+                      options={OBSTACLE_OPTIONS}
+                      columns={2}
                     />
-                  </div>
-                </Step>
-              )}
+                    {obstacle === 'other' && (
+                      <TextInput
+                        className="mt-3"
+                        label="Tell us more"
+                        value={obstacleNote}
+                        onChange={(e) => setObstacleNote(e.target.value)}
+                        placeholder="What got in the way?"
+                      />
+                    )}
+                  </>
+                )}
+              </Step>
+            )}
+
+            {current === 'tomorrow' && (
+              <Step
+                title="What's tomorrow's target?"
+                hint="Planning tomorrow is worth points because it is the single best predictor of showing up."
+              >
+                <TextArea
+                  label="Tomorrow's plan"
+                  value={tomorrowTarget}
+                  onChange={(e) => setTomorrowTarget(e.target.value)}
+                  placeholder="Chronic inflammation — 90 minutes, 6 AM study room."
+                  rows={3}
+                />
+                {context.nextTopicTitle && (
+                  <button
+                    type="button"
+                    onClick={() => setTomorrowTarget(context.nextTopicTitle!)}
+                    className="tap rounded-pill border-border bg-bg-elevated text-fg-muted hover:text-fg mt-2.5 border px-3.5 py-1.5 text-sm font-semibold"
+                  >
+                    Use next roadmap topic
+                  </button>
+                )}
+              </Step>
+            )}
+
+            {current === 'satisfaction' && (
+              <Step title="How satisfied are you with today?">
+                <div className="mb-4 flex justify-center gap-2" aria-hidden>
+                  {SATISFACTION_EMOJI.map((emoji, i) => (
+                    <span
+                      key={emoji}
+                      className={`text-3xl transition-all duration-200 ${
+                        satisfaction === i + 1 ? 'scale-125' : 'scale-90 opacity-35'
+                      }`}
+                    >
+                      {emoji}
+                    </span>
+                  ))}
+                </div>
+                <RatingScale
+                  name="Satisfaction"
+                  value={satisfaction}
+                  onChange={setSatisfaction}
+                  lowLabel="Not at all"
+                  highLabel="Very"
+                />
+                <div className="mt-5">
+                  <TextArea
+                    label="Anything worth remembering? (optional, +10 points)"
+                    value={reflection}
+                    onChange={(e) => setReflection(e.target.value)}
+                    placeholder="The 6 AM slot works far better than evenings. Keep it."
+                    rows={3}
+                  />
+                </div>
+              </Step>
+            )}
           </div>
         </div>
 
-        <div className="flex gap-2.5 border-t border-border px-5 py-4">
+        <div className="border-border bg-bg-sunken/60 flex gap-2.5 border-t px-5 py-4">
           {step > 0 && (
             <Button variant="outline" size="lg" onClick={() => setStep((s) => s - 1)}>
               Back
@@ -434,9 +480,9 @@ function Step({
 }) {
   return (
     <div>
-      <h2 className="text-lg font-extrabold text-balance text-fg">{title}</h2>
-      {hint && <p className="mt-1.5 text-sm text-fg-muted">{hint}</p>}
-      <div className="mt-5">{children}</div>
+      <h2 className="text-fg text-xl font-extrabold text-balance">{title}</h2>
+      {hint && <p className="text-fg-muted mt-2 text-sm leading-relaxed">{hint}</p>}
+      <div className="mt-6">{children}</div>
     </div>
   );
 }

@@ -4,12 +4,14 @@ import { useActionState, useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+import { LevelBadge, XPBar } from '@/components/gamification/level';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader } from '@/components/ui/card';
+import { Card, CardAurora, CardHeader } from '@/components/ui/card';
 import { FormError, FormSuccess, Select, TextInput } from '@/components/ui/form';
 import { Sheet } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/toast';
+import { levelFromPoints } from '@/lib/domain/level';
 import { type ActionState, changePasswordAction, logoutAction } from '@/server/actions/auth';
 import { updateProfileAction } from '@/server/actions/onboarding';
 
@@ -42,26 +44,57 @@ type Props = {
     examDate: string | null;
     subjectName: string | null;
   } | null;
+  /** Lifetime points. The level and rank on the header are derived from this. */
+  points: number;
 };
 
-export function ProfileScreen({ user, cohort, goals }: Props) {
+export function ProfileScreen({ user, cohort, goals, points }: Props) {
   const router = useRouter();
   const toast = useToast();
   const [editOpen, setEditOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [signingOut, startSignOut] = useTransition();
 
+  const level = levelFromPoints(points);
+
   return (
-    <div className="space-y-4">
-      <header className="flex items-center gap-4 px-1 pt-2">
-        <Avatar name={user.fullName} size="lg" />
-        <div className="min-w-0">
-          <h1 className="truncate text-xl font-extrabold tracking-tight text-fg">
-            {user.fullName}
-          </h1>
-          <p className="truncate text-sm text-fg-muted">{user.email}</p>
+    <div className="space-y-4 lg:space-y-5">
+      {/*
+        The profile opens with standing rather than with settings. Who you are here is your
+        rank and your commitment; the editable fields are administration, and they sit below.
+      */}
+      <Card variant="solid" tone="pulse" padding="lg" glow className="overflow-hidden text-white">
+        <CardAurora tone="pulse" />
+        <div className="relative flex flex-wrap items-center gap-5">
+          <Avatar name={user.fullName} size="xl" ring />
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-2xl font-extrabold tracking-tight">{user.fullName}</h1>
+            <p className="truncate text-sm text-white/70">{user.email}</p>
+            <p className="rounded-pill mt-2.5 inline-flex items-center gap-2 bg-white/15 px-3 py-1 text-xs font-bold ring-1 ring-white/20 ring-inset">
+              Level {level.level} · {level.rank.title}
+            </p>
+          </div>
+          <div className="w-full sm:w-56">
+            <div className="text-2xs flex items-baseline justify-between font-bold tracking-[0.12em] text-white/60 uppercase">
+              <span>Total XP</span>
+              <span className="stat-num text-base tracking-normal text-white">
+                {level.xp.toLocaleString()}
+              </span>
+            </div>
+            <div className="rounded-pill mt-2 h-2 w-full overflow-hidden bg-white/20">
+              <div
+                className="rounded-pill from-citrus-300 ease-out-soft h-full bg-linear-to-r to-white transition-[width] duration-700"
+                style={{ width: `${Math.max(3, level.pct)}%` }}
+              />
+            </div>
+            <p className="text-2xs mt-2 font-semibold text-white/65">
+              {level.remaining === null
+                ? 'Top of the ladder'
+                : `${level.remaining.toLocaleString()} XP to level ${level.level + 1}`}
+            </p>
+          </div>
         </div>
-      </header>
+      </Card>
 
       <Card>
         <CardHeader
@@ -70,7 +103,7 @@ export function ProfileScreen({ user, cohort, goals }: Props) {
             <button
               type="button"
               onClick={() => setEditOpen(true)}
-              className="text-sm font-semibold text-pulse-700 dark:text-pulse-400"
+              className="text-pulse-700 dark:text-pulse-400 text-sm font-semibold"
             >
               Edit
             </button>
@@ -100,10 +133,8 @@ export function ProfileScreen({ user, cohort, goals }: Props) {
                 />
               )}
               <div>
-                <dt className="text-2xs font-bold tracking-[0.14em] text-fg-subtle uppercase">
-                  What you set out to finish
-                </dt>
-                <dd className="mt-1.5 text-sm leading-relaxed text-fg italic">
+                <dt className="eyebrow">What you set out to finish</dt>
+                <dd className="text-fg mt-1.5 text-sm leading-relaxed italic">
                   “{goals.cohortGoal}”
                 </dd>
               </div>
@@ -137,7 +168,7 @@ export function ProfileScreen({ user, cohort, goals }: Props) {
         </div>
       </Card>
 
-      <p className="px-1 pb-1 text-center text-xs text-fg-subtle">
+      <p className="text-fg-subtle px-1 pb-1 text-center text-xs">
         <Link href="/how-points-work" className="underline">
           How points and consistency work
         </Link>
@@ -165,8 +196,8 @@ export function ProfileScreen({ user, cohort, goals }: Props) {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-sm text-fg-muted">{label}</dt>
-      <dd className="text-right text-sm font-semibold text-fg">{value}</dd>
+      <dt className="text-fg-muted text-sm">{label}</dt>
+      <dd className="text-fg text-right text-sm font-semibold">{value}</dd>
     </div>
   );
 }
@@ -249,7 +280,11 @@ function ChangePasswordForm({ onDone }: { onDone: () => void }) {
 
   return (
     <form action={action} className="space-y-4 pt-2" noValidate>
-      {state.ok ? <FormSuccess>{state.message}</FormSuccess> : <FormError>{state.message}</FormError>}
+      {state.ok ? (
+        <FormSuccess>{state.message}</FormSuccess>
+      ) : (
+        <FormError>{state.message}</FormError>
+      )}
       <TextInput
         label="Current password"
         name="currentPassword"

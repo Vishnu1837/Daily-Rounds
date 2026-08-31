@@ -120,9 +120,7 @@ export async function recomputeDay(args: {
   const points = entries.reduce((sum, e) => sum + e.points, 0);
 
   // Prefer the student's self-reported minutes; fall back to tracked session time.
-  const trackedMinutes = Math.round(
-    sessionRows.reduce((sum, s) => sum + s.elapsedSeconds, 0) / 60,
-  );
+  const trackedMinutes = Math.round(sessionRows.reduce((sum, s) => sum + s.elapsedSeconds, 0) / 60);
   const studyMinutes = checkInRows[0]?.actualMinutes ?? trackedMinutes;
 
   const record: DayRecord = {
@@ -378,9 +376,7 @@ export async function totalPoints(memberId: string): Promise<number> {
   return rows[0]?.total ?? 0;
 }
 
-export async function totalPointsForMembers(
-  memberIds: string[],
-): Promise<Map<string, number>> {
+export async function totalPointsForMembers(memberIds: string[]): Promise<Map<string, number>> {
   if (memberIds.length === 0) return new Map();
   const rows = await db
     .select({

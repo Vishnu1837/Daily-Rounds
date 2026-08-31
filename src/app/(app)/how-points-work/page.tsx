@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 
 import { Card, CardHeader } from '@/components/ui/card';
+import { PageHeader } from '@/components/ui/page-header';
 import { requireOnboardedUser } from '@/lib/auth/guards';
 import { BEHAVIOUR_EVENTS, POINT_EVENT_LABELS, maxDailyBehaviourPoints } from '@/lib/domain/points';
 import { getMemberContext } from '@/server/context';
@@ -20,42 +21,40 @@ export default async function HowPointsWorkPage() {
   const max = maxDailyBehaviourPoints(rules);
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-3xl space-y-5">
       <Link
         href="/"
-        className="tap inline-flex items-center gap-1.5 px-1 py-2 text-sm font-semibold text-fg-muted hover:text-fg"
+        className="tap text-fg-muted hover:text-fg inline-flex items-center gap-1.5 rounded-lg px-1 py-2 text-sm font-semibold transition-colors"
       >
         <ArrowLeft className="size-4" aria-hidden />
         Back
       </Link>
 
-      <header className="px-1">
-        <h1 className="text-2xl font-extrabold tracking-tight text-fg">How points work</h1>
-        <p className="mt-2 text-sm leading-relaxed text-fg-muted">
-          Daily Rounds rewards the process, not the result. Every point below is earned by doing
-          something — not by being right.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="The rules, in full"
+        title="How points work"
+        description="Daily Rounds rewards the process, not the result. Every point below is earned by doing something — not by being right."
+      />
 
       <Card>
         <CardHeader
           title="Your day"
           description={`${max} points are available every study day from behaviour alone.`}
         />
-        <ul className="divide-y divide-border">
+        <ul className="divide-border divide-y">
           {BEHAVIOUR_EVENTS.map((event) => (
             <li key={event} className="flex items-center justify-between gap-3 px-5 py-3">
-              <span className="text-sm font-medium text-fg">{POINT_EVENT_LABELS[event]}</span>
-              <span className="text-sm font-extrabold text-pulse-700 tabular-nums dark:text-pulse-400">
+              <span className="text-fg text-sm font-medium">{POINT_EVENT_LABELS[event]}</span>
+              <span className="text-pulse-700 dark:text-pulse-400 text-sm font-extrabold tabular-nums">
                 +{rules[event]}
               </span>
             </li>
           ))}
           <li className="flex items-center justify-between gap-3 px-5 py-3">
-            <span className="text-sm font-medium text-fg">
+            <span className="text-fg text-sm font-medium">
               {POINT_EVENT_LABELS.live_session_late} (partial credit)
             </span>
-            <span className="text-sm font-extrabold text-warning tabular-nums">
+            <span className="text-warning text-sm font-extrabold tabular-nums">
               +{rules.live_session_late}
             </span>
           </li>
@@ -64,7 +63,7 @@ export default async function HowPointsWorkPage() {
 
       <Card>
         <CardHeader title="Bonuses" description="Occasional, and deliberately secondary." />
-        <ul className="divide-y divide-border">
+        <ul className="divide-border divide-y">
           <Bonus label="Weekly review" value={`+${rules.weekly_review}`} />
           <Bonus
             label="Knowledge check"
@@ -75,9 +74,9 @@ export default async function HowPointsWorkPage() {
         </ul>
       </Card>
 
-      <Card className="p-5">
-        <h2 className="font-bold text-fg">Why quiz scores barely matter</h2>
-        <p className="mt-2 text-sm leading-relaxed text-fg-muted">
+      <Card padding="lg">
+        <h2 className="text-fg text-base font-bold">Why quiz scores barely matter</h2>
+        <p className="text-fg-muted mt-2 text-sm leading-relaxed">
           A perfect quiz is worth {rules.quiz_attempt + rules.quiz_bonus} points. Turning up and
           finishing your study block is worth{' '}
           {rules.live_session_present + rules.study_block_completed}. Consistency is measured only
@@ -87,14 +86,14 @@ export default async function HowPointsWorkPage() {
         </p>
       </Card>
 
-      <Card className="p-5">
-        <h2 className="font-bold text-fg">How consistency is calculated</h2>
-        <p className="mt-2 text-sm leading-relaxed text-fg-muted">
+      <Card padding="lg">
+        <h2 className="text-fg text-base font-bold">How consistency is calculated</h2>
+        <p className="text-fg-muted mt-2 text-sm leading-relaxed">
           For each active study day we work out how much of the day you completed, as a fraction of
           the {max} behaviour points available. Consistency is the average of those fractions across
           every active study day since you joined.
         </p>
-        <p className="mt-3 text-sm leading-relaxed text-fg-muted">
+        <p className="text-fg-muted mt-3 text-sm leading-relaxed">
           Active study days are{' '}
           {cohort.activeWeekdays
             .map((d) => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d - 1])
@@ -104,9 +103,9 @@ export default async function HowPointsWorkPage() {
         </p>
       </Card>
 
-      <Card className="p-5">
-        <h2 className="font-bold text-fg">Streaks</h2>
-        <p className="mt-2 text-sm leading-relaxed text-fg-muted">
+      <Card padding="lg">
+        <h2 className="text-fg text-base font-bold">Streaks</h2>
+        <p className="text-fg-muted mt-2 text-sm leading-relaxed">
           Your streak counts consecutive <em>active study days</em> on which you showed up. Friday
           and the following Monday are consecutive. A holiday in the middle of the week is skipped,
           not forgiven. Missing an active study day breaks the streak — but the points you already
@@ -114,9 +113,9 @@ export default async function HowPointsWorkPage() {
         </p>
       </Card>
 
-      <Card className="p-5">
-        <h2 className="font-bold text-fg">Corrections</h2>
-        <p className="mt-2 text-sm leading-relaxed text-fg-muted">
+      <Card padding="lg">
+        <h2 className="text-fg text-base font-bold">Corrections</h2>
+        <p className="text-fg-muted mt-2 text-sm leading-relaxed">
           Points live in an append-only ledger. If your cohort lead ever corrects something, it is
           recorded as a new, signed entry with a reason — nothing is quietly rewritten. You can read
           your whole ledger from the Progress screen.
@@ -129,8 +128,8 @@ export default async function HowPointsWorkPage() {
 function Bonus({ label, value }: { label: string; value: string }) {
   return (
     <li className="flex items-center justify-between gap-3 px-5 py-3">
-      <span className="text-sm font-medium text-fg">{label}</span>
-      <span className="text-sm font-extrabold text-iris-600 tabular-nums dark:text-iris-300">
+      <span className="text-fg text-sm font-medium">{label}</span>
+      <span className="text-iris-600 dark:text-iris-300 text-sm font-extrabold tabular-nums">
         {value}
       </span>
     </li>

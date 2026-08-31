@@ -109,7 +109,11 @@ export function calculateRiskStatus(args: {
   // Only compare weeks once the current one has enough elapsed days to be a fair sample —
   // otherwise every Monday morning would look like a collapse.
   const drop = previousWeek.consistencyPct - currentWeek.consistencyPct;
-  if (previousWeek.activeDays > 0 && currentWeek.activeDays >= 3 && drop >= t.atRiskConsistencyDropPct) {
+  if (
+    previousWeek.activeDays > 0 &&
+    currentWeek.activeDays >= 3 &&
+    drop >= t.atRiskConsistencyDropPct
+  ) {
     reasons.push(
       `Consistency dropped from ${previousWeek.consistencyPct}% to ${currentWeek.consistencyPct}%`,
     );

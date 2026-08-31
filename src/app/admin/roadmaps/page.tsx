@@ -7,7 +7,11 @@ import { subjects } from '@/db/schema';
 import { requireAdmin } from '@/lib/auth/guards';
 import { templateList } from '@/lib/roadmap-templates';
 import { getCohortContext, getPrimaryCohort } from '@/server/context';
-import { getAssignmentsForDate, getCohortStudents, getStudentRoadmaps } from '@/server/queries/admin';
+import {
+  getAssignmentsForDate,
+  getCohortStudents,
+  getStudentRoadmaps,
+} from '@/server/queries/admin';
 
 import { RoadmapAdminScreen } from './roadmap-admin';
 
@@ -37,9 +41,7 @@ export default async function RoadmapAdminPage({
 
   const active = students.filter((s) => s.status === 'active');
   const selectedMemberId = member ?? active[0]?.memberId ?? null;
-  const roadmapRows = selectedMemberId
-    ? await getStudentRoadmaps(cohort.id, selectedMemberId)
-    : [];
+  const roadmapRows = selectedMemberId ? await getStudentRoadmaps(cohort.id, selectedMemberId) : [];
 
   return (
     <RoadmapAdminScreen

@@ -17,7 +17,12 @@ export type QuizResult = {
   score: number;
   total: number;
   pointsAwarded: number;
-  review: { prompt: string; correctIndex: number; chosenIndex: number; explanation: string | null }[];
+  review: {
+    prompt: string;
+    correctIndex: number;
+    chosenIndex: number;
+    explanation: string | null;
+  }[];
 };
 
 /**

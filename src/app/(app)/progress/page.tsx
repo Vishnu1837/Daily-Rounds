@@ -15,10 +15,7 @@ export default async function ProgressPage() {
   const ctx = await getMemberContext(user);
   if (!ctx) redirect('/admin');
 
-  const [data, log] = await Promise.all([
-    getProgressData(ctx),
-    getPointsLog(ctx.memberId, 30),
-  ]);
+  const [data, log] = await Promise.all([getProgressData(ctx), getPointsLog(ctx.memberId, 30)]);
 
   const cohortEnded = ctx.today > ctx.calendar.endDate;
 

@@ -140,11 +140,9 @@ export const ledgerKey = {
     `quiz_attempt:${memberId}:${quizId}:${date}`,
   quizBonus: (memberId: string, quizId: string, date: string) =>
     `quiz_bonus:${memberId}:${quizId}:${date}`,
-  streakMilestone: (memberId: string, milestone: number) =>
-    `streak_bonus:${memberId}:${milestone}`,
+  streakMilestone: (memberId: string, milestone: number) => `streak_bonus:${memberId}:${milestone}`,
   achievement: (memberId: string, code: string) => `achievement:${memberId}:${code}`,
-  weeklyReview: (memberId: string, weekStart: string) =>
-    `weekly_review:${memberId}:${weekStart}`,
+  weeklyReview: (memberId: string, weekStart: string) => `weekly_review:${memberId}:${weekStart}`,
   adminAdjustment: (memberId: string, ref: string) => `admin_adjustment:${memberId}:${ref}`,
 };
 

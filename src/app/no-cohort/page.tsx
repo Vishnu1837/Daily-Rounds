@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/feedback';
 import { requireUser } from '@/lib/auth/guards';
 import { logoutAction } from '@/server/actions/auth';
+import { Clock } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'No cohort yet' };
 export const dynamic = 'force-dynamic';
@@ -18,9 +19,9 @@ export default async function NoCohortPage() {
       <div className="mb-6 flex justify-center">
         <Logo />
       </div>
-      <Card>
+      <Card variant="outline">
         <EmptyState
-          emoji="⏳"
+          icon={<Clock className="size-6" aria-hidden />}
           title="You're not in a cohort yet"
           description={`Hi ${user.fullName.split(' ')[0]} — your account is set up, but you haven't been added to an active cohort. Your cohort lead can add you from the admin console.`}
         />

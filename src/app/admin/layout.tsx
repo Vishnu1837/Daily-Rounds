@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
 
 import { Logo } from '@/components/brand/logo';
 import { BottomNav, SideNav } from '@/components/nav/bottom-nav';
@@ -17,42 +18,49 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-dvh lg:flex">
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-border bg-bg-elevated px-4 py-6 lg:flex">
+      <aside className="border-border bg-bg-elevated sticky top-0 hidden h-dvh w-[17rem] shrink-0 flex-col border-r px-4 py-6 lg:flex">
         <Link href="/admin" className="mb-3 px-2" aria-label="Daily Rounds admin">
           <Logo />
         </Link>
-        <div className="mb-6 px-2">
+        <div className="mb-7 px-2">
           <Badge tone="iris">Admin console</Badge>
         </div>
-        <SideNav items={ADMIN_NAV} />
-        <div className="mt-auto rounded-2xl bg-bg-sunken p-4">
-          <p className="text-2xs font-bold tracking-[0.14em] text-fg-subtle uppercase">
-            {cohort.name}
-          </p>
-          <p className="mt-1 text-sm font-semibold text-fg">{user.fullName}</p>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <SideNav items={ADMIN_NAV} />
+        </div>
+
+        <div className="rounded-panel border-border bg-bg-sunken mt-6 border p-4">
+          <p className="eyebrow truncate">{cohort.name}</p>
+          <p className="text-fg mt-1 truncate text-sm font-semibold">{user.fullName}</p>
           <Link
             href="/"
-            className="mt-3 inline-block text-sm font-semibold text-pulse-700 dark:text-pulse-400"
+            className="text-pulse-700 hover:text-pulse-500 dark:text-pulse-300 mt-3 inline-flex items-center gap-1.5 text-sm font-semibold transition-colors"
           >
-            ← Student view
+            <ArrowLeft className="size-3.5" aria-hidden />
+            Student view
           </Link>
-          <SignOutButton size="sm" className="mt-2 -ml-2" />
+          <SignOutButton size="sm" className="mt-1 -ml-2" />
         </div>
       </aside>
 
       <div className="min-w-0 flex-1">
         <TopBar
           name={user.fullName}
+          subtitle={`${cohort.name} · admin console`}
           right={
             <Link
               href="/"
-              className="tap mr-1 rounded-xl px-3 py-1.5 text-sm font-semibold whitespace-nowrap text-fg-muted hover:bg-bg-sunken hover:text-fg lg:hidden"
+              className="tap rounded-field text-fg-muted hover:bg-bg-sunken hover:text-fg mr-1 px-3 py-1.5 text-sm font-semibold whitespace-nowrap lg:hidden"
             >
               Student
             </Link>
           }
         />
-        <main id="main" className="mx-auto max-w-6xl px-4 pt-4 pb-28 lg:px-8 lg:pb-12">
+        <main
+          id="main"
+          className="mx-auto w-full max-w-7xl px-4 pt-5 pb-32 lg:px-8 lg:pt-7 lg:pb-14"
+        >
           {children}
         </main>
       </div>

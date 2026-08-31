@@ -1,15 +1,18 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { ArrowUpRight } from 'lucide-react';
 
 import { Logo } from '@/components/brand/logo';
+import { LevelBadge, XPBar } from '@/components/gamification/level';
 import { BottomNav, SideNav } from '@/components/nav/bottom-nav';
 import { STUDENT_NAV } from '@/components/nav/nav-items';
 import { TopBar } from '@/components/nav/top-bar';
 import { requireUser } from '@/lib/auth/guards';
+import { levelFromPoints } from '@/lib/domain/level';
 import { calculateCurrentStreak } from '@/lib/domain/streak';
 import { minDate } from '@/lib/domain/calendar';
 import { getMemberContext } from '@/server/context';
-import { loadActivity } from '@/server/scoring';
+import { loadActivity, totalPoints } from '@/server/scoring';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -23,32 +26,48 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/no-cohort');
   }
 
-  const activity = await loadActivity(
-    ctx.memberId,
-    ctx.calendar.startDate,
-    minDate(ctx.today, ctx.calendar.endDate),
-  );
+  const [activity, points] = await Promise.all([
+    loadActivity(ctx.memberId, ctx.calendar.startDate, minDate(ctx.today, ctx.calendar.endDate)),
+    totalPoints(ctx.memberId),
+  ]);
   const streak = calculateCurrentStreak(ctx.calendar, activity.showedUp, ctx.today).length;
+  const level = levelFromPoints(points);
+
+  const todayLabel = new Date(`${ctx.today}T12:00:00Z`).toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+  });
 
   return (
     <div className="min-h-dvh lg:flex">
-      {/* Desktop rail */}
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-border bg-bg-elevated px-4 py-6 lg:flex">
+      {/* ------------------------------------------------------ desktop rail */}
+      <aside className="border-border bg-bg-elevated sticky top-0 hidden h-dvh w-[17rem] shrink-0 flex-col border-r px-4 py-6 lg:flex">
         <Link href="/" className="mb-8 px-2" aria-label="Daily Rounds home">
           <Logo />
         </Link>
-        <SideNav items={STUDENT_NAV} />
-        <div className="mt-auto rounded-2xl bg-bg-sunken p-4">
-          <p className="text-2xs font-bold tracking-[0.14em] text-fg-subtle uppercase">
-            {ctx.cohort.name}
-          </p>
-          <p className="mt-1 text-sm font-semibold text-fg">{user.fullName}</p>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <SideNav items={STUDENT_NAV} />
+        </div>
+
+        {/*
+          The rail closes with the student's own standing rather than a settings link. It is
+          the last thing in their eyeline on every screen, and it is a reason to keep going.
+        */}
+        <div className="rounded-panel border-border bg-bg-sunken mt-6 border p-4">
+          <LevelBadge info={level} size="md" />
+          <XPBar info={level} className="mt-4" />
+          <p className="border-border eyebrow mt-4 truncate border-t pt-3">{ctx.cohort.name}</p>
+          <p className="text-fg mt-0.5 truncate text-sm font-semibold">{user.fullName}</p>
           {user.role === 'admin' && (
             <Link
               href="/admin"
-              className="mt-3 inline-block text-sm font-semibold text-pulse-700 dark:text-pulse-400"
+              className="text-pulse-700 hover:text-pulse-500 dark:text-pulse-300 mt-3 inline-flex items-center gap-1 text-sm font-semibold"
             >
-              Admin console →
+              Admin console
+              <ArrowUpRight className="size-3.5" aria-hidden />
             </Link>
           )}
         </div>
@@ -58,18 +77,29 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <TopBar
           name={user.fullName}
           streak={streak}
+          xp={level.xp}
+          level={level.level}
+          subtitle={`${todayLabel} · ${ctx.cohort.name}`}
           right={
             user.role === 'admin' ? (
               <Link
                 href="/admin"
-                className="tap mr-1 hidden rounded-xl px-3 py-1.5 text-sm font-semibold text-fg-muted hover:bg-bg-sunken hover:text-fg sm:inline-block lg:hidden"
+                className="tap rounded-field text-fg-muted hover:bg-bg-sunken hover:text-fg mr-1 hidden px-3 py-1.5 text-sm font-semibold sm:inline-block lg:hidden"
               >
                 Admin
               </Link>
             ) : null
           }
         />
-        <main id="main" className="mx-auto max-w-2xl px-4 pt-4 pb-28 lg:max-w-4xl lg:px-8 lg:pb-12">
+
+        {/*
+          Wide enough for a real dashboard composition on desktop, and still a single
+          comfortable column on a phone. The bottom padding clears the floating nav bar.
+        */}
+        <main
+          id="main"
+          className="mx-auto w-full max-w-2xl px-4 pt-5 pb-32 lg:max-w-6xl lg:px-8 lg:pt-7 lg:pb-14"
+        >
           {children}
         </main>
       </div>

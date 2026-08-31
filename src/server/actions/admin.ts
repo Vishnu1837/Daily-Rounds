@@ -79,7 +79,8 @@ export async function markAttendanceAction(
   return guarded(async () => {
     const { user, ctx } = await adminContext(cohortId);
     const parsed = attendanceMarkSchema.safeParse(input);
-    if (!parsed.success) return fail('That attendance data was not valid.', fieldErrors(parsed.error));
+    if (!parsed.success)
+      return fail('That attendance data was not valid.', fieldErrors(parsed.error));
 
     const { date, entries } = parsed.data;
 

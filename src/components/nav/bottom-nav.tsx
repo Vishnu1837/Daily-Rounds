@@ -2,91 +2,160 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 
 import { cn } from '@/lib/cn';
 
 import { NavIcon } from './icon';
-import type { NavItem } from './nav-items';
+import { type NavItem, groupNav } from './nav-items';
 
 function isActive(pathname: string, href: string): boolean {
   if (href === '/' || href === '/admin') return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Mobile bottom bar. Five targets max, each at least 44px tall. */
+/**
+ * The mobile bar.
+ *
+ * A floating pill inset from the screen edges rather than a full-width bar welded to the
+ * bottom: it reads as a control that belongs to the app rather than to the phone, and the
+ * gap underneath means content scrolling past it stays visible instead of disappearing
+ * under an opaque strip.
+ *
+ * One item may be raised into a centre action button. That slot is the product's single
+ * daily ritual, so it is always in the same place and always the largest target.
+ */
 export function BottomNav({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
+  const reduce = useReducedMotion();
   const primary = items.filter((i) => i.primary);
+  const fab = primary.find((i) => i.fab);
+  const tabs = primary.filter((i) => !i.fab);
+
+  // With a raised action the tabs split evenly around it; without one they simply fill.
+  const half = Math.ceil(tabs.length / 2);
+  const groups = fab ? [tabs.slice(0, half), tabs.slice(half)] : [tabs];
 
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-[var(--nav-bg)] backdrop-blur-xl lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden"
     >
-      <ul className="mx-auto flex max-w-lg items-stretch justify-around px-1 pb-[env(safe-area-inset-bottom)]">
-        {primary.map((item) => {
-          const active = isActive(pathname, item.href);
-          return (
-            <li key={item.href} className="flex-1">
-              <Link
-                href={item.href}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  'tap relative flex min-h-[3.5rem] flex-col items-center justify-center gap-1 px-1 py-2 transition-colors',
-                  active ? 'text-pulse-700 dark:text-pulse-300' : 'text-fg-subtle',
-                )}
-              >
-                {active && (
-                  <motion.span
-                    layoutId="bottom-nav-pill"
-                    className="absolute inset-x-2 inset-y-1.5 -z-10 rounded-2xl bg-pulse-500/12"
-                    transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                  />
-                )}
-                <NavIcon
-                  name={item.icon}
-                  className="size-[22px]"
-                  strokeWidth={active ? 2.4 : 1.9}
-                />
-                <span className="text-2xs leading-none font-semibold">{item.short}</span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="rounded-pill border-border shadow-float relative mx-auto flex max-w-md items-stretch gap-1 border bg-[var(--nav-bg)] px-2 py-1.5 backdrop-blur-2xl">
+        {groups.map((group, groupIndex) => (
+          <ul key={groupIndex} className="flex flex-1 items-stretch justify-around">
+            {group.map((item) => {
+              const active = isActive(pathname, item.href);
+              return (
+                <li key={item.href} className="flex-1">
+                  <Link
+                    href={item.href}
+                    aria-current={active ? 'page' : undefined}
+                    className={cn(
+                      'tap rounded-pill relative flex min-h-13 flex-col items-center justify-center gap-1 px-1 transition-colors duration-150',
+                      active ? 'text-pulse-700 dark:text-pulse-200' : 'text-fg-subtle',
+                    )}
+                  >
+                    {active && (
+                      <motion.span
+                        layoutId="bottom-nav-pill"
+                        className="rounded-pill bg-pulse-500/14 absolute inset-0 -z-10"
+                        transition={
+                          reduce ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 34 }
+                        }
+                      />
+                    )}
+                    <NavIcon
+                      name={item.icon}
+                      className="size-[21px]"
+                      strokeWidth={active ? 2.5 : 1.9}
+                    />
+                    <span className="text-2xs leading-none font-semibold">{item.short}</span>
+                  </Link>
+                </li>
+              );
+            })}
+            {/* Reserves the footprint the raised button occupies above the bar. */}
+            {fab && groupIndex === 0 && <li className="w-16 shrink-0" aria-hidden />}
+          </ul>
+        ))}
+
+        {fab && (
+          <Link
+            href={fab.href}
+            aria-label={fab.label}
+            aria-current={isActive(pathname, fab.href) ? 'page' : undefined}
+            className={cn(
+              'tap absolute -top-4 left-1/2 grid size-14 -translate-x-1/2 place-items-center rounded-full',
+              'from-pulse-400 to-pulse-600 shadow-glow-pulse bg-linear-to-br text-white',
+              'ease-out-soft ring-4 ring-[var(--bg)] transition-transform duration-200',
+              'active:scale-95 motion-reduce:active:scale-100',
+            )}
+          >
+            <NavIcon name={fab.icon} className="size-6" strokeWidth={2.4} />
+          </Link>
+        )}
+      </div>
     </nav>
   );
 }
 
-/** Desktop sidebar. Shows every destination, not just the primary five. */
+/**
+ * The desktop rail.
+ *
+ * Grouped with quiet headings so eight destinations read as three ideas rather than a list
+ * of eight. The active item gets a filled gradient pill *and* a brighter icon — colour
+ * alone would not survive a monochrome display or a colour-blind reader.
+ */
 export function SideNav({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
+  const reduce = useReducedMotion();
+  const groups = groupNav(items);
 
   return (
     <nav aria-label="Primary" className="hidden lg:block">
-      <ul className="space-y-1">
-        {items.map((item) => {
-          const active = isActive(pathname, item.href);
-          return (
-            <li key={item.href}>
-              <Link
-                href={item.href}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  'tap relative flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-sm font-semibold transition-colors',
-                  active
-                    ? 'bg-pulse-500/12 text-pulse-700 dark:text-pulse-300'
-                    : 'text-fg-muted hover:bg-bg-sunken hover:text-fg',
-                )}
-              >
-                <NavIcon name={item.icon} className="size-[18px]" strokeWidth={active ? 2.4 : 2} />
-                {item.label}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="space-y-6">
+        {groups.map(({ group, items: groupItems }) => (
+          <div key={group}>
+            <p className="eyebrow px-3.5 pb-2">{group}</p>
+            <ul className="space-y-0.5">
+              {groupItems.map((item) => {
+                const active = isActive(pathname, item.href);
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      aria-current={active ? 'page' : undefined}
+                      className={cn(
+                        'tap rounded-field relative flex items-center gap-3 px-3.5 py-2.5 text-sm font-semibold transition-colors duration-150',
+                        active ? 'text-white' : 'text-fg-muted hover:bg-bg-sunken hover:text-fg',
+                      )}
+                    >
+                      {active && (
+                        <motion.span
+                          layoutId="side-nav-pill"
+                          className="rounded-field from-pulse-500 to-pulse-600 shadow-glow-pulse absolute inset-0 -z-10 bg-linear-to-r"
+                          transition={
+                            reduce
+                              ? { duration: 0 }
+                              : { type: 'spring', stiffness: 420, damping: 36 }
+                          }
+                        />
+                      )}
+                      <NavIcon
+                        name={item.icon}
+                        className="size-[18px]"
+                        strokeWidth={active ? 2.4 : 2}
+                      />
+                      {item.label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
     </nav>
   );
 }

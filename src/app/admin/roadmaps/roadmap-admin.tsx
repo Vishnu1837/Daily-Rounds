@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Map as MapIcon, Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,8 @@ import { FormError, Select, TextArea, TextInput } from '@/components/ui/form';
 import { ProgressBar } from '@/components/ui/progress';
 import { Sheet } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/toast';
+import { PageHeader } from '@/components/ui/page-header';
+import { Segmented } from '@/components/ui/segmented';
 import { cn } from '@/lib/cn';
 import {
   addRoadmapWeekAction,
@@ -149,32 +151,22 @@ export function RoadmapAdminScreen({
   const unassigned = assignments.filter((a) => !a.topicId).length;
 
   return (
-    <div className="space-y-4">
-      <header className="px-1 pt-2">
-        <h1 className="text-2xl font-extrabold tracking-tight text-fg">Roadmaps &amp; assignments</h1>
-        <p className="mt-1 text-sm text-fg-muted">
-          Every student has their own roadmap. Assign topics in bulk or one at a time.
-        </p>
-      </header>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="The plan"
+        title="Roadmaps & assignments"
+        description="Every student has their own roadmap. Assign topics in bulk or one at a time."
+      />
 
-      <div className="flex gap-2">
-        {(['assign', 'build'] as const).map((key) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            aria-pressed={tab === key}
-            className={cn(
-              'tap rounded-pill px-4 py-2 text-sm font-bold transition-colors',
-              tab === key
-                ? 'bg-ink-900 text-white dark:bg-ink-100 dark:text-ink-950'
-                : 'bg-bg-sunken text-fg-muted hover:text-fg',
-            )}
-          >
-            {key === 'assign' ? "Daily assignments" : 'Build roadmaps'}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        ariaLabel="Roadmap view"
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: 'assign', label: 'Daily assignments' },
+          { value: 'build', label: 'Build roadmaps' },
+        ]}
+      />
 
       {tab === 'assign' ? (
         <>
@@ -229,7 +221,7 @@ export function RoadmapAdminScreen({
             action={
               <a
                 href={`/admin/roadmaps?date=${today}`}
-                className="text-sm font-semibold text-pulse-700 dark:text-pulse-400"
+                className="text-pulse-700 dark:text-pulse-400 text-sm font-semibold"
               >
                 Today
               </a>
@@ -239,7 +231,7 @@ export function RoadmapAdminScreen({
             {unassigned > 0 ? ` · ${unassigned} without a topic` : ''}
           </SectionTitle>
 
-          <Card className="divide-y divide-border p-0">
+          <Card className="divide-border divide-y p-0">
             {assignments.map((a) => (
               <AssignmentRow key={a.memberId} cohortId={cohortId} date={date} assignment={a} />
             ))}
@@ -248,17 +240,14 @@ export function RoadmapAdminScreen({
       ) : (
         <>
           <Card className="p-5">
-            <label
-              htmlFor="member-picker"
-              className="block text-sm font-semibold text-fg"
-            >
+            <label htmlFor="member-picker" className="text-fg block text-sm font-semibold">
               Student
             </label>
             <select
               id="member-picker"
               value={selectedMemberId ?? ''}
               onChange={(e) => router.push(`/admin/roadmaps?member=${e.target.value}`)}
-              className="mt-1.5 w-full rounded-2xl border border-border bg-bg-elevated px-4 py-3 text-fg"
+              className="border-border bg-bg-elevated text-fg mt-1.5 w-full rounded-2xl border px-4 py-3"
             >
               {students.map((s) => (
                 <option key={s.memberId} value={s.memberId}>
@@ -279,7 +268,7 @@ export function RoadmapAdminScreen({
           {roadmaps.length === 0 ? (
             <Card>
               <EmptyState
-                emoji="🗺️"
+                icon={<MapIcon className="size-6" aria-hidden />}
                 title="No roadmap yet"
                 description="Apply a curated template to get this student started, then edit it freely."
               />
@@ -301,11 +290,7 @@ export function RoadmapAdminScreen({
           {selectedMemberId && roadmaps.length > 0 && (
             <Card className="p-5">
               <CardHeader title="Add another roadmap" className="p-0" />
-              <NewRoadmapForm
-                cohortId={cohortId}
-                memberId={selectedMemberId}
-                subjects={subjects}
-              />
+              <NewRoadmapForm cohortId={cohortId} memberId={selectedMemberId} subjects={subjects} />
             </Card>
           )}
         </>
@@ -334,8 +319,8 @@ function AssignmentRow({
     <>
       <div className="flex items-center gap-3 p-4">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-bold text-fg">{assignment.name}</p>
-          <p className="truncate text-xs text-fg-muted">
+          <p className="text-fg truncate text-sm font-bold">{assignment.name}</p>
+          <p className="text-fg-muted truncate text-xs">
             {assignment.topicTitle ?? 'No topic assigned'}
             {assignment.plannedMinutes ? ` · ${assignment.plannedMinutes} min` : ''}
           </p>
@@ -385,7 +370,7 @@ function AssignmentRow({
             defaultValue={assignment.note ?? ''}
             placeholder="Focus on the mediator table — that is what the viva asks about."
           />
-          <p className="text-sm text-fg-subtle">
+          <p className="text-fg-subtle text-sm">
             The topic itself comes from this student&apos;s roadmap. Use “Assign next topic to
             everyone” to advance it, or edit their roadmap directly.
           </p>
@@ -473,7 +458,7 @@ function RoadmapEditor({
         }
       />
 
-      <ul className="mt-3 divide-y divide-border">
+      <ul className="divide-border mt-3 divide-y">
         {roadmap.topics.map((topic, i) => {
           const week = roadmap.weeks.find((w) => w.id === topic.weekId);
           return (
@@ -484,7 +469,7 @@ function RoadmapEditor({
                   onClick={() => move(i, -1)}
                   disabled={i === 0 || pending}
                   aria-label={`Move ${topic.title} up`}
-                  className="tap grid size-6 place-items-center rounded text-fg-subtle hover:bg-bg-sunken hover:text-fg disabled:opacity-30"
+                  className="tap text-fg-subtle hover:bg-bg-sunken hover:text-fg grid size-6 place-items-center rounded disabled:opacity-30"
                 >
                   <ChevronUp className="size-3.5" aria-hidden />
                 </button>
@@ -493,15 +478,15 @@ function RoadmapEditor({
                   onClick={() => move(i, 1)}
                   disabled={i === roadmap.topics.length - 1 || pending}
                   aria-label={`Move ${topic.title} down`}
-                  className="tap grid size-6 place-items-center rounded text-fg-subtle hover:bg-bg-sunken hover:text-fg disabled:opacity-30"
+                  className="tap text-fg-subtle hover:bg-bg-sunken hover:text-fg grid size-6 place-items-center rounded disabled:opacity-30"
                 >
                   <ChevronDown className="size-3.5" aria-hidden />
                 </button>
               </div>
 
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-fg">{topic.title}</p>
-                <p className="truncate text-xs text-fg-subtle">
+                <p className="text-fg truncate text-sm font-semibold">{topic.title}</p>
+                <p className="text-fg-subtle truncate text-xs">
                   {week ? `Week ${week.number} · ` : ''}
                   {topic.minutes} min
                 </p>
@@ -523,7 +508,7 @@ function RoadmapEditor({
                 type="button"
                 onClick={() => setEditing(topic)}
                 aria-label={`Edit ${topic.title}`}
-                className="tap grid size-8 place-items-center rounded-lg text-fg-subtle hover:bg-bg-sunken hover:text-fg"
+                className="tap text-fg-subtle hover:bg-bg-sunken hover:text-fg grid size-8 place-items-center rounded-lg"
               >
                 <Pencil className="size-3.5" aria-hidden />
               </button>
@@ -531,7 +516,7 @@ function RoadmapEditor({
                 type="button"
                 onClick={() => remove(topic.id)}
                 aria-label={`Delete ${topic.title}`}
-                className="tap grid size-8 place-items-center rounded-lg text-fg-subtle hover:bg-danger/10 hover:text-danger"
+                className="tap text-fg-subtle hover:bg-danger/10 hover:text-danger grid size-8 place-items-center rounded-lg"
               >
                 <Trash2 className="size-3.5" aria-hidden />
               </button>
@@ -612,7 +597,13 @@ function TopicForm({
   cohortId: string;
   roadmapId: string;
   weeks: { id: string | null; number: number; title: string }[];
-  topic?: { id: string; title: string; description: string | null; minutes: number; weekId: string | null };
+  topic?: {
+    id: string;
+    title: string;
+    description: string | null;
+    minutes: number;
+    weekId: string | null;
+  };
   onDone: () => void;
 }) {
   const router = useRouter();
@@ -704,11 +695,7 @@ function ApplyTemplateForm({
 
   return (
     <div className="space-y-3">
-      <Select
-        label="Template"
-        value={templateKey}
-        onChange={(e) => setTemplateKey(e.target.value)}
-      >
+      <Select label="Template" value={templateKey} onChange={(e) => setTemplateKey(e.target.value)}>
         {templates.map((t) => (
           <option key={t.key} value={t.key}>
             {t.title}

@@ -2,23 +2,65 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ExternalLink } from 'lucide-react';
+import {
+  BookOpen,
+  ExternalLink,
+  FileText,
+  FolderOpen,
+  Globe,
+  Library,
+  PlayCircle,
+  Search,
+  Video,
+} from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, SectionTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/feedback';
 import { TextInput } from '@/components/ui/form';
+import { PageHeader } from '@/components/ui/page-header';
+import { Reveal } from '@/components/ui/reveal';
 import { cn } from '@/lib/cn';
 import type { MaterialType } from '@/db/schema';
 
-const TYPE_META: Record<MaterialType, { emoji: string; label: string }> = {
-  pdf: { emoji: '📄', label: 'PDF' },
-  drive: { emoji: '📁', label: 'Drive' },
-  video: { emoji: '▶️', label: 'Video' },
-  textbook: { emoji: '📚', label: 'Textbook' },
-  website: { emoji: '🔗', label: 'Website' },
-  recording: { emoji: '🎥', label: 'Recording' },
-};
+/*
+ * Each resource type gets its own icon *and* its own colour, and the pair is fixed. A drive
+ * folder is always amber, a video is always violet — after a week of use the shape of the
+ * list is scannable without reading a single label.
+ */
+const TYPE_META: Record<MaterialType, { icon: typeof FileText; label: string; className: string }> =
+  {
+    pdf: {
+      icon: FileText,
+      label: 'PDF',
+      className: 'bg-danger/12 text-danger-strong dark:text-danger',
+    },
+    drive: {
+      icon: FolderOpen,
+      label: 'Drive',
+      className: 'bg-flame-500/14 text-flame-700 dark:text-flame-300',
+    },
+    video: {
+      icon: PlayCircle,
+      label: 'Video',
+      className: 'bg-iris-500/12 text-iris-700 dark:text-iris-300',
+    },
+    textbook: {
+      icon: BookOpen,
+      label: 'Textbook',
+      className: 'bg-pulse-500/12 text-pulse-700 dark:text-pulse-300',
+    },
+    website: {
+      icon: Globe,
+      label: 'Website',
+      className: 'bg-aqua-400/18 text-aqua-500',
+    },
+    recording: {
+      icon: Video,
+      label: 'Recording',
+      className: 'bg-citrus-500/18 text-citrus-700 dark:text-citrus-300',
+    },
+  };
 
 type Material = {
   id: string;
@@ -68,59 +110,77 @@ export function MaterialsScreen({
     return [...map.entries()];
   }, [materials, query]);
 
+  const matchCount = grouped.reduce((sum, [, items]) => sum + items.length, 0);
+
   return (
-    <div className="space-y-4">
-      <header className="px-1 pt-2">
-        <h1 className="text-2xl font-extrabold tracking-tight text-fg">Materials</h1>
-        <p className="mt-1 text-sm text-fg-muted">
-          Curated by your cohort lead, organised by topic.
-        </p>
-      </header>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Library"
+        title="Materials"
+        description="Curated by your cohort lead and grouped by topic."
+      >
+        <TextInput
+          type="search"
+          placeholder="Search by topic, subject or title"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search materials"
+          leading={<Search className="size-4" aria-hidden />}
+          className="max-w-xl"
+        />
+      </PageHeader>
 
-      <TextInput
-        type="search"
-        placeholder="Search by topic or title"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        aria-label="Search materials"
-      />
-
-      {quizzes.length > 0 && (
-        <section className="space-y-2">
-          <SectionTitle>Knowledge checks</SectionTitle>
-          <p className="px-1 text-sm text-fg-muted">
-            Optional and low-stakes. Attempting is what earns points — the score barely moves your
-            standing.
-          </p>
-          <div className="space-y-2">
-            {quizzes.map((quiz) => (
-              <Link key={quiz.id} href={`/quiz/${quiz.id}`} className="tap block">
-                <Card interactive className="flex items-center gap-3.5 p-4">
-                  <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-bg-sunken text-xl" aria-hidden>
-                    🔬
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-fg">{quiz.title}</p>
-                    <p className="truncate text-xs text-fg-subtle">
-                      {quiz.questionCount} questions · {quiz.topicKey}
-                    </p>
-                  </div>
-                  {quiz.best && (
-                    <Badge tone="pulse">
-                      Best {quiz.best.score}/{quiz.best.total}
-                    </Badge>
-                  )}
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </section>
+      {/* ------------------------------------------------- knowledge checks */}
+      {quizzes.length > 0 && !query && (
+        <Reveal>
+          <section className="space-y-3">
+            <SectionTitle>Knowledge checks</SectionTitle>
+            <p className="text-fg-muted px-1 text-sm">
+              Optional and low-stakes. Attempting is what earns XP — the score barely moves your
+              standing.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {quizzes.map((quiz, i) => (
+                <Reveal key={quiz.id} delay={i}>
+                  <Link href={`/quiz/${quiz.id}`} className="tap block h-full">
+                    <Card
+                      variant="wash"
+                      tone="pulse"
+                      padding="md"
+                      interactive
+                      className="flex h-full flex-col"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span
+                          className="bg-pulse-500/14 text-pulse-600 dark:text-pulse-300 grid size-10 shrink-0 place-items-center rounded-xl"
+                          aria-hidden
+                        >
+                          <Library className="size-5" />
+                        </span>
+                        {quiz.best && (
+                          <Badge tone="success" size="sm">
+                            Best {quiz.best.score}/{quiz.best.total}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-fg mt-3.5 text-sm font-bold">{quiz.title}</p>
+                      <p className="text-fg-muted mt-auto pt-2 text-xs">
+                        {quiz.questionCount} questions · {quiz.topicKey}
+                      </p>
+                    </Card>
+                  </Link>
+                </Reveal>
+              ))}
+            </div>
+          </section>
+        </Reveal>
       )}
 
+      {/* ------------------------------------------------------- the library */}
       {grouped.length === 0 ? (
-        <Card>
+        <Card variant="outline">
           <EmptyState
-            emoji="📚"
+            icon={<BookOpen className="size-6" aria-hidden />}
             title={query ? 'Nothing matched that search' : 'No materials yet'}
             description={
               query
@@ -130,41 +190,79 @@ export function MaterialsScreen({
           />
         </Card>
       ) : (
-        grouped.map(([topic, items]) => (
-          <section key={topic} className="space-y-2">
-            <SectionTitle>{topic}</SectionTitle>
-            <Card className="divide-y divide-border p-0">
-              {items.map((m) => (
-                <a
-                  key={m.id}
-                  href={m.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    'tap flex items-start gap-3.5 p-4 transition-colors hover:bg-bg-sunken',
-                  )}
-                >
-                  <span className="text-xl" aria-hidden>
-                    {TYPE_META[m.type].emoji}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-fg">{m.title}</p>
-                    {m.description && (
-                      <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">{m.description}</p>
-                    )}
-                    <p className="mt-1.5 text-2xs font-bold tracking-wide text-fg-subtle uppercase">
-                      {TYPE_META[m.type].label}
-                      {m.subjectName ? ` · ${m.subjectName}` : ''}
-                    </p>
-                  </div>
-                  <ExternalLink className="mt-0.5 size-4 shrink-0 text-fg-subtle" aria-hidden />
-                  <span className="sr-only">(opens in a new tab)</span>
-                </a>
-              ))}
-            </Card>
-          </section>
-        ))
+        <>
+          {query && (
+            <p className="text-fg-muted px-1 text-sm">
+              <strong className="text-fg">{matchCount}</strong>{' '}
+              {matchCount === 1 ? 'resource' : 'resources'} matching “{query}”
+            </p>
+          )}
+          <div className="space-y-5">
+            {grouped.map(([topic, items], groupIndex) => (
+              <Reveal key={topic} delay={groupIndex}>
+                <section className="space-y-2.5">
+                  <SectionTitle
+                    action={
+                      <span className="text-2xs text-fg-subtle font-bold tabular-nums">
+                        {items.length}
+                      </span>
+                    }
+                  >
+                    {topic}
+                  </SectionTitle>
+                  <Card padding="none" className="overflow-hidden">
+                    <ul className="divide-border divide-y">
+                      {items.map((m) => (
+                        <li key={m.id}>
+                          <MaterialRow material={m} />
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                </section>
+              </Reveal>
+            ))}
+          </div>
+        </>
       )}
     </div>
+  );
+}
+
+function MaterialRow({ material }: { material: Material }) {
+  const meta = TYPE_META[material.type];
+  const Icon = meta.icon;
+
+  return (
+    <a
+      href={material.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cn('tap group hover:bg-bg-sunken flex items-start gap-3.5 p-4 transition-colors')}
+    >
+      <span
+        className={cn('grid size-10 shrink-0 place-items-center rounded-xl', meta.className)}
+        aria-hidden
+      >
+        <Icon className="size-5" />
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <p className="text-fg text-sm font-bold">{material.title}</p>
+        {material.description && (
+          <p className="text-fg-muted mt-0.5 text-xs leading-relaxed">{material.description}</p>
+        )}
+        <p className="eyebrow mt-1.5">
+          {meta.label}
+          {material.subjectName ? ` · ${material.subjectName}` : ''}
+        </p>
+      </div>
+
+      <ExternalLink
+        className="text-fg-subtle group-hover:text-fg-muted mt-0.5 size-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+        aria-hidden
+      />
+      <span className="sr-only">(opens in a new tab)</span>
+    </a>
   );
 }
