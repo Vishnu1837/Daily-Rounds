@@ -266,6 +266,98 @@ export function ChoiceGroup<T extends string>({
   );
 }
 
+/**
+ * The same control as `ChoiceGroup`, for questions where more than one answer is true.
+ *
+ * Kept as a separate component rather than a `multiple` flag on the one above, because the
+ * two differ in more than behaviour: this one is a group of checkboxes with square ticks
+ * and no "one of these replaces the others" expectation, and conflating them is how a
+ * radio group ends up silently accepting two answers.
+ */
+export function MultiChoiceGroup<T extends string>({
+  name,
+  values,
+  onChange,
+  options,
+  columns = 1,
+  className,
+}: {
+  name: string;
+  values: T[];
+  onChange: (values: T[]) => void;
+  options: { value: T; label: string; description?: string; emoji?: string }[];
+  columns?: 1 | 2 | 3;
+  className?: string;
+}) {
+  const toggle = (value: T) =>
+    onChange(values.includes(value) ? values.filter((v) => v !== value) : [...values, value]);
+
+  return (
+    <div
+      role="group"
+      aria-label={name}
+      className={cn(
+        'grid gap-2.5',
+        columns === 2 && 'grid-cols-2',
+        columns === 3 && 'grid-cols-3',
+        className,
+      )}
+    >
+      {options.map((option) => {
+        const selected = values.includes(option.value);
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="checkbox"
+            aria-checked={selected}
+            onClick={() => toggle(option.value)}
+            className={cn(
+              'tap group rounded-panel relative flex items-center gap-3 overflow-hidden border p-3.5 text-left',
+              'ease-out-soft transition-all duration-200 active:scale-[0.985] motion-reduce:active:scale-100',
+              selected
+                ? 'border-pulse-500 bg-pulse-500/10 shadow-glow-pulse'
+                : 'border-border bg-bg-elevated hover:border-pulse-300 hover:shadow-soft hover:-translate-y-0.5 motion-reduce:hover:translate-y-0',
+            )}
+          >
+            {option.emoji && (
+              <span className="text-xl" aria-hidden>
+                {option.emoji}
+              </span>
+            )}
+            <span className="min-w-0 flex-1">
+              <span
+                className={cn(
+                  'block text-sm font-semibold',
+                  selected ? 'text-pulse-700 dark:text-pulse-200' : 'text-fg',
+                )}
+              >
+                {option.label}
+              </span>
+              {option.description && (
+                <span className="text-fg-muted mt-0.5 block text-xs">{option.description}</span>
+              )}
+            </span>
+            <span
+              className={cn(
+                // A square tick, against the radio group's round one: the shape is the only
+                // cue that says "more than one of these can be true".
+                'grid size-5 shrink-0 place-items-center rounded-md border-2 transition-all duration-200',
+                selected
+                  ? 'border-pulse-500 bg-pulse-500 scale-110 text-white'
+                  : 'border-border-strong text-transparent',
+              )}
+              aria-hidden
+            >
+              <Check className="size-3" strokeWidth={3.5} />
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** 1–N rating scale with accessible labels. */
 export function RatingScale({
   value,

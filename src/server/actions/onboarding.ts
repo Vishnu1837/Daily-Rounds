@@ -41,17 +41,25 @@ export async function completeOnboardingAction(
     // Checkboxes share a field name, which `Object.fromEntries` above would collapse to a
     // single value — so the challenge list is read off the FormData directly.
     const parsedChallenges = challengesSchema.safeParse(formData.getAll('challenges'));
-    if (!parsedChallenges.success) {
-      return fail('Some answers need a second look.', {
+
+    /*
+     * One of the two has to be there, but not both. A tab that was opened before the
+     * multi-select shipped still posts a single `biggestObstacle` and no challenge list,
+     * and refusing that would dead-end someone at the last step of onboarding with an
+     * error about a question their page never asked.
+     */
+    if (!parsedChallenges.success && !input.biggestObstacle) {
+      return fail('Tell us what gets in your way — pick at least one.', {
         challenges: 'Pick at least one — this is what the cohort is built to fix',
       });
     }
-    const challenges = parsedChallenges.data;
+    const challenges = parsedChallenges.success ? parsedChallenges.data : [];
 
     // `biggest_obstacle` still drives risk scoring and takes exactly one value, so it is
     // projected from the student's first-picked challenge unless they set it explicitly.
+    const first = challenges[0];
     const biggestObstacle =
-      input.biggestObstacle ?? CHALLENGE_TO_OBSTACLE[challenges[0]!] ?? 'other';
+      input.biggestObstacle ?? (first ? CHALLENGE_TO_OBSTACLE[first] : undefined) ?? 'other';
 
     const cohortRows = await db
       .select()

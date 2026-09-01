@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import {
   ChoiceGroup,
   Field,
+  MultiChoiceGroup,
   FormError,
   RatingScale,
   Select,
@@ -15,7 +16,7 @@ import {
   TextInput,
 } from '@/components/ui/form';
 import { cn } from '@/lib/cn';
-import { OBSTACLE_LABELS, obstacleValues } from '@/lib/validation';
+import { CHALLENGE_LABELS, type Challenge, challengeValues } from '@/lib/validation';
 import { completeOnboardingAction } from '@/server/actions/onboarding';
 import { DEFAULT_TIMEZONE, TIMEZONE_GROUPS } from '@/lib/timezones';
 
@@ -41,19 +42,24 @@ const STEPS = [
   { key: 'obstacle', title: 'What gets in the way' },
 ] as const;
 
-const OBSTACLE_OPTIONS = obstacleValues.map((value) => ({
+/**
+ * The standing patterns a student arrives with. Several are true at once for most people,
+ * which is why this is the question onboarding asks — the single `biggest_obstacle` that
+ * risk scoring needs is derived from the first pick on the server.
+ */
+const CHALLENGE_OPTIONS = challengeValues.map((value) => ({
   value,
-  label: OBSTACLE_LABELS[value] ?? value,
+  label: CHALLENGE_LABELS[value],
   emoji: (
     {
+      consistency: '📆',
       procrastination: '⏳',
-      social_media: '📱',
-      sleep: '😴',
-      classes: '🏥',
-      unclear_what_to_study: '🤷',
-      lack_of_motivation: '🔋',
-      personal: '🏠',
-      other: '❓',
+      low_motivation: '🔋',
+      backlogs: '📚',
+      poor_time_management: '⏰',
+      dont_know_where_to_start: '🤷',
+      sticking_to_plans: '📋',
+      distractions: '📱',
     } as Record<string, string>
   )[value],
 }));
@@ -94,7 +100,7 @@ export function OnboardingWizard({
   const [baselineConsistency, setBaselineConsistency] = useState<number | null>(null);
   const [baselineConfidence, setBaselineConfidence] = useState<number | null>(null);
 
-  const [obstacle, setObstacle] = useState<(typeof obstacleValues)[number] | null>(null);
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [obstacleNote, setObstacleNote] = useState('');
 
   const current = STEPS[step]!;
@@ -118,7 +124,7 @@ export function OnboardingWizard({
       case 'baseline':
         return baselineDays !== null && baselineConsistency !== null && baselineConfidence !== null;
       case 'obstacle':
-        return obstacle !== null;
+        return challenges.length > 0;
     }
   }, [
     current.key,
@@ -132,7 +138,7 @@ export function OnboardingWizard({
     baselineDays,
     baselineConsistency,
     baselineConfidence,
-    obstacle,
+    challenges,
   ]);
 
   function submit() {
@@ -153,7 +159,8 @@ export function OnboardingWizard({
     data.set('baselineDaysStudiedLastWeek', String(baselineDays ?? 0));
     data.set('baselineConsistencyRating', String(baselineConsistency ?? 5));
     data.set('baselineConfidence', String(baselineConfidence ?? 3));
-    data.set('biggestObstacle', obstacle ?? 'other');
+    // Repeated field, one entry per pick — `biggestObstacle` is derived from these server-side.
+    for (const challenge of challenges) data.append('challenges', challenge);
     if (obstacleNote) data.set('obstacleNote', obstacleNote);
 
     startTransition(async () => {
@@ -445,22 +452,23 @@ export function OnboardingWizard({
             {current.key === 'obstacle' && (
               <div className="mt-5 space-y-4">
                 <p className="text-fg-muted text-sm">
-                  What is the single biggest thing that breaks your consistency?
+                  What breaks your consistency? Pick everything that applies — most people have more
+                  than one.
                 </p>
-                <ChoiceGroup
-                  name="Biggest obstacle"
-                  value={obstacle}
-                  onChange={setObstacle}
-                  options={OBSTACLE_OPTIONS}
+                <MultiChoiceGroup
+                  name="What gets in the way"
+                  values={challenges}
+                  onChange={setChallenges}
+                  options={CHALLENGE_OPTIONS}
                   columns={2}
                 />
-                {obstacle === 'other' && (
-                  <TextInput
-                    label="Tell us more"
-                    value={obstacleNote}
-                    onChange={(e) => setObstacleNote(e.target.value)}
-                  />
-                )}
+                <FormError>{errors.challenges}</FormError>
+                <TextInput
+                  label="Anything else we should know? (optional)"
+                  value={obstacleNote}
+                  onChange={(e) => setObstacleNote(e.target.value)}
+                  error={errors.obstacleNote}
+                />
               </div>
             )}
           </div>

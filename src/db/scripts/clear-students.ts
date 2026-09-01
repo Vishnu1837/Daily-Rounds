@@ -15,8 +15,11 @@ loadEnv();
  * (`marked_by`, `created_by`, audit entries) is nulled rather than removed, so the history
  * of who did what survives.
  *
+ * Pass `--email=someone@example.edu` to remove exactly one account instead of all of them.
+ *
  *     npm run db:clear-students                        # local PGlite
  *     ALLOW_REMOTE_DESTRUCTIVE=1 npm run db:clear-students   # hosted database
+ *     ALLOW_REMOTE_DESTRUCTIVE=1 npm run db:clear-students -- --email=one@student.edu
  */
 async function main() {
   const { dbQuery: query, closeDb: close } = await import('../client');
@@ -39,13 +42,26 @@ async function main() {
     process.exit(1);
   }
 
+  const emailArg = process.argv.find((arg) => arg.startsWith('--email='))?.slice('--email='.length);
+
+  /*
+   * Admins are excluded in the WHERE clause rather than checked afterwards, so there is no
+   * ordering in which this script can remove one. The email filter is parameterised through
+   * a quoted literal for the same reason the rest of these scripts avoid interpolation.
+   */
+  const scope = emailArg
+    ? `role <> 'admin' AND lower(email) = lower('${emailArg.replaceAll("'", "''")}')`
+    : "role <> 'admin'";
+
   // Show the target before touching it: a count is the one thing worth checking twice.
   const doomed = await query<{ id: string; email: string; full_name: string }>(
-    "SELECT id, email, full_name FROM users WHERE role <> 'admin' ORDER BY full_name",
+    `SELECT id, email, full_name FROM users WHERE ${scope} ORDER BY full_name`,
   );
 
   if (doomed.length === 0) {
-    console.log('→ no student accounts to remove.');
+    console.log(
+      emailArg ? `→ no student account matching ${emailArg}.` : '→ no student accounts to remove.',
+    );
     await close();
     return;
   }
@@ -53,9 +69,7 @@ async function main() {
   console.log(`→ removing ${doomed.length} student account${doomed.length === 1 ? '' : 's'}:`);
   for (const user of doomed) console.log(`   · ${user.full_name} <${user.email}>`);
 
-  const deleted = await query<{ id: string }>(
-    "DELETE FROM users WHERE role <> 'admin' RETURNING id",
-  );
+  const deleted = await query<{ id: string }>(`DELETE FROM users WHERE ${scope} RETURNING id`);
 
   const [remaining] = await query<{ students: number; admins: number; members: number }>(
     `SELECT
