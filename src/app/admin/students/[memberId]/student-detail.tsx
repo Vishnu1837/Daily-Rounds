@@ -58,7 +58,7 @@ export function StudentDetailScreen({
       {/* ------------------------------------------------------------ header */}
       <Card padding="lg">
         <div className="flex flex-wrap items-start gap-5">
-          <Avatar name={member.name} size="lg" ring />
+          <Avatar name={member.name} src={member.avatarUrl} size="lg" ring />
           <div className="min-w-0 flex-1">
             <h1 className="text-fg text-2xl font-extrabold tracking-tight">{member.name}</h1>
             <p className="text-fg-muted truncate text-sm">{member.email}</p>

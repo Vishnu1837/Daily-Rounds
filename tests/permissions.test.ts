@@ -33,6 +33,7 @@ const student: SessionUser = {
   role: 'student',
   timezone: 'Asia/Kolkata',
   avatarSeed: 'test',
+  avatarUrl: null,
   mbbsYear: 2,
   university: 'Test College',
   whatsapp: null,

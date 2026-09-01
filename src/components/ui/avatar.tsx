@@ -1,12 +1,12 @@
 import { cn } from '@/lib/cn';
 
 /**
- * Avatars are generated, never uploaded — this is a study cohort, not a social network, and
- * asking two dozen students for a photo is friction that buys nothing.
+ * An avatar is either an uploaded photograph or a generated monogram — nobody is required
+ * to have a picture, and the fallback has to look deliberate rather than like a gap.
  *
- * The gradient is chosen deterministically from the name, so a given person is the same
- * colour on the leaderboard, in the admin console and on their own profile. Palettes are
- * drawn from the brand ramps rather than random hues so a list of thirty students still
+ * The monogram gradient is chosen deterministically from the name, so a given person is the
+ * same colour on the leaderboard, in the admin console and on their own profile. Palettes
+ * are drawn from the brand ramps rather than random hues so a list of thirty students still
  * looks like one product.
  */
 const PALETTES = [
@@ -35,6 +35,7 @@ export function initialsOf(name: string): string {
 
 export function Avatar({
   name,
+  src,
   size = 'md',
   className,
   ring,
@@ -42,6 +43,8 @@ export function Avatar({
   glow,
 }: {
   name: string;
+  /** An uploaded picture. Falls back to the monogram when absent. */
+  src?: string | null;
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
   ring?: boolean;
@@ -58,7 +61,7 @@ export function Avatar({
   return (
     <span
       className={cn(
-        'relative grid shrink-0 place-items-center rounded-full bg-linear-to-br font-bold text-white select-none',
+        'relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-linear-to-br font-bold text-white select-none',
         paletteFor(name),
         dims,
         ring && 'ring-bg-elevated ring-2',
@@ -67,7 +70,16 @@ export function Avatar({
       )}
       aria-hidden
     >
-      {initialsOf(name)}
+      {src ? (
+        /*
+         * Uploaded pictures are stored as inline data URLs, already downscaled to a square
+         * on the client, so there is nothing for the image optimiser to do here.
+         */
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="" className="absolute inset-0 size-full object-cover" />
+      ) : (
+        initialsOf(name)
+      )}
     </span>
   );
 }
@@ -77,26 +89,27 @@ export function Avatar({
  * remainder as a count, so the row cannot grow unbounded on a large cohort.
  */
 export function AvatarStack({
-  names,
+  people,
   max = 4,
   size = 'sm',
   className,
 }: {
-  names: string[];
+  people: { name: string; avatarUrl?: string | null }[];
   max?: number;
   size?: 'xs' | 'sm';
   className?: string;
 }) {
-  const shown = names.slice(0, max);
-  const rest = names.length - shown.length;
+  const shown = people.slice(0, max);
+  const rest = people.length - shown.length;
   const dims = size === 'xs' ? 'size-7 text-2xs' : 'size-9 text-xs';
 
   return (
     <div className={cn('flex items-center', className)}>
-      {shown.map((name, i) => (
+      {shown.map((person, i) => (
         <Avatar
-          key={`${name}-${i}`}
-          name={name}
+          key={`${person.name}-${i}`}
+          name={person.name}
+          src={person.avatarUrl}
           size={size}
           ring
           className={i > 0 ? '-ml-2.5' : undefined}

@@ -66,6 +66,7 @@ export function ThemeToggle({ className }: { className?: string }) {
  */
 export function TopBar({
   name,
+  avatarUrl,
   streak,
   xp,
   level,
@@ -75,6 +76,7 @@ export function TopBar({
   subtitle,
 }: {
   name: string;
+  avatarUrl?: string | null;
   streak?: number;
   xp?: number;
   level?: number;
@@ -138,7 +140,7 @@ export function TopBar({
           <ThemeToggle />
 
           <Link href={href} aria-label="Your profile" className="tap ml-0.5">
-            <Avatar name={name} size="sm" ring />
+            <Avatar name={name} src={avatarUrl} size="sm" ring />
           </Link>
         </div>
       </div>

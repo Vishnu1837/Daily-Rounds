@@ -5,6 +5,7 @@ import {
   asc,
   desc,
   eq,
+  gt,
   gte,
   inArray,
   isNotNull,
@@ -37,6 +38,7 @@ import {
   roadmaps,
   studentAchievements,
   studentGoals,
+  studyRoomPresence,
   studySessions,
   subjects,
   users,
@@ -53,6 +55,7 @@ import {
   isActiveStudyDay,
   isHoliday,
   minDate,
+  timeInTimezone,
   weekStart,
 } from '@/lib/domain/calendar';
 import {
@@ -63,6 +66,7 @@ import {
   calculateWeeklyProgress,
 } from '@/lib/domain/consistency';
 import { BEHAVIOUR_EVENTS, maxDailyBehaviourPoints } from '@/lib/domain/points';
+import { PRESENCE_STALE_SECONDS, parseHm } from '@/lib/domain/study-room';
 import {
   calculateBestStreak,
   calculateCurrentStreak,
@@ -112,6 +116,12 @@ export type HomeData = {
     startTime: string;
     endTime: string;
     attended: AttendanceStatus | null;
+    /** Cohort wall clock in minutes since midnight, so the card's countdown is not the browser's. */
+    nowMinutes: number;
+    /** Whether this student is on the live roster right now. */
+    joined: boolean;
+    /** Everyone in the room, freshest heartbeat window only. */
+    occupants: { memberId: string; name: string; avatarUrl: string | null }[];
   };
   tasks: TodayTask[];
   todayPoints: number;
@@ -150,6 +160,7 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
     announcementRows,
     unseenRows,
     points,
+    presenceRows,
   ] = await Promise.all([
     loadActivity(memberId, calendar.startDate, upTo),
     db
@@ -221,6 +232,24 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
       .from(studentAchievements)
       .where(and(eq(studentAchievements.memberId, memberId), isNull(studentAchievements.seenAt))),
     totalPoints(memberId),
+    db
+      .select({
+        memberId: studyRoomPresence.memberId,
+        name: users.fullName,
+        avatarUrl: users.avatarUrl,
+      })
+      .from(studyRoomPresence)
+      .innerJoin(cohortMembers, eq(cohortMembers.id, studyRoomPresence.memberId))
+      .innerJoin(users, eq(users.id, cohortMembers.userId))
+      .where(
+        and(
+          eq(cohortMembers.cohortId, cohort.id),
+          eq(studyRoomPresence.date, today),
+          isNull(studyRoomPresence.leftAt),
+          gt(studyRoomPresence.lastSeenAt, new Date(Date.now() - PRESENCE_STALE_SECONDS * 1000)),
+        ),
+      )
+      .orderBy(asc(studyRoomPresence.joinedAt)),
   ]);
 
   const streak = calculateCurrentStreak(calendar, activity.showedUp, today);
@@ -314,6 +343,9 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
       startTime: cohort.meetStartTime,
       endTime: cohort.meetEndTime,
       attended: attendedStatus,
+      nowMinutes: parseHm(timeInTimezone(cohort.timezone)) ?? 0,
+      joined: presenceRows.some((row) => row.memberId === memberId),
+      occupants: presenceRows,
     },
     tasks,
     todayPoints: ledgerRows.reduce((s, r) => s + r.points, 0),
@@ -339,6 +371,7 @@ export type LeaderboardRow = {
   memberId: string;
   userId: string;
   name: string;
+  avatarUrl: string | null;
   mbbsYear: number | null;
   consistencyPct: number;
   showUpRatePct: number;
@@ -373,6 +406,7 @@ export async function getLeaderboard(
       memberId: cohortMembers.id,
       userId: users.id,
       name: users.fullName,
+      avatarUrl: users.avatarUrl,
       mbbsYear: users.mbbsYear,
     })
     .from(cohortMembers)
@@ -459,6 +493,7 @@ export async function getLeaderboard(
       memberId: m.memberId,
       userId: m.userId,
       name: m.name,
+      avatarUrl: m.avatarUrl,
       mbbsYear: m.mbbsYear,
       consistencyPct: overall.consistencyPct,
       showUpRatePct: overall.showUpRatePct,

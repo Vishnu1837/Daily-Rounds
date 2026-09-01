@@ -43,6 +43,7 @@ export default async function ProfilePage() {
         mbbsYear: user.mbbsYear,
         timezone: user.timezone,
         role: user.role,
+        avatarUrl: user.avatarUrl,
       }}
       cohort={{
         name: ctx.cohort.name,

@@ -284,7 +284,13 @@ function Podium({ rows }: { rows: LeaderboardRow[] }) {
                 transition={{ delay: place === 1 ? 0.05 : 0.15, duration: 0.35 }}
                 className="flex flex-col items-center"
               >
-                <Avatar name={row.name} size={place === 1 ? 'lg' : 'md'} ring glow={place === 1} />
+                <Avatar
+                  name={row.name}
+                  src={row.avatarUrl}
+                  size={place === 1 ? 'lg' : 'md'}
+                  ring
+                  glow={place === 1}
+                />
                 <p className="text-fg mt-2 line-clamp-1 max-w-full text-xs font-bold">
                   {row.isSelf ? 'You' : row.name.split(' ')[0]}
                 </p>
@@ -349,7 +355,7 @@ function StandingRow({
         {rank}
       </span>
 
-      <Avatar name={row.name} size="sm" ring={row.isSelf} />
+      <Avatar name={row.name} src={row.avatarUrl} size="sm" ring={row.isSelf} />
 
       <div className="min-w-0 flex-1">
         <p

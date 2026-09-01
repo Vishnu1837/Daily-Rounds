@@ -21,6 +21,7 @@ type Status = 'present' | 'late' | 'absent';
 type Row = {
   memberId: string;
   name: string;
+  avatarUrl: string | null;
   mbbsYear: number | null;
   status: Status | null;
   note: string | null;
@@ -228,7 +229,7 @@ export function AttendanceSheet({
           {filtered.map((row) => (
             <div key={row.memberId} className="p-3.5 sm:flex sm:items-center sm:gap-3">
               <div className="flex min-w-0 flex-1 items-center gap-3">
-                <Avatar name={row.name} size="sm" />
+                <Avatar name={row.name} src={row.avatarUrl} size="sm" />
                 <div className="min-w-0 flex-1">
                   <p className="text-fg truncate text-sm font-bold">{row.name}</p>
                   <p className="text-fg-subtle truncate text-xs">

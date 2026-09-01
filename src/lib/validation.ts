@@ -556,6 +556,24 @@ export const profileSchema = z.object({
   timezone: z.string().trim().min(3).max(64),
 });
 
+/**
+ * An uploaded profile picture.
+ *
+ * The picture is carried inline as a data URL rather than being handed to object storage:
+ * the client has already downscaled it to a 256px square, so a row is tens of kilobytes and
+ * a cohort of thirty is a few megabytes in total. The cap is generous enough for a photo at
+ * that size and small enough that nobody can post a payload through this field.
+ */
+export const AVATAR_MAX_BYTES = 400_000;
+
+export const avatarSchema = z.object({
+  dataUrl: z
+    .string()
+    .regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/, 'That is not a supported image')
+    .max(AVATAR_MAX_BYTES, 'That picture is too large — try a smaller one')
+    .nullable(),
+});
+
 /* --------------------------------------------------------------- waitlist */
 
 /**

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Check, Clock, Loader2, Map as MapIcon, Repeat } from 'lucide-react';
+import { Check, Loader2, Map as MapIcon, Repeat } from 'lucide-react';
 
 import { AnimatedCheck } from '@/components/gamification/celebration';
 import { Badge } from '@/components/ui/badge';
@@ -375,22 +375,21 @@ function TopicRow({
               {topic.description}
             </span>
           )}
-          <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {topic.isToday && !done && (
+          {/* Only one of these can apply, and neither does for a plain upcoming topic —
+              so the row is dropped entirely rather than left as empty space. */}
+          {topic.isToday && !done ? (
+            <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <Badge tone="pulse" size="sm">
                 Today&apos;s topic
               </Badge>
-            )}
-            {status === 'in_progress' && !topic.isToday && (
+            </span>
+          ) : status === 'in_progress' ? (
+            <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <Badge tone="iris" size="sm">
                 In progress
               </Badge>
-            )}
-            <span className="text-fg-subtle inline-flex items-center gap-1 text-xs">
-              <Clock className="size-3" aria-hidden />
-              {topic.estimatedMinutes} min
             </span>
-          </span>
+          ) : null}
         </span>
       </button>
     </motion.div>

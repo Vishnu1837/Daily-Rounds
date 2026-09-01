@@ -25,6 +25,8 @@ export type SessionUser = {
   role: 'student' | 'admin';
   timezone: string;
   avatarSeed: string;
+  /** An uploaded profile picture as a data URL, or null for the generated monogram. */
+  avatarUrl: string | null;
   mbbsYear: number | null;
   university: string | null;
   whatsapp: string | null;
@@ -78,6 +80,7 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
       role: users.role,
       timezone: users.timezone,
       avatarSeed: users.avatarSeed,
+      avatarUrl: users.avatarUrl,
       mbbsYear: users.mbbsYear,
       university: users.university,
       whatsapp: users.whatsapp,

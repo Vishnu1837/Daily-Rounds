@@ -8,6 +8,7 @@ import { MobileMenu } from '@/components/nav/mobile-menu';
 import { ADMIN_NAV } from '@/components/nav/nav-items';
 import { SignOutButton } from '@/components/nav/sign-out-button';
 import { TopBar } from '@/components/nav/top-bar';
+import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { requireAdmin } from '@/lib/auth/guards';
 import { getPrimaryCohort } from '@/server/context';
@@ -33,7 +34,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
         <div className="rounded-panel border-border bg-bg-sunken mt-6 border p-4">
           <p className="eyebrow truncate">{cohort.name}</p>
-          <p className="text-fg mt-1 truncate text-sm font-semibold">{user.fullName}</p>
+          <Link
+            href="/admin/profile"
+            className="mt-1 flex items-center gap-2.5 hover:opacity-80"
+            aria-label="Your profile"
+          >
+            <Avatar name={user.fullName} src={user.avatarUrl} size="sm" />
+            <span className="min-w-0">
+              <span className="text-fg block truncate text-sm font-semibold">{user.fullName}</span>
+              <span className="text-fg-subtle block text-xs">Your profile</span>
+            </span>
+          </Link>
           <Link
             href="/"
             className="text-pulse-700 hover:text-pulse-500 dark:text-pulse-300 mt-3 inline-flex items-center gap-1.5 text-sm font-semibold transition-colors"
@@ -48,6 +59,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <div className="min-w-0 flex-1">
         <TopBar
           name={user.fullName}
+          avatarUrl={user.avatarUrl}
+          href="/admin/profile"
           subtitle={`${cohort.name} · admin console`}
           left={<MobileMenu items={ADMIN_NAV} footer={<SignOutButton size="sm" />} />}
           right={

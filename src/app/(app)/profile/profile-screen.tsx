@@ -4,8 +4,7 @@ import { useActionState, useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-import { LevelBadge, XPBar } from '@/components/gamification/level';
-import { Avatar } from '@/components/ui/avatar';
+import { AvatarPicker } from '@/components/ui/avatar-picker';
 import { Button } from '@/components/ui/button';
 import { Card, CardAurora, CardHeader } from '@/components/ui/card';
 import { FormError, FormSuccess, Select, TextInput } from '@/components/ui/form';
@@ -14,6 +13,7 @@ import { useToast } from '@/components/ui/toast';
 import { levelFromPoints } from '@/lib/domain/level';
 import { type ActionState, changePasswordAction, logoutAction } from '@/server/actions/auth';
 import { updateProfileAction } from '@/server/actions/onboarding';
+import { updateAvatarAction } from '@/server/actions/profile';
 import { TIMEZONE_GROUPS, timezoneLabel } from '@/lib/timezones';
 
 type Props = {
@@ -25,6 +25,7 @@ type Props = {
     mbbsYear: number | null;
     timezone: string;
     role: 'student' | 'admin';
+    avatarUrl: string | null;
   };
   cohort: { name: string; startDate: string; endDate: string };
   goals: {
@@ -56,7 +57,11 @@ export function ProfileScreen({ user, cohort, goals, points }: Props) {
       <Card variant="solid" tone="pulse" padding="lg" glow className="overflow-hidden text-white">
         <CardAurora tone="pulse" />
         <div className="relative flex flex-wrap items-center gap-5">
-          <Avatar name={user.fullName} size="xl" ring />
+          <AvatarPicker
+            name={user.fullName}
+            avatarUrl={user.avatarUrl}
+            onSave={updateAvatarAction}
+          />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-2xl font-extrabold tracking-tight">{user.fullName}</h1>
             <p className="truncate text-sm text-white/70">{user.email}</p>

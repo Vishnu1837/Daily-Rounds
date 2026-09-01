@@ -296,7 +296,7 @@ async function main() {
     .values({
       email: ADMIN_EMAIL,
       passwordHash: adminHash,
-      fullName: 'Dr. Anitha Varghese',
+      fullName: 'Mohammed Imran Sujad',
       role: 'admin',
       timezone: TZ,
       avatarSeed: 'anitha',

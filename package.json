@@ -23,7 +23,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "db:resequence": "tsx src/db/scripts/resequence-roadmaps.ts"
+    "db:resequence": "tsx src/db/scripts/resequence-roadmaps.ts",
+    "db:clear-students": "tsx src/db/scripts/clear-students.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

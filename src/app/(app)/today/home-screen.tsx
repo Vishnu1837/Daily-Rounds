@@ -13,7 +13,6 @@ import {
   Play,
   Target,
   Users,
-  Video,
 } from 'lucide-react';
 
 import {
@@ -23,7 +22,7 @@ import {
 } from '@/components/gamification/celebration';
 import { LevelBadge, XPBar } from '@/components/gamification/level';
 import { StreakFlame } from '@/components/gamification/streak-flame';
-import { Badge, LiveDot } from '@/components/ui/badge';
+import { Badge } from '@/components/ui/badge';
 import { Button, LinkButton } from '@/components/ui/button';
 import { Card, CardAurora, SectionTitle } from '@/components/ui/card';
 import { AnimatedCounter } from '@/components/ui/counter';
@@ -31,6 +30,7 @@ import { ProgressBar, ProgressRing, ProgressSegments } from '@/components/ui/pro
 import { Reveal } from '@/components/ui/reveal';
 import { StatTile } from '@/components/ui/stat';
 import { useToast } from '@/components/ui/toast';
+import { StudyRoomCard } from './study-room-card';
 import { cn } from '@/lib/cn';
 import { levelFromPoints } from '@/lib/domain/level';
 import { markAchievementsSeenAction } from '@/server/actions/study';
@@ -724,64 +724,6 @@ function LevelPanel({
           </p>
         </div>
       </div>
-    </Card>
-  );
-}
-
-function StudyRoomCard({ room }: { room: HomeData['studyRoom'] }) {
-  const attendedLabel =
-    room.attended === 'present'
-      ? 'Marked present'
-      : room.attended === 'late'
-        ? 'Marked late'
-        : room.attended === 'absent'
-          ? 'Marked absent'
-          : null;
-
-  return (
-    <Card padding="lg">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <LiveDot label="Live study room" />
-          <p className="text-fg mt-3 text-lg font-extrabold">Morning Study Room</p>
-          <p className="text-fg-muted flex items-center gap-1.5 text-sm">
-            <Clock className="size-3.5" aria-hidden />
-            {room.startTime} – {room.endTime}
-          </p>
-        </div>
-        {attendedLabel && (
-          <Badge
-            tone={
-              room.attended === 'absent'
-                ? 'danger'
-                : room.attended === 'late'
-                  ? 'warning'
-                  : 'success'
-            }
-          >
-            {attendedLabel}
-          </Badge>
-        )}
-      </div>
-
-      {room.url ? (
-        <LinkButton
-          href={room.url}
-          external
-          variant="secondary"
-          size="lg"
-          fullWidth
-          className="mt-5"
-        >
-          <Video className="size-[18px]" aria-hidden />
-          Join Google Meet
-        </LinkButton>
-      ) : (
-        <p className="surface-sunken text-fg-muted mt-5 p-3.5 text-sm">
-          No meeting link has been set for the study room yet. Your cohort lead can add one from the
-          admin settings.
-        </p>
-      )}
     </Card>
   );
 }

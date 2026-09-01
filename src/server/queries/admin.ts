@@ -51,6 +51,7 @@ export type AdminStudentRow = {
   memberId: string;
   userId: string;
   name: string;
+  avatarUrl: string | null;
   email: string;
   mbbsYear: number | null;
   university: string | null;
@@ -85,6 +86,7 @@ export async function getCohortStudents(ctx: CohortCtx): Promise<AdminStudentRow
       memberId: cohortMembers.id,
       userId: users.id,
       name: users.fullName,
+      avatarUrl: users.avatarUrl,
       email: users.email,
       mbbsYear: users.mbbsYear,
       university: users.university,
@@ -192,6 +194,7 @@ export async function getCohortStudents(ctx: CohortCtx): Promise<AdminStudentRow
       memberId: m.memberId,
       userId: m.userId,
       name: m.name,
+      avatarUrl: m.avatarUrl,
       email: m.email,
       mbbsYear: m.mbbsYear,
       university: m.university,
@@ -301,6 +304,7 @@ export async function getAttendanceSheet(ctx: CohortCtx, date: ISODate) {
     .select({
       memberId: cohortMembers.id,
       name: users.fullName,
+      avatarUrl: users.avatarUrl,
       mbbsYear: users.mbbsYear,
       status: attendance.status,
       note: attendance.note,
@@ -325,6 +329,7 @@ export async function getStudentDetail(ctx: CohortCtx, memberId: string) {
       memberId: cohortMembers.id,
       userId: users.id,
       name: users.fullName,
+      avatarUrl: users.avatarUrl,
       email: users.email,
       whatsapp: users.whatsapp,
       university: users.university,
@@ -468,6 +473,7 @@ export async function getRecentCheckIns(ctx: CohortCtx, limit = 60) {
       id: checkIns.id,
       memberId: checkIns.memberId,
       name: users.fullName,
+      avatarUrl: users.avatarUrl,
       date: checkIns.date,
       completion: checkIns.completion,
       actualMinutes: checkIns.actualMinutes,

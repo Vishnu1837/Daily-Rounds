@@ -151,7 +151,7 @@ export function StudentsScreen({
                       href={`/admin/students/${s.memberId}`}
                       className="text-fg flex items-center gap-3 font-semibold hover:underline"
                     >
-                      <Avatar name={s.name} size="xs" />
+                      <Avatar name={s.name} src={s.avatarUrl} size="xs" />
                       <span>
                         {s.name}
                         <span className="text-fg-subtle block text-xs font-normal">{s.email}</span>
@@ -197,7 +197,7 @@ export function StudentsScreen({
                   href={`/admin/students/${s.memberId}`}
                   className="tap hover:bg-bg-sunken flex items-center gap-3 p-4 transition-colors"
                 >
-                  <Avatar name={s.name} size="sm" />
+                  <Avatar name={s.name} src={s.avatarUrl} size="sm" />
                   <div className="min-w-0 flex-1">
                     <p className="text-fg truncate text-sm font-bold">{s.name}</p>
                     <p className="text-fg-subtle truncate text-xs">

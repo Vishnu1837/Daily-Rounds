@@ -125,6 +125,12 @@ export const users = pgTable(
     role: userRoleEnum('role').notNull().default('student'),
     timezone: varchar('timezone', { length: 64 }).notNull().default('Asia/Kolkata'),
     avatarSeed: varchar('avatar_seed', { length: 32 }).notNull().default('dr'),
+    /**
+     * An uploaded profile picture, stored inline as a `data:image/...` URL. The client
+     * downscales to a 256px square before upload, so a row is tens of kilobytes; null
+     * means "use the generated initials avatar".
+     */
+    avatarUrl: text('avatar_url'),
     onboardingCompletedAt: timestamp('onboarding_completed_at', { withTimezone: true }),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -457,6 +463,33 @@ export const attendance = pgTable(
   (t) => [
     uniqueIndex('attendance_unique').on(t.memberId, t.date),
     index('attendance_date_idx').on(t.date),
+  ],
+);
+
+/**
+ * Who is in the morning study room right now.
+ *
+ * Attendance is the *fact of the day* — it survives, and an admin can overrule it. Presence
+ * is the *live signal*: a student joins, their tab heartbeats every minute, and a row goes
+ * stale on its own once the heartbeats stop. One row per member per day; re-joining after a
+ * drop reuses it rather than opening a second.
+ */
+export const studyRoomPresence = pgTable(
+  'study_room_presence',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => cohortMembers.id, { onDelete: 'cascade' }),
+    date: date('date').notNull(),
+    joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Bumped by the client heartbeat; drives the "still in the room" window. */
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    leftAt: timestamp('left_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('study_room_presence_unique').on(t.memberId, t.date),
+    index('study_room_presence_date_idx').on(t.date),
   ],
 );
 
@@ -829,6 +862,7 @@ export type RoadmapTopic = typeof roadmapTopics.$inferSelect;
 export type DailyAssignment = typeof dailyAssignments.$inferSelect;
 export type StudySession = typeof studySessions.$inferSelect;
 export type Attendance = typeof attendance.$inferSelect;
+export type StudyRoomPresence = typeof studyRoomPresence.$inferSelect;
 export type CheckIn = typeof checkIns.$inferSelect;
 export type PointsLedgerEntry = typeof pointsLedger.$inferSelect;
 export type DailyActivity = typeof dailyActivity.$inferSelect;

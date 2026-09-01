@@ -78,6 +78,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="min-w-0 flex-1">
         <TopBar
           name={user.fullName}
+          avatarUrl={user.avatarUrl}
           streak={streak}
           xp={level.xp}
           level={level.level}

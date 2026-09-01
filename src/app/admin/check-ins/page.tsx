@@ -85,7 +85,7 @@ export default async function CheckInsPage() {
               {entries.map((c) => (
                 <article key={c.id} className="p-4">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Avatar name={c.name} size="xs" />
+                    <Avatar name={c.name} src={c.avatarUrl} size="xs" />
                     <Link
                       href={`/admin/students/${c.memberId}`}
                       className="text-fg text-sm font-bold hover:underline"
