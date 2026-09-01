@@ -72,6 +72,20 @@ export const CURRICULUM: CurriculumPhase[] = [
             slug: 'upper-limb',
             topics: [
               {
+                title: 'Upper Limb Osteology',
+                slug: 'upper-limb-osteology',
+                nodes: [
+                  'Clavicle',
+                  'Scapula',
+                  'Humerus',
+                  'Radius',
+                  'Ulna',
+                  'Carpal bones',
+                  'Metacarpals',
+                  'Phalanges',
+                ],
+              },
+              {
                 title: 'Pectoral Region & Axilla',
                 slug: 'pectoral-region-and-axilla',
                 nodes: [
@@ -156,26 +170,26 @@ export const CURRICULUM: CurriculumPhase[] = [
                   'Radial nerve injury',
                 ],
               },
-              {
-                title: 'Upper Limb Osteology',
-                slug: 'upper-limb-osteology',
-                nodes: [
-                  'Clavicle',
-                  'Scapula',
-                  'Humerus',
-                  'Radius',
-                  'Ulna',
-                  'Carpal bones',
-                  'Metacarpals',
-                  'Phalanges',
-                ],
-              },
             ],
           },
           {
             title: 'Lower Limb',
             slug: 'lower-limb',
             topics: [
+              {
+                title: 'Lower Limb Osteology',
+                slug: 'lower-limb-osteology',
+                nodes: [
+                  'Hip bone',
+                  'Femur',
+                  'Patella',
+                  'Tibia',
+                  'Fibula',
+                  'Tarsal bones',
+                  'Metatarsals',
+                  'Phalanges',
+                ],
+              },
               {
                 title: 'Gluteal Region & Hip',
                 slug: 'gluteal-region-and-hip',
@@ -248,20 +262,6 @@ export const CURRICULUM: CurriculumPhase[] = [
                   'Lateral plantar nerve',
                   'Arches of foot',
                   'Dorsalis pedis artery',
-                ],
-              },
-              {
-                title: 'Lower Limb Osteology',
-                slug: 'lower-limb-osteology',
-                nodes: [
-                  'Hip bone',
-                  'Femur',
-                  'Patella',
-                  'Tibia',
-                  'Fibula',
-                  'Tarsal bones',
-                  'Metatarsals',
-                  'Phalanges',
                 ],
               },
             ],
@@ -603,6 +603,11 @@ export const CURRICULUM: CurriculumPhase[] = [
                 nodes: ['Lobes', 'Deep nuclei', 'Cerebellar peduncles', 'Functional connections'],
               },
               {
+                title: 'Diencephalon',
+                slug: 'diencephalon',
+                nodes: ['Thalamus', 'Hypothalamus', 'Epithalamus', 'Subthalamus'],
+              },
+              {
                 title: 'Cerebrum',
                 slug: 'cerebrum',
                 nodes: [
@@ -614,11 +619,6 @@ export const CURRICULUM: CurriculumPhase[] = [
                   'Internal capsule',
                   'Basal ganglia',
                 ],
-              },
-              {
-                title: 'Diencephalon',
-                slug: 'diencephalon',
-                nodes: ['Thalamus', 'Hypothalamus', 'Epithalamus', 'Subthalamus'],
               },
               {
                 title: 'Ventricles & CSF',

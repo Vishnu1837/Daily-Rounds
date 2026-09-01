@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CURRICULUM_SUBJECTS, resolveRef } from '@/lib/curriculum';
+import { CURRICULUM_SUBJECTS, curriculumSection, resolveRef } from '@/lib/curriculum';
 import {
   generateRoadmapForSubject,
   generatedTopicsInOrder,
@@ -95,6 +95,40 @@ describe('generateRoadmapForSubject', () => {
       const roadmap = generateRoadmapForSubject(subject.slug)!;
       expect(generatedTopicsInOrder(roadmap)).toHaveLength(roadmap.totalTopics);
       expect(trackableUnitCount(subject.slug)).toBe(roadmap.totalTopics);
+    }
+  });
+});
+
+describe('study order', () => {
+  // The syllabus is the only place order is decided; the roadmap reads it off the array
+  // index. These lock the academic sequence so a future edit to data.ts cannot quietly
+  // put a region's dissection before its bones.
+  it.each([
+    ['upper-limb', 'Upper Limb Osteology'],
+    ['lower-limb', 'Lower Limb Osteology'],
+  ])('teaches %s osteology before any of its regions', (sectionSlug, osteology) => {
+    const section = curriculumSection('anatomy', sectionSlug)!.section;
+    expect(section.topics[0]!.title).toBe(osteology);
+  });
+
+  it('walks the neuraxis upwards, diencephalon before cerebrum', () => {
+    const titles = curriculumSection('anatomy', 'neuroanatomy')!.section.topics.map((t) => t.title);
+    expect(titles.indexOf('Diencephalon')).toBeLessThan(titles.indexOf('Cerebrum'));
+  });
+
+  it('gives the roadmap exactly the syllabus order, section by section', () => {
+    for (const subject of CURRICULUM_SUBJECTS) {
+      const roadmap = generateRoadmapForSubject(subject.slug)!;
+      expect(
+        roadmap.weeks.map((w) => w.title),
+        subject.slug,
+      ).toEqual(subject.sections.map((s) => s.title));
+      for (const [i, week] of roadmap.weeks.entries()) {
+        expect(
+          week.topics.map((t) => t.title),
+          `${subject.slug} / ${week.title}`,
+        ).toEqual(subject.sections[i]!.topics.map((t) => t.title));
+      }
     }
   });
 });

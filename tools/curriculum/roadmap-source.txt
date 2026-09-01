@@ -16,19 +16,19 @@ General Anatomy & Embryology
 Anatomy  →  General Anatomy & Embryology  →  Introduction & General Anatomy  →  Anatomical position, planes & axes  →  Terms of relation & movement  →  Bones & classification  →  Joints & classification  →  Muscles & classification  →  Fascia  →  Blood vessels  →  Lymphatic system  →  Nervous system basics
 Anatomy  →  General Anatomy & Embryology  →  General Embryology  →  Gametogenesis  →  Fertilization  →  Cleavage & blastocyst  →  Implantation  →  Bilaminar germ disc  →  Gastrulation  →  Trilaminar germ disc  →  Notochord  →  Neurulation  →  Embryonic folding  →  Placenta  →  Fetal membranes  →  Umbilical cord  →  Twinning  →  Teratology basics
 Upper Limb
+Anatomy  →  Upper Limb  →  Upper Limb Osteology  →  Clavicle  →  Scapula  →  Humerus  →  Radius  →  Ulna  →  Carpal bones  →  Metacarpals  →  Phalanges
 Anatomy  →  Upper Limb  →  Pectoral Region & Axilla  →  Pectoral fascia  →  Pectoralis major  →  Pectoralis minor  →  Clavipectoral fascia  →  Breast  →  Axilla — boundaries  →  Axilla — contents  →  Axillary artery  →  Axillary vein  →  Axillary lymph nodes  →  Brachial plexus — roots  →  Brachial plexus — trunks  →  Brachial plexus — divisions  →  Brachial plexus — cords  →  Brachial plexus — branches  →  Erb palsy  →  Klumpke palsy
 Anatomy  →  Upper Limb  →  Back & Scapular Region  →  Scapular muscles  →  Trapezius  →  Latissimus dorsi  →  Levator scapulae  →  Rhomboids  →  Scapular anastomosis
 Anatomy  →  Upper Limb  →  Shoulder & Arm  →  Shoulder joint  →  Rotator cuff — SITS muscles  →  Movements of shoulder  →  Deltoid  →  Arm — anterior compartment  →  Arm — posterior compartment  →  Brachial artery  →  Musculocutaneous nerve  →  Radial nerve in arm
 Anatomy  →  Upper Limb  →  Forearm & Elbow  →  Elbow joint  →  Cubital fossa  →  Forearm flexor compartment  →  Forearm extensor compartment  →  Median nerve  →  Ulnar nerve  →  Radial nerve  →  Radial artery  →  Ulnar artery
 Anatomy  →  Upper Limb  →  Wrist & Hand  →  Wrist joint  →  Flexor retinaculum  →  Carpal tunnel  →  Palmar aponeurosis  →  Thenar muscles  →  Hypothenar muscles  →  Lumbricals  →  Interossei  →  Palmar arches  →  Digital nerves  →  Anatomical snuffbox  →  Median nerve injury  →  Ulnar nerve injury  →  Radial nerve injury
-Anatomy  →  Upper Limb  →  Upper Limb Osteology  →  Clavicle  →  Scapula  →  Humerus  →  Radius  →  Ulna  →  Carpal bones  →  Metacarpals  →  Phalanges
 Lower Limb
+Anatomy  →  Lower Limb  →  Lower Limb Osteology  →  Hip bone  →  Femur  →  Patella  →  Tibia  →  Fibula  →  Tarsal bones  →  Metatarsals  →  Phalanges
 Anatomy  →  Lower Limb  →  Gluteal Region & Hip  →  Gluteus maximus  →  Gluteus medius & minimus  →  Piriformis  →  Greater & lesser sciatic foramina  →  Sciatic nerve  →  Superior gluteal nerve  →  Inferior gluteal nerve  →  Hip joint  →  Blood supply of femoral head
 Anatomy  →  Lower Limb  →  Thigh  →  Femoral triangle  →  Femoral sheath  →  Femoral canal  →  Adductor canal  →  Anterior compartment  →  Medial compartment  →  Posterior compartment  →  Femoral nerve  →  Obturator nerve  →  Femoral artery
 Anatomy  →  Lower Limb  →  Knee & Popliteal Fossa  →  Knee joint  →  ACL  →  PCL  →  Medial meniscus  →  Lateral meniscus  →  Collateral ligaments  →  Locking & unlocking  →  Popliteal fossa  →  Popliteal artery
 Anatomy  →  Lower Limb  →  Leg  →  Anterior compartment  →  Lateral compartment  →  Posterior compartment  →  Common fibular nerve  →  Deep fibular nerve  →  Superficial fibular nerve  →  Tibial nerve
 Anatomy  →  Lower Limb  →  Ankle & Foot  →  Ankle joint  →  Talocalcaneal joints  →  Dorsum of foot  →  Sole of foot  →  Plantar aponeurosis  →  Medial plantar nerve  →  Lateral plantar nerve  →  Arches of foot  →  Dorsalis pedis artery
-Anatomy  →  Lower Limb  →  Lower Limb Osteology  →  Hip bone  →  Femur  →  Patella  →  Tibia  →  Fibula  →  Tarsal bones  →  Metatarsals  →  Phalanges
 Thorax
 Anatomy  →  Thorax  →  Thoracic Wall  →  Thoracic cage  →  Typical rib  →  Atypical ribs  →  Sternum  →  Intercostal spaces  →  Intercostal muscles  →  Intercostal nerves  →  Internal thoracic artery  →  Diaphragm
 Anatomy  →  Thorax  →  Mediastinum  →  Superior mediastinum  →  Anterior mediastinum  →  Middle mediastinum  →  Posterior mediastinum  →  Thoracic duct  →  Azygos system  →  Vagus nerves  →  Phrenic nerves
@@ -57,8 +57,8 @@ Neuroanatomy
 Anatomy  →  Neuroanatomy  →  Spinal Cord  →  External features  →  Gray matter  →  White matter  →  Ascending tracts  →  Descending tracts  →  Blood supply
 Anatomy  →  Neuroanatomy  →  Brainstem  →  Medulla  →  Pons  →  Midbrain  →  Cranial nerve nuclei overview
 Anatomy  →  Neuroanatomy  →  Cerebellum  →  Lobes  →  Deep nuclei  →  Cerebellar peduncles  →  Functional connections
-Anatomy  →  Neuroanatomy  →  Cerebrum  →  Lobes  →  Sulci & gyri  →  Functional cortical areas  →  White matter  →  Corpus callosum  →  Internal capsule  →  Basal ganglia
 Anatomy  →  Neuroanatomy  →  Diencephalon  →  Thalamus  →  Hypothalamus  →  Epithalamus  →  Subthalamus
+Anatomy  →  Neuroanatomy  →  Cerebrum  →  Lobes  →  Sulci & gyri  →  Functional cortical areas  →  White matter  →  Corpus callosum  →  Internal capsule  →  Basal ganglia
 Anatomy  →  Neuroanatomy  →  Ventricles & CSF  →  Lateral ventricles  →  Third ventricle  →  Cerebral aqueduct  →  Fourth ventricle  →  CSF circulation
 Anatomy  →  Neuroanatomy  →  Meninges & Venous Sinuses  →  Dura mater  →  Arachnoid  →  Pia mater  →  Dural venous sinuses
 Anatomy  →  Neuroanatomy  →  Blood Supply of Brain  →  Internal carotid system  →  Vertebrobasilar system  →  Circle of Willis  →  Major cerebral arteries  →  Arterial territories

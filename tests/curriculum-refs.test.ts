@@ -137,7 +137,10 @@ describe('template refs', () => {
   });
 
   it('gives a curriculum template the exact topic it was built from', () => {
-    expect(ROADMAP_TEMPLATES['anatomy:upper-limb']!.weeks[4]!.ref).toBe(TOPIC);
+    const week = ROADMAP_TEMPLATES['anatomy:upper-limb']!.weeks.find(
+      (w) => w.title === 'Wrist & Hand',
+    );
+    expect(week!.ref).toBe(TOPIC);
   });
 });
 

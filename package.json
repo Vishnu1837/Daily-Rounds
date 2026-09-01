@@ -22,7 +22,8 @@
     "db:setup": "npm run db:migrate && npm run db:seed",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "db:resequence": "tsx src/db/scripts/resequence-roadmaps.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
