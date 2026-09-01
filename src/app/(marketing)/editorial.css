@@ -1,0 +1,622 @@
+/*
+ * ==========================================================================================
+ * DAILY ROUNDS — EDITORIAL (public site only)
+ * ==========================================================================================
+ *
+ * The landing page and the cohort portal are deliberately two different design languages.
+ * Inside the product, colour is functional: indigo acts, amber means streak, green means
+ * done. Outside it, colour would only be decoration — so the public site is built almost
+ * entirely from paper, ink and space, with one saturated violet held in reserve for the
+ * few things that are genuinely the point (a metric, an active row, a chart arc).
+ *
+ * Everything here is scoped under `.ed`. Two consequences, and they are the reason it is
+ * scoped at all:
+ *
+ *   1. The portal's semantic tokens (`--bg`, `--fg`, `--border`…) are untouched, so nothing
+ *      in the authenticated tree can shift because a marketing colour was retuned.
+ *   2. The values are literal rather than derived, so the `.dark` class the theme script
+ *      puts on <html> does not reach them. The public site is a printed page: one intended
+ *      look, art-directed, the same for every visitor.
+ *
+ * Contrast note: `--ed-faint` is display-only — it appears in 40px+ headlines and decorative
+ * micro-labels, never in body copy. Anything a visitor has to *read* uses `--ed-muted`,
+ * which clears 4.5:1 on both the page and the field surfaces.
+ * ==========================================================================================
+ */
+
+.ed {
+  /* ------------------------------------------------------------------ surfaces */
+  --ed-page: #fcfcfb; /* warm near-white — the paper */
+  --ed-field: #f1f2f3; /* cool grey section fields */
+  --ed-field-deep: #eaebec;
+  --ed-surface: #ffffff;
+
+  /* ----------------------------------------------------------------------- ink */
+  --ed-ink: #080808;
+  --ed-ink-soft: #3d3d3d;
+  --ed-muted: #6e6e6e; /* body copy — accessible on page and field */
+  --ed-faint: #adadad; /* display-only de-emphasis */
+
+  /* --------------------------------------------------------------------- lines */
+  --ed-line: #e7e7e7;
+  --ed-line-strong: #d8d9da;
+  --ed-hairline: rgba(8, 8, 8, 0.07);
+
+  /* ---------------------------------------------- accent, used sparingly */
+  --ed-accent: #5b2be8;
+  --ed-accent-deep: #4413c4;
+  --ed-accent-lift: #7c56ff;
+  --ed-accent-wash: #efeaff;
+
+  /* ------------------------------- quiet secondary tints — tags and details only */
+  --ed-blue: #e7effe;
+  --ed-blue-ink: #2b52bd;
+  --ed-pink: #fce9f0;
+  --ed-pink-ink: #a83564;
+  --ed-mint: #e2f6ea;
+  --ed-mint-ink: #1b7145;
+  --ed-yellow: #fbf2d6;
+  --ed-yellow-ink: #7d6013;
+
+  /* ------------------------------------------------------------- dark passage */
+  --ed-dark: #0d0d0d;
+  --ed-char: #171717;
+  --ed-char-lift: #202020;
+  --ed-dark-line: rgba(255, 255, 255, 0.09);
+  --ed-dark-muted: #8d8d8d;
+  --ed-dark-faint: #5e5e5e;
+
+  /* ------------------------------------------------------------------- shape */
+  --ed-r-hero: 36px;
+  --ed-r-card: 24px;
+  --ed-r-sm: 16px;
+  --ed-r-xs: 12px;
+
+  /* ------------------------------------------------------------------ shadow */
+  /* Broad and almost invisible. A shadow here separates two whites; it never decorates. */
+  --ed-shadow: 0 1px 2px rgba(8, 8, 8, 0.03), 0 18px 40px -28px rgba(8, 8, 8, 0.18);
+  --ed-shadow-lift: 0 2px 6px rgba(8, 8, 8, 0.04), 0 26px 56px -30px rgba(8, 8, 8, 0.26);
+
+  /* ------------------------------------------------------------------ motion */
+  --ed-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  background: var(--ed-page);
+  color: var(--ed-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (max-width: 640px) {
+  .ed {
+    --ed-r-hero: 28px;
+    --ed-r-card: 20px;
+  }
+}
+
+/*
+ * The portal sets a separate display face on every heading. Here a single grotesk carries
+ * the whole page — the contrast between a 96px headline and 12px microcopy is doing the
+ * work a second typeface would otherwise be asked to do.
+ */
+.ed :where(h1, h2, h3, h4) {
+  font-family: var(--font-sans);
+  color: var(--ed-ink);
+}
+
+.ed ::selection {
+  background: var(--ed-ink);
+  color: var(--ed-page);
+}
+
+.ed :focus-visible {
+  outline: 2px solid var(--ed-accent);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
+.ed-dark-scope :focus-visible {
+  outline-color: #ffffff;
+}
+
+/* ---------------------------------------------------------------- type scale */
+
+/*
+ * Fluid, but clamped at both ends by hand rather than generated. The lower bound is the
+ * smallest size at which the hero still reads as a statement rather than a paragraph; the
+ * upper bound is where the line count stops being controllable.
+ */
+.ed-display {
+  font-size: clamp(2.625rem, 1.9rem + 3.8vw, 5.5rem);
+  line-height: 0.93;
+  letter-spacing: -0.042em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.ed-h2 {
+  font-size: clamp(2rem, 1.4rem + 2.5vw, 3.5rem);
+  line-height: 0.98;
+  letter-spacing: -0.036em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.ed-h3 {
+  font-size: clamp(1.375rem, 1.1rem + 1vw, 1.75rem);
+  line-height: 1.1;
+  letter-spacing: -0.028em;
+  font-weight: 600;
+}
+
+.ed-metric {
+  font-size: clamp(3.5rem, 1.9rem + 6.4vw, 7.5rem);
+  line-height: 0.82;
+  letter-spacing: -0.055em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The de-emphasised half of a headline. Editorial contrast inside one sentence. */
+.ed-faint {
+  color: var(--ed-faint);
+}
+
+.ed-label {
+  font-size: 0.75rem;
+  line-height: 1.1rem;
+  letter-spacing: 0.02em;
+  font-weight: 500;
+  color: var(--ed-muted);
+}
+
+.ed-body {
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--ed-muted);
+}
+
+@media (min-width: 768px) {
+  .ed-body {
+    font-size: 1rem;
+  }
+}
+
+/* -------------------------------------------------------------------- shell */
+
+.ed-shell {
+  max-width: 1440px;
+  margin-inline: auto;
+  padding-inline: 16px;
+}
+
+@media (min-width: 768px) {
+  .ed-shell {
+    padding-inline: 24px;
+  }
+}
+
+/* -------------------------------------------------------------- primitives */
+
+.ed-card {
+  background: var(--ed-surface);
+  border: 1px solid var(--ed-line);
+  border-radius: var(--ed-r-card);
+}
+
+.ed-panel {
+  background: var(--ed-field);
+  border-radius: var(--ed-r-hero);
+}
+
+/*
+ * Buttons are drawn here rather than reused from the portal's `Button`, so the public site
+ * can carry a fully round pill without that decision leaking into product surfaces where
+ * a pill would collide with the field radius.
+ */
+.ed-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  padding: 14px 24px;
+  white-space: nowrap;
+  transition:
+    background-color 200ms var(--ed-ease),
+    color 200ms var(--ed-ease),
+    border-color 200ms var(--ed-ease),
+    transform 200ms var(--ed-ease),
+    box-shadow 200ms var(--ed-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ed-btn-sm {
+  padding: 9px 16px;
+  font-size: 0.8125rem;
+}
+
+.ed-btn-solid {
+  background: var(--ed-ink);
+  color: #ffffff;
+}
+.ed-btn-solid:hover {
+  background: var(--ed-accent);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px -12px rgba(91, 43, 232, 0.7);
+}
+
+.ed-btn-quiet {
+  background: transparent;
+  color: var(--ed-ink);
+  border: 1px solid var(--ed-line-strong);
+}
+.ed-btn-quiet:hover {
+  background: var(--ed-ink);
+  color: #ffffff;
+  border-color: var(--ed-ink);
+}
+
+.ed-btn-invert {
+  background: #ffffff;
+  color: var(--ed-ink);
+}
+.ed-btn-invert:hover {
+  background: var(--ed-accent-lift);
+  color: #ffffff;
+}
+
+.ed-btn[aria-disabled='true'],
+.ed-btn:disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* Nav link — a pill that fills in, rather than an underline that appears. */
+.ed-navlink {
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 0.875rem;
+  font-weight: 450;
+  color: var(--ed-muted);
+  transition:
+    background-color 180ms var(--ed-ease),
+    color 180ms var(--ed-ease);
+}
+.ed-navlink:hover {
+  background: rgba(8, 8, 8, 0.05);
+  color: var(--ed-ink);
+}
+
+/* Small tinted capability tag — the only place the secondary tints appear. */
+.ed-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+/* ------------------------------------------------------------- feature rows */
+
+/*
+ * One row, two shapes. On desktop it is a single 68px-tall pill reading left to right:
+ * mark, name, functional descriptor, explanation, arrow. Below 900px that line has nowhere
+ * to go, so the descriptor and the explanation drop underneath the name instead of being
+ * truncated — the copy is the part a visitor is there for.
+ */
+.ed-row {
+  display: grid;
+  align-items: center;
+  gap: 4px 20px;
+  grid-template-columns: 22px 1fr 34px;
+  grid-template-areas:
+    'tick name arrow'
+    '.    meta meta'
+    '.    copy copy';
+  width: 100%;
+  text-align: left;
+  background: var(--ed-surface);
+  border: 1px solid var(--ed-line);
+  border-radius: 999px;
+  padding: 20px 20px 20px 24px;
+  transition:
+    background-color 220ms var(--ed-ease),
+    color 220ms var(--ed-ease),
+    border-color 220ms var(--ed-ease),
+    box-shadow 220ms var(--ed-ease),
+    transform 220ms var(--ed-ease);
+}
+
+/* Below the desktop grid the row becomes a stacked card: a 999px radius around three
+   wrapped lines of copy reads as a mistake, not as a pill. */
+@media (max-width: 899px) {
+  .ed-row {
+    border-radius: var(--ed-r-card);
+    padding: 20px;
+  }
+}
+
+/*
+ * The inverted state belongs to two things at once: the row marked featured in the markup,
+ * and whichever row the pointer is over. Doing it in CSS rather than with a hover-tracking
+ * client component keeps the whole section server-rendered, and — more to the point — the
+ * rows are content, not controls. Nothing here is clickable, so nothing here takes focus
+ * away from a keyboard user for a state change they cannot use.
+ */
+.ed-row[data-active='true'],
+.ed-row:hover {
+  background: var(--ed-ink);
+  border-color: var(--ed-ink);
+  color: #ffffff;
+  box-shadow: var(--ed-shadow-lift);
+  transform: translateY(-1px);
+}
+
+.ed-row[data-active='true'] .ed-row-name,
+.ed-row:hover .ed-row-name {
+  color: #ffffff;
+}
+.ed-row[data-active='true'] .ed-row-meta,
+.ed-row:hover .ed-row-meta {
+  color: rgba(255, 255, 255, 0.45);
+}
+.ed-row[data-active='true'] .ed-row-copy,
+.ed-row:hover .ed-row-copy {
+  color: rgba(255, 255, 255, 0.72);
+}
+.ed-row[data-active='true'] .ed-row-arrow,
+.ed-row:hover .ed-row-arrow {
+  background: #ffffff;
+  color: var(--ed-ink);
+  border-color: #ffffff;
+}
+.ed-row[data-active='true'] .ed-row-tick,
+.ed-row:hover .ed-row-tick {
+  color: var(--ed-accent-lift);
+}
+
+@media (min-width: 900px) {
+  .ed-row {
+    grid-template-columns: 22px minmax(180px, 230px) minmax(130px, 190px) 1fr 34px;
+    grid-template-areas: 'tick name meta copy arrow';
+  }
+}
+
+.ed-row-tick {
+  grid-area: tick;
+  color: var(--ed-ink);
+  transition: color 220ms var(--ed-ease);
+}
+.ed-row-arrow {
+  grid-area: arrow;
+}
+
+.ed-row-name {
+  grid-area: name;
+  font-size: 0.9375rem;
+  font-weight: 550;
+  letter-spacing: -0.015em;
+  color: var(--ed-ink);
+  transition: color 220ms var(--ed-ease);
+}
+.ed-row-meta {
+  grid-area: meta;
+  font-size: 0.875rem;
+  color: var(--ed-faint);
+  transition: color 220ms var(--ed-ease);
+}
+.ed-row-copy {
+  grid-area: copy;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--ed-muted);
+  transition: color 220ms var(--ed-ease);
+}
+
+.ed-row-arrow {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--ed-line);
+  color: var(--ed-ink);
+  transition:
+    background-color 220ms var(--ed-ease),
+    color 220ms var(--ed-ease),
+    border-color 220ms var(--ed-ease),
+    transform 220ms var(--ed-ease);
+}
+.ed-row:hover .ed-row-arrow {
+  transform: translateX(3px);
+}
+
+/* ------------------------------------------------------------ dark passage */
+
+.ed-dark-scope {
+  background: var(--ed-dark);
+  color: #ffffff;
+}
+.ed-dark-scope :where(h1, h2, h3, h4) {
+  color: #ffffff;
+}
+
+.ed-dark-card {
+  background: var(--ed-char);
+  border: 1px solid var(--ed-dark-line);
+  border-radius: var(--ed-r-card);
+  transition:
+    background-color 220ms var(--ed-ease),
+    border-color 220ms var(--ed-ease),
+    transform 220ms var(--ed-ease);
+}
+.ed-dark-card:hover {
+  background: var(--ed-char-lift);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-2px);
+}
+
+/* The one gradient on the page, on two or three words of a single headline. */
+.ed-gradient-text {
+  background: linear-gradient(96deg, #8ab4ff 0%, #b79bff 46%, #ff9ecb 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* --------------------------------------------------------------- accordion */
+
+.ed-faq {
+  border-bottom: 1px solid var(--ed-line);
+}
+.ed-faq summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 24px 4px;
+  font-size: 1.0625rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  transition: color 180ms var(--ed-ease);
+}
+.ed-faq summary::-webkit-details-marker {
+  display: none;
+}
+.ed-faq summary:hover {
+  color: var(--ed-accent);
+}
+.ed-faq-sign {
+  margin-left: auto;
+  flex: none;
+  transition: transform 260ms var(--ed-ease);
+}
+.ed-faq[open] .ed-faq-sign {
+  transform: rotate(45deg);
+}
+
+/* ------------------------------------------------------------------ fields */
+
+/*
+ * The waitlist form keeps its server action and its validation, and takes a different
+ * control skin. A boxed grey input inside a 36px-radius panel reads as a form bolted onto
+ * a poster; these sit on the paper instead.
+ */
+.ed-input {
+  width: 100%;
+  background: var(--ed-surface);
+  border: 1px solid var(--ed-line);
+  border-radius: 14px;
+  padding: 13px 16px;
+  font-size: max(16px, 0.9375rem);
+  color: var(--ed-ink);
+  transition:
+    border-color 180ms var(--ed-ease),
+    box-shadow 180ms var(--ed-ease);
+}
+.ed-input::placeholder {
+  color: var(--ed-faint);
+}
+.ed-input:hover {
+  border-color: var(--ed-line-strong);
+}
+.ed-input:focus {
+  outline: none;
+  border-color: var(--ed-accent);
+  box-shadow: 0 0 0 4px rgba(91, 43, 232, 0.12);
+}
+.ed-input[aria-invalid='true'] {
+  border-color: #c8324b;
+}
+.ed-input[aria-invalid='true']:focus {
+  box-shadow: 0 0 0 4px rgba(200, 50, 75, 0.14);
+}
+
+@media (min-width: 640px) {
+  .ed-input {
+    font-size: 0.9375rem;
+  }
+}
+
+select.ed-input {
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%236e6e6e' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M4 6.5 8 10.5l4-4'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 40px;
+}
+
+/* ------------------------------------------------------------------ motion */
+
+/*
+ * Scroll reveal, opt-in from the client.
+ *
+ * The hidden state applies only once `data-reveal-ready` has been set by a mounted client
+ * component. Without JavaScript — or before hydration — every section is simply visible,
+ * which is the only acceptable failure mode for a page whose whole job is to be read.
+ */
+[data-reveal-ready] .ed-reveal {
+  opacity: 0;
+}
+
+/*
+ * The visible state is an animation rather than a transition, and deliberately so: an
+ * animation with `both` fill owns the element's final opacity outright, so the reveal can
+ * never be left mid-cascade against the hidden rule above it. It also means the entrance
+ * plays exactly once, on the way in, and is not replayed by an unrelated repaint.
+ */
+[data-reveal-ready] .ed-reveal.is-visible {
+  animation: ed-reveal-in 620ms var(--ed-ease) var(--ed-delay, 0ms) both;
+}
+
+@keyframes ed-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A chart arc draws itself once, the first time it is seen. */
+.ed-arc {
+  stroke-dasharray: var(--ed-arc-len);
+  stroke-dashoffset: var(--ed-arc-len);
+}
+.is-visible .ed-arc {
+  animation: ed-draw 1100ms var(--ed-ease) 160ms forwards;
+}
+
+@keyframes ed-draw {
+  to {
+    stroke-dashoffset: var(--ed-arc-rest, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal-ready] .ed-reveal,
+  [data-reveal-ready] .ed-reveal.is-visible {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+  .ed-arc {
+    stroke-dashoffset: var(--ed-arc-rest, 0);
+    animation: none;
+  }
+  .ed *,
+  .ed *::before,
+  .ed *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+}
