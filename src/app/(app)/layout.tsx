@@ -5,6 +5,7 @@ import { ArrowUpRight } from 'lucide-react';
 import { Logo } from '@/components/brand/logo';
 import { LevelBadge, XPBar } from '@/components/gamification/level';
 import { BottomNav, SideNav } from '@/components/nav/bottom-nav';
+import { MobileMenu } from '@/components/nav/mobile-menu';
 import { STUDENT_NAV } from '@/components/nav/nav-items';
 import { TopBar } from '@/components/nav/top-bar';
 import { requireUser } from '@/lib/auth/guards';
@@ -80,6 +81,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           xp={level.xp}
           level={level.level}
           subtitle={`${todayLabel} · ${ctx.cohort.name}`}
+          left={
+            <MobileMenu
+              items={STUDENT_NAV}
+              footer={
+                user.role === 'admin' ? (
+                  <Link
+                    href="/admin"
+                    className="text-pulse-700 hover:text-pulse-500 dark:text-pulse-300 inline-flex items-center gap-1 px-3 text-sm font-semibold"
+                  >
+                    Admin console
+                    <ArrowUpRight className="size-3.5" aria-hidden />
+                  </Link>
+                ) : null
+              }
+            />
+          }
           right={
             user.role === 'admin' ? (
               <Link

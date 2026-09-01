@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactNode, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { X } from 'lucide-react';
 
@@ -11,6 +12,10 @@ import { cn } from '@/lib/cn';
  * surface in the app is this component, so the interaction model never changes shape: it
  * always arrives from the same direction, always closes the same way, and always traps
  * focus identically.
+ *
+ * It renders through a portal on `<body>`. A `backdrop-filter` anywhere up the tree — the
+ * header and the bottom bar both have one — would otherwise become the containing block for
+ * `position: fixed` and pin the sheet inside that element instead of the viewport.
  */
 export function Sheet({
   open,
@@ -68,7 +73,10 @@ export function Sheet({
 
   const width = size === 'sm' ? 'sm:max-w-md' : size === 'lg' ? 'sm:max-w-3xl' : 'sm:max-w-xl';
 
-  return (
+  // No document while server-rendering; the sheet is shut on first paint either way.
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
@@ -132,6 +140,7 @@ export function Sheet({
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

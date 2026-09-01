@@ -69,6 +69,7 @@ export function TopBar({
   xp,
   level,
   href = '/profile',
+  left,
   right,
   subtitle,
 }: {
@@ -77,6 +78,8 @@ export function TopBar({
   xp?: number;
   level?: number;
   href?: string;
+  /** Sits beside the wordmark — on mobile this is the overflow menu. */
+  left?: React.ReactNode;
   right?: React.ReactNode;
   /** Small line under the wordmark on desktop — usually the date and cohort. */
   subtitle?: React.ReactNode;
@@ -84,9 +87,12 @@ export function TopBar({
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--nav-border)] bg-[var(--nav-bg)] backdrop-blur-xl">
       <div className="mx-auto flex h-15 max-w-7xl items-center justify-between gap-3 px-4 lg:px-8">
-        <Link href="/" className="lg:hidden" aria-label="Daily Rounds home">
-          <Logo size={30} />
-        </Link>
+        <div className="flex items-center gap-1 lg:hidden">
+          {left}
+          <Link href="/" aria-label="Daily Rounds home">
+            <Logo size={30} />
+          </Link>
+        </div>
 
         <div className="hidden min-w-0 lg:block">
           {subtitle && <p className="text-fg-muted truncate text-sm font-medium">{subtitle}</p>}

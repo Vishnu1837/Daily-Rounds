@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 
 import { Logo } from '@/components/brand/logo';
 import { BottomNav, SideNav } from '@/components/nav/bottom-nav';
+import { MobileMenu } from '@/components/nav/mobile-menu';
 import { ADMIN_NAV } from '@/components/nav/nav-items';
 import { SignOutButton } from '@/components/nav/sign-out-button';
 import { TopBar } from '@/components/nav/top-bar';
@@ -48,6 +49,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <TopBar
           name={user.fullName}
           subtitle={`${cohort.name} · admin console`}
+          left={<MobileMenu items={ADMIN_NAV} footer={<SignOutButton size="sm" />} />}
           right={
             <Link
               href="/"
