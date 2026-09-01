@@ -17,6 +17,7 @@ import {
 import { cn } from '@/lib/cn';
 import { OBSTACLE_LABELS, obstacleValues } from '@/lib/validation';
 import { completeOnboardingAction } from '@/server/actions/onboarding';
+import { DEFAULT_TIMEZONE, TIMEZONE_GROUPS } from '@/lib/timezones';
 
 type Subject = { id: string; name: string; phaseLabel: string };
 
@@ -57,17 +58,6 @@ const OBSTACLE_OPTIONS = obstacleValues.map((value) => ({
   )[value],
 }));
 
-const TIMEZONES = [
-  'Asia/Kolkata',
-  'Asia/Karachi',
-  'Asia/Dhaka',
-  'Asia/Colombo',
-  'Asia/Dubai',
-  'Europe/London',
-  'America/New_York',
-  'UTC',
-];
-
 export function OnboardingWizard({
   defaultName,
   subjects,
@@ -84,7 +74,13 @@ export function OnboardingWizard({
   const [whatsapp, setWhatsapp] = useState('');
   const [university, setUniversity] = useState('');
   const [mbbsYear, setMbbsYear] = useState('');
-  const [timezone, setTimezone] = useState('Asia/Kolkata');
+  /*
+   * Defaulted rather than auto-detected. Reading the browser's zone would disagree with
+   * whatever the server rendered and produce a hydration mismatch, and the brief wants this
+   * to be a student-selected value anyway — so it is an explicit choice, pre-set to the
+   * cohort's most common zone.
+   */
+  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
 
   const [primarySubjectId, setPrimarySubjectId] = useState('');
   const [secondarySubjectId, setSecondarySubjectId] = useState('');
@@ -296,10 +292,14 @@ export function OnboardingWizard({
                   onChange={(e) => setTimezone(e.target.value)}
                   hint="Your study days are counted in this timezone."
                 >
-                  {TIMEZONES.map((tz) => (
-                    <option key={tz} value={tz}>
-                      {tz.replace('_', ' ')}
-                    </option>
+                  {TIMEZONE_GROUPS.map((group) => (
+                    <optgroup key={group.region} label={group.region}>
+                      {group.zones.map((zone) => (
+                        <option key={zone.id} value={zone.id}>
+                          {zone.label}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </Select>
               </div>

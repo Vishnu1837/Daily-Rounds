@@ -81,6 +81,69 @@ export const OBSTACLE_LABELS: Record<string, string> = {
   none: 'Nothing stopped me',
 };
 
+/**
+ * The consistency challenges onboarding asks about, as a multi-select.
+ *
+ * Kept separate from `obstacleValues` on purpose. An obstacle is what stopped a student on
+ * one particular day and drives the risk and check-in logic, so it stays a single value. A
+ * challenge is a standing pattern they came into the cohort with, and students genuinely
+ * have several at once — forcing a single answer was throwing away most of the signal.
+ */
+export const challengeValues = [
+  'consistency',
+  'procrastination',
+  'low_motivation',
+  'backlogs',
+  'poor_time_management',
+  'dont_know_where_to_start',
+  'sticking_to_plans',
+  'distractions',
+] as const;
+
+export type Challenge = (typeof challengeValues)[number];
+
+export const CHALLENGE_LABELS: Record<Challenge, string> = {
+  consistency: 'Staying consistent',
+  procrastination: 'Procrastination',
+  low_motivation: 'Low motivation',
+  backlogs: 'Backlogs piling up',
+  poor_time_management: 'Poor time management',
+  dont_know_where_to_start: "Don't know where to start",
+  sticking_to_plans: 'Sticking to a plan',
+  distractions: 'Distractions / phone',
+};
+
+/**
+ * The single obstacle each challenge maps onto.
+ *
+ * `student_goals.biggest_obstacle` still drives risk scoring and cannot take a list, so the
+ * student's first-picked challenge is projected onto the nearest obstacle value.
+ */
+export const CHALLENGE_TO_OBSTACLE: Record<Challenge, (typeof obstacleValues)[number]> = {
+  consistency: 'procrastination',
+  procrastination: 'procrastination',
+  low_motivation: 'lack_of_motivation',
+  backlogs: 'unclear_what_to_study',
+  poor_time_management: 'classes',
+  dont_know_where_to_start: 'unclear_what_to_study',
+  sticking_to_plans: 'procrastination',
+  distractions: 'social_media',
+};
+
+/**
+ * Reads a repeated form field into a validated challenge list.
+ *
+ * `FormData` gives every checkbox in a group the same name, which `Object.fromEntries`
+ * collapses to the last value — so this has to be pulled with `getAll` before the object is
+ * built, and is why it sits outside `onboardingSchema`.
+ */
+export const challengesSchema = z
+  .array(z.enum(challengeValues))
+  .min(1, 'Pick at least one — this is what the cohort is built to fix')
+  .max(challengeValues.length)
+  // Order is the student's own; duplicates would only ever come from a malformed post.
+  .transform((values) => [...new Set(values)]);
+
 export const onboardingSchema = z.object({
   fullName: z.string().trim().min(2, 'Tell us your name').max(120),
   whatsapp: z
@@ -125,7 +188,15 @@ export const onboardingSchema = z.object({
   baselineDaysStudiedLastWeek: z.coerce.number().int().min(0).max(7),
   baselineConsistencyRating: z.coerce.number().int().min(1).max(10),
   baselineConfidence: z.coerce.number().int().min(1).max(5),
-  biggestObstacle: z.enum(obstacleValues),
+  /**
+   * Optional now that challenges are the multi-select question the student actually answers.
+   * When omitted it is derived from their first challenge via `CHALLENGE_TO_OBSTACLE`.
+   */
+  biggestObstacle: z
+    .enum(obstacleValues)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
   obstacleNote: z
     .string()
     .trim()
@@ -409,6 +480,10 @@ export const announcementSchema = z.object({
   title: z.string().trim().min(2).max(160),
   body: z.string().trim().min(2).max(2000),
   isPinned: z.coerce.boolean().default(false),
+  /** Surface this as a modal the next time each student enters the portal. */
+  isPopup: z.coerce.boolean().default(false),
+  /** Keep showing the modal even after a student acknowledges it. Use sparingly. */
+  isPersistent: z.coerce.boolean().default(false),
 });
 
 export const pointAdjustmentSchema = z.object({
@@ -480,6 +555,57 @@ export const profileSchema = z.object({
   mbbsYear: z.coerce.number().int().min(1).max(5).optional(),
   timezone: z.string().trim().min(3).max(64),
 });
+
+/* --------------------------------------------------------------- waitlist */
+
+/**
+ * The public next-cohort form.
+ *
+ * Only name and WhatsApp are required — this is an unauthenticated marketing form, and
+ * every additional required field costs sign-ups. Year, college and the free-text
+ * challenge are useful for triage but never worth blocking on.
+ */
+export const waitlistSchema = z.object({
+  fullName: z.string().trim().min(2, 'Tell us your name').max(120),
+  whatsapp: z
+    .string()
+    .trim()
+    .min(7, 'Enter a WhatsApp number we can reach you on')
+    .max(32)
+    .regex(/^[+0-9 ()-]+$/, 'Use digits, spaces and + only'),
+  email: z
+    .string()
+    .trim()
+    .max(255)
+    .email('That email does not look right')
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  mbbsYear: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(5)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => (v === '' ? undefined : (v as number))),
+  university: z
+    .string()
+    .trim()
+    .max(160)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  challenge: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+});
+
+export type WaitlistInput = z.infer<typeof waitlistSchema>;
 
 /* ----------------------------------------------------- form error helpers */
 

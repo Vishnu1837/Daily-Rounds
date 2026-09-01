@@ -1,10 +1,12 @@
 'use server';
 
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 import { db } from '@/db/client';
 import {
+  announcementReads,
+  announcements,
   dailyAssignments,
   roadmapTopics,
   roadmaps,
@@ -14,6 +16,7 @@ import {
 import { requireUserAction } from '@/lib/auth/guards';
 import { ledgerKey } from '@/lib/domain/points';
 import { getMemberContext } from '@/server/context';
+import { replaceActiveSubject } from '@/server/roadmap';
 import { awardPoints, settleDay } from '@/server/scoring';
 
 import { type Result, fail, guarded, ok } from './shared';
@@ -115,7 +118,7 @@ export async function startSessionAction(): Promise<Result<StudySessionState>> {
       })
       .returning();
 
-    revalidatePath('/');
+    revalidatePath('/today');
     return ok(toState(created!));
   }, 'We could not start your study session. Nothing has been lost — please try again.');
 }
@@ -210,7 +213,7 @@ export async function finishSessionAction(sessionId: string): Promise<Result<Fin
       rules: ctx.rules,
     });
 
-    revalidatePath('/');
+    revalidatePath('/today');
     revalidatePath('/progress');
     return ok({
       // settleDay only reports what *it* awarded (milestones, achievements), so the block
@@ -286,7 +289,7 @@ export async function completeTargetAction(): Promise<Result<SettleSummary>> {
       rules: ctx.rules,
     });
 
-    revalidatePath('/');
+    revalidatePath('/today');
     revalidatePath('/roadmap');
     revalidatePath('/progress');
     return ok(summarise(outcome));
@@ -315,10 +318,67 @@ export async function setTopicStatusAction(
       .set({ status, completedAt: status === 'completed' ? new Date() : null })
       .where(eq(roadmapTopics.id, topicId));
 
+    // Move the pointer on. Completing a topic should make the next incomplete one current
+    // straight away, so a student who finishes three topics in one sitting is never told to
+    // wait for tomorrow — the brief is explicit that topics are not calendar-locked.
+    if (status === 'completed') await advanceCurrentTopic(ctx.memberId);
+
     revalidatePath('/roadmap');
-    revalidatePath('/');
+    revalidatePath('/today');
     return ok();
   }, 'We could not update that topic. Please try again.');
+}
+
+/**
+ * Marks the earliest incomplete topic as in-progress, and nothing else.
+ *
+ * Runs across both active roadmaps in slot order, so the primary subject is finished before
+ * the secondary becomes 'current' — while leaving the student free to tick any topic in
+ * either subject whenever they like.
+ */
+async function advanceCurrentTopic(memberId: string): Promise<void> {
+  const [next] = await db
+    .select({ id: roadmapTopics.id })
+    .from(roadmapTopics)
+    .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
+    .where(and(eq(roadmaps.memberId, memberId), eq(roadmapTopics.status, 'upcoming')))
+    .orderBy(asc(roadmaps.slot), asc(roadmapTopics.position))
+    .limit(1);
+
+  if (!next) return;
+
+  await db
+    .update(roadmapTopics)
+    .set({ status: 'in_progress' })
+    .where(eq(roadmapTopics.id, next.id));
+}
+
+/**
+ * Replaces one of the student's two active subjects, resetting only that slot.
+ *
+ * The confirmation lives in the UI; by the time this runs the student has already been told
+ * exactly which progress is about to go.
+ */
+export async function switchActiveSubjectAction(
+  slot: 'primary' | 'secondary',
+  subjectSlug: string,
+): Promise<Result> {
+  return guarded(async () => {
+    const ctx = await context();
+
+    const outcome = await replaceActiveSubject({ memberId: ctx.memberId, slot, subjectSlug });
+    if (!outcome.ok) {
+      if (outcome.reason === 'duplicate-subject') {
+        return fail('That is already your other active subject. Pick a different one.');
+      }
+      return fail('We could not find that subject in the syllabus.');
+    }
+
+    revalidatePath('/roadmap');
+    revalidatePath('/today');
+    revalidatePath('/progress');
+    return ok();
+  }, 'We could not switch that subject. Please try again.');
 }
 
 /** Marks celebrations as shown so they only fire once. */
@@ -348,4 +408,33 @@ function toState(row: typeof studySessions.$inferSelect): StudySessionState {
     resumedAt: row.resumedAt?.toISOString() ?? null,
     plannedMinutes: row.plannedMinutes,
   };
+}
+
+/**
+ * Records that a student has seen a pop-up announcement.
+ *
+ * Idempotent: acknowledging twice is a no-op rather than an error, because the modal can be
+ * dismissed from two tabs at once and neither should show a failure.
+ */
+export async function acknowledgeAnnouncementAction(announcementId: string): Promise<Result> {
+  return guarded(async () => {
+    const ctx = await context();
+
+    // Scoped to the student's own cohort, so an id from elsewhere cannot be acknowledged.
+    const [found] = await db
+      .select({ id: announcements.id })
+      .from(announcements)
+      .where(and(eq(announcements.id, announcementId), eq(announcements.cohortId, ctx.cohort.id)))
+      .limit(1);
+
+    if (!found) return fail('That announcement is no longer available.');
+
+    await db
+      .insert(announcementReads)
+      .values({ announcementId, memberId: ctx.memberId })
+      .onConflictDoNothing();
+
+    revalidatePath('/today');
+    return ok();
+  }, 'We could not save that. It is safe to dismiss again.');
 }

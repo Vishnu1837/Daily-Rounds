@@ -70,8 +70,12 @@ describe('timezone handling', () => {
   it('handles the midnight boundary in both directions', () => {
     expect(formatInTimezone(new Date('2025-09-01T18:29:59Z'), 'Asia/Kolkata')).toBe('2025-09-01');
     expect(formatInTimezone(new Date('2025-09-01T18:30:00Z'), 'Asia/Kolkata')).toBe('2025-09-02');
-    expect(formatInTimezone(new Date('2025-09-02T03:59:00Z'), 'America/New_York')).toBe('2025-09-01');
-    expect(formatInTimezone(new Date('2025-09-02T04:00:00Z'), 'America/New_York')).toBe('2025-09-02');
+    expect(formatInTimezone(new Date('2025-09-02T03:59:00Z'), 'America/New_York')).toBe(
+      '2025-09-01',
+    );
+    expect(formatInTimezone(new Date('2025-09-02T04:00:00Z'), 'America/New_York')).toBe(
+      '2025-09-02',
+    );
   });
 
   it('reports wall-clock time in the cohort timezone', () => {
@@ -126,13 +130,7 @@ describe('active study days', () => {
 
   it('lists active days in a range, clamped to the cohort', () => {
     const days = activeStudyDaysBetween(cal, '2025-09-01', '2025-09-07');
-    expect(days).toEqual([
-      '2025-09-01',
-      '2025-09-02',
-      '2025-09-03',
-      '2025-09-04',
-      '2025-09-05',
-    ]);
+    expect(days).toEqual(['2025-09-01', '2025-09-02', '2025-09-03', '2025-09-04', '2025-09-05']);
     expect(activeStudyDaysBetween(cal, '2025-08-01', '2025-09-02')).toEqual([
       '2025-09-01',
       '2025-09-02',

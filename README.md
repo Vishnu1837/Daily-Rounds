@@ -136,6 +136,33 @@ Copy `.env.example` to `.env.local`. **Every variable is optional for local deve
 | `SEED_STUDENT_PASSWORD` | `roundsdemo123`         | Shared password for seeded students.                                                          |
 | `SEED_MEET_URL`         | a placeholder           | Study-room link for the seeded cohort.                                                        |
 
+### Public site
+
+Read at build time and shipped to the browser, so none of these may hold a secret. All are
+optional — each has a safe fallback, and the landing page hides any route it has no value for
+rather than rendering a dead link (no WhatsApp number means no WhatsApp button at all).
+
+| Variable                        | Default              | Purpose                                                     |
+| ------------------------------- | -------------------- | ----------------------------------------------------------- |
+| `NEXT_PUBLIC_INSTAGRAM_HANDLE`  | `mohd.imrxn`         | Founder handle, without the `@`.                            |
+| `NEXT_PUBLIC_WHATSAPP_NUMBER`   | _(unset)_            | Enquiry number: digits only, country code included, no `+`. |
+| `NEXT_PUBLIC_FOUNDER_PHOTO_URL` | _(unset)_            | Founder photograph. Falls back to a monogram.               |
+| `NEXT_PUBLIC_COHORT_LABEL`      | `the current cohort` | Used in CTAs, so a new batch needs no code change.          |
+| `NEXT_PUBLIC_NEXT_COHORT_LABEL` | `the next cohort`    | Waitlist copy.                                              |
+| `NEXT_PUBLIC_WAITLIST_CTA`      | `Join the waitlist`  | Waitlist button label.                                      |
+| `NEXT_PUBLIC_ENTER_COHORT_CTA`  | `Enter cohort`       | Member sign-in button label.                                |
+
+### Destructive-script guard
+
+| Variable                   | Default   | Purpose                                                                        |
+| -------------------------- | --------- | ------------------------------------------------------------------------------ |
+| `ALLOW_REMOTE_DESTRUCTIVE` | _(unset)_ | Must be `1` before `db:seed` or `db:reset` will run against a remote database. |
+
+Both scripts begin by truncating every table, and the only thing distinguishing a local run
+from a production one was whether `DATABASE_URL` happened to be set. That is far too quiet a
+difference for an irreversible operation, so pointing either at a remote database now has to
+be said out loud.
+
 No secret is ever read on the client. The Google Meet link, scoring values, study days,
 holidays and risk thresholds all live in the database and are edited through the admin UI —
 none of them are environment variables or constants in code.

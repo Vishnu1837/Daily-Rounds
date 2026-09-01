@@ -545,8 +545,10 @@ export async function getStudentRoadmaps(cohortId: string, memberId: string) {
       roadmapId: roadmaps.id,
       roadmapTitle: roadmaps.title,
       track: roadmaps.track,
+      slot: roadmaps.slot,
       subjectId: roadmaps.subjectId,
       subjectName: subjects.name,
+      subjectSlug: subjects.slug,
       weekId: roadmapWeeks.id,
       weekNumber: roadmapWeeks.weekNumber,
       weekTitle: roadmapWeeks.title,
@@ -563,7 +565,8 @@ export async function getStudentRoadmaps(cohortId: string, memberId: string) {
     .leftJoin(roadmapTopics, eq(roadmapTopics.roadmapId, roadmaps.id))
     .leftJoin(roadmapWeeks, eq(roadmapWeeks.id, roadmapTopics.weekId))
     .where(and(eq(roadmaps.memberId, memberId), eq(cohortMembers.cohortId, cohortId)))
-    .orderBy(asc(roadmaps.createdAt), asc(roadmapTopics.position));
+    // Slot order, not creation order: the student's primary subject always reads first.
+    .orderBy(asc(roadmaps.slot), asc(roadmapTopics.position));
 
   return rows;
 }

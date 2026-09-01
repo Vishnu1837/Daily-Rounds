@@ -9,24 +9,31 @@ import { db } from '@/db/client';
 import {
   announcements,
   attendance,
+  checkIns,
   cohortExtraStudyDays,
   cohortHolidays,
   cohortMembers,
   cohorts,
+  dailyActivity,
   dailyAssignments,
   events,
   materials,
   pointRules,
   pointsLedger,
+  quizAttempts,
   roadmapTopics,
   roadmapWeeks,
   roadmaps,
+  type RoadmapSlot,
+  studentAchievements,
+  studentGoals,
+  studySessions,
   users,
+  weeklyReviews,
 } from '@/db/schema';
 import { requireAdminAction } from '@/lib/auth/guards';
 import { hashPassword } from '@/lib/auth/password';
 import { ledgerKey } from '@/lib/domain/points';
-import { ROADMAP_TEMPLATES } from '@/lib/roadmap-templates';
 import {
   announcementSchema,
   assignmentSchema,
@@ -49,6 +56,14 @@ import {
 } from '@/lib/validation';
 import { getCohortContext } from '@/server/context';
 import { awardPoints, recomputeRange, revokeAward, settleDay } from '@/server/scoring';
+
+import {
+  deleteRoadmap,
+  ensureRoadmaps,
+  replaceActiveSubject,
+  resetRoadmapProgress,
+  syncGoalSubjects,
+} from '../roadmap';
 
 import { type Result, fail, guarded, ok, recordAudit } from './shared';
 
@@ -101,45 +116,71 @@ export async function markAttendanceAction(
     const accepted = entries.filter((e) => allowed.has(e.memberId));
     if (accepted.length === 0) return fail('None of those students are in this cohort.');
 
-    for (const entry of accepted) {
-      await db
-        .insert(attendance)
-        .values({
+    const markedAt = new Date();
+
+    /*
+     * One statement for the whole sheet.
+     *
+     * This used to be an upsert per student inside the loop below, which for a 27-person
+     * cohort meant 27 sequential round trips before any of the scoring work even started.
+     * Against a pooled hosted database that was most of the wall-clock time the admin spent
+     * watching a spinner — the "attendance save stuck on loading" report in the brief.
+     */
+    await db
+      .insert(attendance)
+      .values(
+        accepted.map((entry) => ({
           memberId: entry.memberId,
           date,
           status: entry.status,
           markedBy: user.id,
-          markedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [attendance.memberId, attendance.date],
-          set: { status: entry.status, markedBy: user.id, markedAt: new Date() },
-        });
-
-      // Attendance points are re-cut from scratch: withdraw the old award, then re-award
-      // at the correct value. The ledger key is per member-day, so this stays idempotent.
-      const key = ledgerKey.attendance(entry.memberId, date);
-      await revokeAward(key);
-
-      if (entry.status !== 'absent') {
-        const event = entry.status === 'present' ? 'live_session_present' : 'live_session_late';
-        await awardPoints({
-          memberId: entry.memberId,
-          event,
-          points: ctx.rules[event],
-          occurredOn: date,
-          idempotencyKey: key,
-          reason: entry.status === 'present' ? 'Attended the study room' : 'Joined late',
-          createdBy: user.id,
-        });
-      }
-
-      await settleDay({
-        memberId: entry.memberId,
-        date,
-        calendar: ctx.calendar,
-        rules: ctx.rules,
+          markedAt,
+        })),
+      )
+      .onConflictDoUpdate({
+        target: [attendance.memberId, attendance.date],
+        set: {
+          status: sql`excluded.status`,
+          markedBy: sql`excluded.marked_by`,
+          markedAt: sql`excluded.marked_at`,
+        },
       });
+
+    // Withdraw every previous attendance award in one delete, for the same reason.
+    const keys = accepted.map((entry) => ledgerKey.attendance(entry.memberId, date));
+    await db.delete(pointsLedger).where(inArray(pointsLedger.idempotencyKey, keys));
+
+    /*
+     * Scoring stays per-student because `settleDay` reads and rewrites that student's whole
+     * activity history. It is run in bounded batches rather than one at a time: independent
+     * per member, so there is no ordering requirement, and capped so a large cohort cannot
+     * open an unbounded number of connections against the pool.
+     */
+    const BATCH = 6;
+    for (let i = 0; i < accepted.length; i += BATCH) {
+      await Promise.all(
+        accepted.slice(i, i + BATCH).map(async (entry) => {
+          if (entry.status !== 'absent') {
+            const event = entry.status === 'present' ? 'live_session_present' : 'live_session_late';
+            await awardPoints({
+              memberId: entry.memberId,
+              event,
+              points: ctx.rules[event],
+              occurredOn: date,
+              idempotencyKey: ledgerKey.attendance(entry.memberId, date),
+              reason: entry.status === 'present' ? 'Attended the study room' : 'Joined late',
+              createdBy: user.id,
+            });
+          }
+
+          await settleDay({
+            memberId: entry.memberId,
+            date,
+            calendar: ctx.calendar,
+            rules: ctx.rules,
+          });
+        }),
+      );
     }
 
     await recordAudit({
@@ -204,7 +245,7 @@ export async function updateCohortSettingsAction(
 
     revalidatePath('/admin/settings');
     revalidatePath('/admin');
-    revalidatePath('/');
+    revalidatePath('/today');
     return ok();
   }, 'We could not save the cohort settings. Please try again.');
 }
@@ -316,7 +357,7 @@ export async function recomputeCohort(cohortId: string): Promise<Result<{ member
     }
 
     revalidatePath('/admin');
-    revalidatePath('/');
+    revalidatePath('/today');
     return ok({ members: members.length });
   }, 'We could not recalculate the cohort. Please try again.');
 }
@@ -429,6 +470,263 @@ export async function updateStudentAction(
   }, 'We could not save those changes. Please try again.');
 }
 
+/**
+ * Removes a student's account entirely.
+ *
+ * Deletes the `users` row, and every cascade hanging off it — membership, roadmaps,
+ * check-ins, attendance, points. There is no soft-delete here on purpose: the alternative
+ * an admin usually wants is "stop counting them", which is what setting membership status
+ * to `left` already does, and offering two things that both look like deletion is how
+ * people delete the wrong one.
+ */
+export async function deleteStudentAction(cohortId: string, userId: string): Promise<Result> {
+  return guarded(async () => {
+    const admin = await requireAdminAction();
+
+    if (userId === admin.id) return fail('You cannot delete your own account.');
+
+    const [membership] = await db
+      .select({ id: cohortMembers.id })
+      .from(cohortMembers)
+      .where(and(eq(cohortMembers.userId, userId), eq(cohortMembers.cohortId, cohortId)))
+      .limit(1);
+    if (!membership) return fail('That student is not in this cohort.');
+
+    const [target] = await db
+      .select({ email: users.email, fullName: users.fullName })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    await db.delete(users).where(eq(users.id, userId));
+
+    await recordAudit({
+      actorUserId: admin.id,
+      action: 'student.delete',
+      entity: 'user',
+      entityId: userId,
+      // Recorded because the row itself is gone — this is the only remaining trace.
+      payload: { email: target?.email, fullName: target?.fullName, cohortId },
+    });
+
+    revalidatePath('/admin/students');
+    revalidatePath('/admin');
+    return ok();
+  }, 'We could not delete that student. Please try again.');
+}
+
+/**
+ * Places a student into a cohort and gives them their two roadmaps.
+ *
+ * This is the post-signup path from the brief: a student creates an account, sits
+ * unassigned, and an admin assigns them — optionally confirming or changing their two
+ * subjects at the same time. Roadmaps are generated from the syllabus as part of the same
+ * action, so "assigned" and "ready to study" are never two separate states.
+ */
+export async function assignCohortAction(
+  cohortId: string,
+  userId: string,
+  subjectSlugs: { primary: string | null; secondary: string | null },
+): Promise<Result> {
+  return guarded(async () => {
+    const { user: admin, ctx } = await adminContext(cohortId);
+
+    if (subjectSlugs.primary && subjectSlugs.primary === subjectSlugs.secondary) {
+      return fail('Pick two different subjects.');
+    }
+
+    const [membership] = await db
+      .insert(cohortMembers)
+      .values({ cohortId, userId, status: 'active' })
+      .onConflictDoUpdate({
+        target: [cohortMembers.cohortId, cohortMembers.userId],
+        set: { status: 'active' },
+      })
+      .returning({ id: cohortMembers.id });
+
+    if (!membership) return fail('We could not add that student to the cohort.');
+
+    /*
+     * `student_goals` is NOT NULL on its baseline columns, which onboarding fills in. A
+     * student assigned before finishing onboarding has no row yet, so one is seeded with
+     * neutral values rather than failing the assignment — they overwrite it themselves the
+     * moment they complete onboarding.
+     */
+    await db
+      .insert(studentGoals)
+      .values({
+        memberId: membership.id,
+        cohortGoal: 'Set during onboarding.',
+        baselineDaysStudiedLastWeek: 0,
+        baselineConsistencyRating: 5,
+        baselineConfidence: 3,
+        biggestObstacle: 'other',
+      })
+      .onConflictDoNothing({ target: studentGoals.memberId });
+
+    await ensureRoadmaps({
+      memberId: membership.id,
+      primarySubjectSlug: subjectSlugs.primary,
+      secondarySubjectSlug: subjectSlugs.secondary,
+      cohortTimezone: ctx.cohort.timezone,
+      today: ctx.today,
+    });
+
+    await syncGoalSubjects(membership.id);
+
+    await recordAudit({
+      actorUserId: admin.id,
+      action: 'cohort.assign',
+      entity: 'cohort_member',
+      entityId: membership.id,
+      payload: { userId, cohortId, ...subjectSlugs },
+    });
+
+    revalidatePath('/admin/students');
+    revalidatePath('/admin/roadmaps');
+    revalidatePath('/admin');
+    return ok();
+  }, 'We could not assign that student. Please try again.');
+}
+
+export type RestartImpact = {
+  students: number;
+  checkIns: number;
+  attendance: number;
+  pointsEntries: number;
+  topicsCompleted: number;
+};
+
+/**
+ * What a cohort restart would clear, counted before anyone confirms it.
+ *
+ * The brief asks a restart to state exactly which cohort-level state resets. Counting it
+ * for real — rather than describing it in prose that can drift from the code — means the
+ * confirmation cannot quietly become wrong when a table is added.
+ */
+export async function getRestartImpact(cohortId: string): Promise<Result<RestartImpact>> {
+  return guarded(async () => {
+    await adminContext(cohortId);
+
+    const memberIds = (
+      await db
+        .select({ id: cohortMembers.id })
+        .from(cohortMembers)
+        .where(eq(cohortMembers.cohortId, cohortId))
+    ).map((m) => m.id);
+
+    if (memberIds.length === 0) {
+      return ok({
+        students: 0,
+        checkIns: 0,
+        attendance: 0,
+        pointsEntries: 0,
+        topicsCompleted: 0,
+      });
+    }
+
+    const [checkInCount, attendanceCount, pointsCount, topicCount] = await Promise.all([
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(checkIns)
+        .where(inArray(checkIns.memberId, memberIds)),
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(attendance)
+        .where(inArray(attendance.memberId, memberIds)),
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(pointsLedger)
+        .where(inArray(pointsLedger.memberId, memberIds)),
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(roadmapTopics)
+        .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
+        .where(and(inArray(roadmaps.memberId, memberIds), eq(roadmapTopics.status, 'completed'))),
+    ]);
+
+    return ok({
+      students: memberIds.length,
+      checkIns: checkInCount[0]?.n ?? 0,
+      attendance: attendanceCount[0]?.n ?? 0,
+      pointsEntries: pointsCount[0]?.n ?? 0,
+      topicsCompleted: topicCount[0]?.n ?? 0,
+    });
+  }, 'We could not work out what a restart would affect.');
+}
+
+/**
+ * Restarts a cohort from day one.
+ *
+ * Clears cohort *progress* — check-ins, attendance, points, the derived activity cache,
+ * achievements, quiz attempts, sessions, assignments, weekly reviews — and resets every
+ * roadmap topic to upcoming. It deliberately does not touch accounts, memberships, subject
+ * choices, goals, or the roadmaps themselves: the brief is explicit that a restart must not
+ * silently delete unrelated profile or account data, and a student should come back on day
+ * one with the same two subjects they chose, at 0%.
+ */
+export async function restartCohortAction(cohortId: string, confirmation: string): Promise<Result> {
+  return guarded(async () => {
+    const { user: admin, ctx } = await adminContext(cohortId);
+
+    // Typed confirmation matched against the cohort's own name. A restart affects every
+    // student at once, so it takes more than a click to reach.
+    if (confirmation.trim().toLowerCase() !== ctx.cohort.name.trim().toLowerCase()) {
+      return fail(`Type the cohort name exactly — ${ctx.cohort.name} — to confirm.`);
+    }
+
+    const memberIds = (
+      await db
+        .select({ id: cohortMembers.id })
+        .from(cohortMembers)
+        .where(eq(cohortMembers.cohortId, cohortId))
+    ).map((m) => m.id);
+
+    if (memberIds.length === 0) return fail('This cohort has no students to restart.');
+
+    await db.transaction(async (tx) => {
+      await tx.delete(checkIns).where(inArray(checkIns.memberId, memberIds));
+      await tx.delete(attendance).where(inArray(attendance.memberId, memberIds));
+      await tx.delete(pointsLedger).where(inArray(pointsLedger.memberId, memberIds));
+      await tx.delete(dailyActivity).where(inArray(dailyActivity.memberId, memberIds));
+      await tx.delete(studentAchievements).where(inArray(studentAchievements.memberId, memberIds));
+      await tx.delete(quizAttempts).where(inArray(quizAttempts.memberId, memberIds));
+      await tx.delete(studySessions).where(inArray(studySessions.memberId, memberIds));
+      await tx.delete(dailyAssignments).where(inArray(dailyAssignments.memberId, memberIds));
+      await tx.delete(weeklyReviews).where(inArray(weeklyReviews.memberId, memberIds));
+
+      // Roadmaps survive; only their completion state is cleared.
+      const roadmapIds = (
+        await tx
+          .select({ id: roadmaps.id })
+          .from(roadmaps)
+          .where(inArray(roadmaps.memberId, memberIds))
+      ).map((r) => r.id);
+
+      if (roadmapIds.length > 0) {
+        await tx
+          .update(roadmapTopics)
+          .set({ status: 'upcoming', completedAt: null })
+          .where(inArray(roadmapTopics.roadmapId, roadmapIds));
+      }
+    });
+
+    await recordAudit({
+      actorUserId: admin.id,
+      action: 'cohort.restart',
+      entity: 'cohort',
+      entityId: cohortId,
+      payload: { students: memberIds.length },
+    });
+
+    revalidatePath('/admin');
+    revalidatePath('/admin/students');
+    revalidatePath('/admin/attendance');
+    revalidatePath('/today');
+    return ok();
+  }, 'We could not restart that cohort. Nothing has been changed — please try again.');
+}
+
 /** Signed, auditable score correction. Never edits or deletes existing entries. */
 export async function adjustPointsAction(
   cohortId: string,
@@ -476,98 +774,118 @@ export async function adjustPointsAction(
 
 /* --------------------------------------------------------------- roadmaps */
 
-export async function createRoadmapAction(
-  cohortId: string,
-  _prev: unknown,
-  formData: FormData,
-): Promise<Result> {
-  return guarded(async () => {
-    const { user } = await adminContext(cohortId);
-    const parsed = roadmapSchema.safeParse(Object.fromEntries(formData));
-    if (!parsed.success) return fail('Check the highlighted fields.', fieldErrors(parsed.error));
-
-    await assertMemberInCohort(parsed.data.memberId, cohortId);
-
-    const [created] = await db
-      .insert(roadmaps)
-      .values({
-        memberId: parsed.data.memberId,
-        subjectId: parsed.data.subjectId,
-        title: parsed.data.title,
-        track: parsed.data.track ?? null,
-      })
-      .returning({ id: roadmaps.id });
-
-    await recordAudit({
-      actorUserId: user.id,
-      action: 'roadmap.create',
-      entity: 'roadmap',
-      entityId: created?.id,
-      payload: { memberId: parsed.data.memberId },
-    });
-
-    revalidatePath('/admin/roadmaps');
-    return ok();
-  }, 'We could not create that roadmap. Please try again.');
-}
-
-/** Applies a curated template to a student who has no roadmap yet. */
-export async function applyRoadmapTemplateAction(
+/**
+ * Generates (or regenerates) a student's roadmap for one slot, straight from the syllabus.
+ *
+ * This replaced the old "create roadmap" + "apply template" pair. An admin no longer types
+ * a title, a track or any topics: choosing the subject is the whole decision, because the
+ * master syllabus already holds its modules and topics in teaching order.
+ */
+export async function generateRoadmapAction(
   cohortId: string,
   memberId: string,
-  templateKey: string,
-  subjectId: string,
+  slot: RoadmapSlot,
+  subjectSlug: string,
 ): Promise<Result> {
   return guarded(async () => {
     const { user } = await adminContext(cohortId);
     await assertMemberInCohort(memberId, cohortId);
 
-    const template = ROADMAP_TEMPLATES[templateKey];
-    if (!template) return fail('That template could not be found.');
-
-    const [roadmap] = await db
-      .insert(roadmaps)
-      .values({ memberId, subjectId, title: template.title, track: template.track })
-      .returning({ id: roadmaps.id });
-    if (!roadmap) return fail('We could not create that roadmap.');
-
-    const weekRows = await db
-      .insert(roadmapWeeks)
-      .values(
-        template.weeks.map((w, i) => ({
-          roadmapId: roadmap.id,
-          weekNumber: i + 1,
-          title: w.title,
-        })),
-      )
-      .returning();
-
-    await db.insert(roadmapTopics).values(
-      template.weeks.flatMap((w, wi) =>
-        w.topics.map((title, ti) => ({
-          roadmapId: roadmap.id,
-          weekId: weekRows[wi]!.id,
-          title,
-          // Carries the week's place in the curriculum, so quizzes and materials attach.
-          curriculumRef: w.ref,
-          position: wi * 100 + ti,
-          status: (wi === 0 && ti === 0 ? 'in_progress' : 'upcoming') as 'in_progress' | 'upcoming',
-        })),
-      ),
-    );
+    const outcome = await replaceActiveSubject({ memberId, slot, subjectSlug });
+    if (!outcome.ok) {
+      if (outcome.reason === 'duplicate-subject') {
+        return fail('That subject already fills the student’s other slot. Pick a different one.');
+      }
+      return fail('That subject is not part of the MBBS syllabus we hold.');
+    }
 
     await recordAudit({
       actorUserId: user.id,
-      action: 'roadmap.apply_template',
+      action: 'roadmap.generate',
       entity: 'roadmap',
-      entityId: roadmap.id,
-      payload: { memberId, templateKey },
+      entityId: memberId,
+      payload: {
+        memberId,
+        slot,
+        subjectSlug,
+        replacedSubject: outcome.replacedSubject,
+        topicCount: outcome.topicCount,
+      },
+    });
+
+    revalidatePath('/admin/roadmaps');
+    revalidatePath('/admin/students');
+    revalidatePath('/roadmap');
+    return ok();
+  }, 'We could not generate that roadmap. Please try again.');
+}
+
+/** Clears completion state but keeps the topic list — the "start this subject again" action. */
+export async function resetRoadmapAction(cohortId: string, roadmapId: string): Promise<Result> {
+  return guarded(async () => {
+    const { user } = await adminContext(cohortId);
+    const owner = await roadmapOwner(roadmapId);
+    if (!owner) return fail('That roadmap no longer exists.');
+    await assertMemberInCohort(owner.memberId, cohortId);
+
+    const { topicsReset } = await resetRoadmapProgress(roadmapId);
+
+    await recordAudit({
+      actorUserId: user.id,
+      action: 'roadmap.reset',
+      entity: 'roadmap',
+      entityId: roadmapId,
+      payload: { memberId: owner.memberId, topicsReset },
     });
 
     revalidatePath('/admin/roadmaps');
     revalidatePath('/roadmap');
     return ok();
-  }, 'We could not apply that template. Please try again.');
+  }, 'We could not reset that roadmap. Please try again.');
+}
+
+/**
+ * Deletes a roadmap and frees its slot.
+ *
+ * Previously this silently failed. The fix is that deletion now goes through one service
+ * call whose cascade removes the weeks and topics, and the freed slot is immediately
+ * available to `generateRoadmapAction` — so recreate-after-delete works.
+ */
+export async function deleteRoadmapAction(cohortId: string, roadmapId: string): Promise<Result> {
+  return guarded(async () => {
+    const { user } = await adminContext(cohortId);
+    const owner = await roadmapOwner(roadmapId);
+    if (!owner) return fail('That roadmap no longer exists.');
+    await assertMemberInCohort(owner.memberId, cohortId);
+
+    await deleteRoadmap(roadmapId);
+    await syncGoalSubjects(owner.memberId);
+
+    await recordAudit({
+      actorUserId: user.id,
+      action: 'roadmap.delete',
+      entity: 'roadmap',
+      entityId: roadmapId,
+      payload: { memberId: owner.memberId, slot: owner.slot },
+    });
+
+    revalidatePath('/admin/roadmaps');
+    revalidatePath('/admin/students');
+    revalidatePath('/roadmap');
+    return ok();
+  }, 'We could not delete that roadmap. Please try again.');
+}
+
+/** The member and slot a roadmap belongs to, for ownership checks before a destructive call. */
+async function roadmapOwner(
+  roadmapId: string,
+): Promise<{ memberId: string; slot: RoadmapSlot } | null> {
+  const [row] = await db
+    .select({ memberId: roadmaps.memberId, slot: roadmaps.slot })
+    .from(roadmaps)
+    .where(eq(roadmaps.id, roadmapId))
+    .limit(1);
+  return row ?? null;
 }
 
 export async function addRoadmapWeekAction(
@@ -749,7 +1067,7 @@ export async function setAssignmentAction(
       });
 
     revalidatePath('/admin/roadmaps');
-    revalidatePath('/');
+    revalidatePath('/today');
     return ok();
   }, 'We could not save that assignment. Please try again.');
 }
@@ -815,7 +1133,7 @@ export async function bulkAssignAction(
     });
 
     revalidatePath('/admin/roadmaps');
-    revalidatePath('/');
+    revalidatePath('/today');
     return ok({ assigned });
   }, 'We could not assign topics. Please try again.');
 }
@@ -863,7 +1181,7 @@ export async function saveEventAction(
 
     revalidatePath('/admin/events');
     revalidatePath('/calendar');
-    revalidatePath('/');
+    revalidatePath('/today');
     return ok();
   }, 'We could not save that event. Please try again.');
 }
@@ -894,6 +1212,8 @@ export async function saveAnnouncementAction(
     const parsed = announcementSchema.safeParse({
       ...Object.fromEntries(formData),
       isPinned: formData.get('isPinned') === 'on',
+      isPopup: formData.get('isPopup') === 'on',
+      isPersistent: formData.get('isPersistent') === 'on',
     });
     if (!parsed.success) return fail('Check the highlighted fields.', fieldErrors(parsed.error));
 
@@ -901,7 +1221,13 @@ export async function saveAnnouncementAction(
     if (announcementId) {
       await db
         .update(announcements)
-        .set({ title: input.title, body: input.body, isPinned: input.isPinned })
+        .set({
+          title: input.title,
+          body: input.body,
+          isPinned: input.isPinned,
+          isPopup: input.isPopup,
+          isPersistent: input.isPersistent,
+        })
         .where(
           and(eq(announcements.id, announcementId), eq(announcements.cohortId, input.cohortId)),
         );
@@ -911,12 +1237,14 @@ export async function saveAnnouncementAction(
         title: input.title,
         body: input.body,
         isPinned: input.isPinned,
+        isPopup: input.isPopup,
+        isPersistent: input.isPersistent,
         createdBy: user.id,
       });
     }
 
     revalidatePath('/admin/events');
-    revalidatePath('/');
+    revalidatePath('/today');
     return ok();
   }, 'We could not save that announcement. Please try again.');
 }
@@ -931,7 +1259,7 @@ export async function deleteAnnouncementAction(
       .delete(announcements)
       .where(and(eq(announcements.id, announcementId), eq(announcements.cohortId, cohortId)));
     revalidatePath('/admin/events');
-    revalidatePath('/');
+    revalidatePath('/today');
     return ok();
   }, 'We could not delete that announcement. Please try again.');
 }

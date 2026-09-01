@@ -3,6 +3,7 @@ import 'server-only';
 import { redirect } from 'next/navigation';
 
 import { type SessionUser, getCurrentUser } from './session';
+import { STUDENT_HOME } from '@/lib/routes';
 
 /** Thrown by action-layer guards. Server actions convert this into a typed error result. */
 export class AuthorizationError extends Error {
@@ -29,7 +30,7 @@ export async function requireOnboardedUser(): Promise<SessionUser> {
 /** For pages: admin-only. Students are sent back to their dashboard, never shown the UI. */
 export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireUser();
-  if (user.role !== 'admin') redirect('/');
+  if (user.role !== 'admin') redirect(STUDENT_HOME);
   return user;
 }
 

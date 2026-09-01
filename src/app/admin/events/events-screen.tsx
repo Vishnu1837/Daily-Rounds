@@ -31,7 +31,14 @@ type Event = {
   meetUrl: string | null;
 };
 
-type Announcement = { id: string; title: string; body: string; isPinned: boolean };
+type Announcement = {
+  id: string;
+  title: string;
+  body: string;
+  isPinned: boolean;
+  isPopup: boolean;
+  isPersistent: boolean;
+};
 
 const EVENT_TYPES: { value: EventType; label: string }[] = [
   { value: 'workshop', label: 'Workshop' },
@@ -98,6 +105,7 @@ export function EventsScreen({
                   <div className="flex items-center gap-2">
                     <p className="text-fg text-sm font-bold">{a.title}</p>
                     {a.isPinned && <Badge tone="pulse">Pinned</Badge>}
+                    {a.isPopup && <Badge tone="iris">Pop-up</Badge>}
                   </div>
                   <p className="text-fg-muted mt-1 text-sm">{a.body}</p>
                 </div>
@@ -403,6 +411,30 @@ function AnnouncementForm({
           className="border-border-strong size-5 rounded accent-[var(--color-pulse-600)]"
         />
         Pin to the top of every home screen
+      </label>
+      <label className="text-fg flex items-center gap-2.5 text-sm font-semibold">
+        <input
+          type="checkbox"
+          name="isPopup"
+          defaultChecked={announcement?.isPopup ?? false}
+          className="border-border-strong size-5 rounded accent-[var(--color-pulse-600)]"
+        />
+        Show as a pop-up the next time each student opens the portal
+      </label>
+      <label className="text-fg-muted flex items-start gap-2.5 pl-7 text-sm">
+        <input
+          type="checkbox"
+          name="isPersistent"
+          defaultChecked={announcement?.isPersistent ?? false}
+          className="border-border-strong mt-0.5 size-5 rounded accent-[var(--color-pulse-600)]"
+        />
+        <span>
+          Keep showing it after they dismiss it
+          <span className="text-fg-subtle block text-xs">
+            Only for something that genuinely must be seen every time — otherwise a pop-up shows
+            once and then lives in the announcements list.
+          </span>
+        </span>
       </label>
       <Button type="submit" size="lg" fullWidth loading={pending}>
         {announcement ? 'Save announcement' : 'Post announcement'}

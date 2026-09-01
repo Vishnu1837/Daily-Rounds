@@ -14,6 +14,7 @@ import { calculateCurrentStreak } from '@/lib/domain/streak';
 import { minDate } from '@/lib/domain/calendar';
 import { getMemberContext } from '@/server/context';
 import { loadActivity, totalPoints } from '@/server/scoring';
+import { STUDENT_HOME } from '@/lib/routes';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -45,7 +46,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="min-h-dvh lg:flex">
       {/* ------------------------------------------------------ desktop rail */}
       <aside className="border-border bg-bg-elevated sticky top-0 hidden h-dvh w-[17rem] shrink-0 flex-col border-r px-4 py-6 lg:flex">
-        <Link href="/" className="mb-8 px-2" aria-label="Daily Rounds home">
+        <Link href={STUDENT_HOME} className="mb-8 px-2" aria-label="Daily Rounds home">
           <Logo />
         </Link>
 

@@ -5,13 +5,14 @@ import { requireUser } from '@/lib/auth/guards';
 import { listSubjects } from '@/server/actions/onboarding';
 
 import { OnboardingWizard } from './wizard';
+import { STUDENT_HOME } from '@/lib/routes';
 
 export const metadata: Metadata = { title: 'Set up your cohort' };
 export const dynamic = 'force-dynamic';
 
 export default async function OnboardingPage() {
   const user = await requireUser();
-  if (user.onboardingCompletedAt) redirect('/');
+  if (user.onboardingCompletedAt) redirect(STUDENT_HOME);
 
   const subjects = await listSubjects();
 

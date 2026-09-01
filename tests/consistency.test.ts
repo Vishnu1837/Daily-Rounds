@@ -141,7 +141,9 @@ describe('weekly progress', () => {
   });
 
   it('reports zero improvement from a single week', () => {
-    expect(calculateImprovement(calculateWeeklyProgress(cal, lookup, '2025-09-03')).deltaPct).toBe(0);
+    expect(calculateImprovement(calculateWeeklyProgress(cal, lookup, '2025-09-03')).deltaPct).toBe(
+      0,
+    );
   });
 
   it('scopes the current week to days up to today', () => {

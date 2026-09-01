@@ -73,6 +73,19 @@ export const materialTypeEnum = pgEnum('material_type', [
   'recording',
 ]);
 export const riskLevelEnum = pgEnum('risk_level', ['on_track', 'at_risk', 'needs_intervention']);
+/**
+ * Which of a student's two active roadmaps this is.
+ *
+ * A student has at most one roadmap per slot, which is how "maximum two active subjects" is
+ * enforced by the database rather than by hoping every call site remembers to check.
+ */
+export const roadmapSlotEnum = pgEnum('roadmap_slot', ['primary', 'secondary']);
+export const waitlistStatusEnum = pgEnum('waitlist_status', [
+  'new',
+  'contacted',
+  'enrolled',
+  'declined',
+]);
 export const dayBandEnum = pgEnum('day_band', [
   'perfect',
   'strong',
@@ -266,6 +279,17 @@ export const studentGoals = pgTable(
     baselineConsistencyRating: smallint('baseline_consistency_rating').notNull(),
     baselineConfidence: smallint('baseline_confidence').notNull(),
     biggestObstacle: obstacleEnum('biggest_obstacle').notNull(),
+    /**
+     * Every consistency challenge the student picked, not just the worst one.
+     *
+     * `biggestObstacle` above stays as the single headline value because the risk and
+     * check-in logic keys off one obstacle; this array is the fuller picture onboarding now
+     * collects, and is what the admin student view shows.
+     */
+    challenges: text('challenges')
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
     obstacleNote: text('obstacle_note'),
     /** Filled at cohort end for the before/after report. */
     finalConsistencyRating: smallint('final_consistency_rating'),
@@ -290,9 +314,30 @@ export const roadmaps = pgTable(
     title: varchar('title', { length: 160 }).notNull(),
     /** e.g. "General Pathology" */
     track: varchar('track', { length: 160 }),
+    /**
+     * Which of the student's two active subjects this roadmap fills.
+     *
+     * The partial unique index below allows exactly one roadmap per (member, slot), so a
+     * student can never end up with three active subjects. Replacing a subject rewrites the
+     * roadmap in that slot and leaves the other slot untouched.
+     */
+    slot: roadmapSlotEnum('slot').notNull().default('primary'),
+    /**
+     * The subject slug this roadmap was generated from, e.g. `anatomy`.
+     *
+     * Denormalised from `subjects.slug` on purpose: it is the key back into the curriculum
+     * tree, and carrying it here means a roadmap can be regenerated or verified against the
+     * syllabus without a join.
+     */
+    curriculumRef: varchar('curriculum_ref', { length: 200 }),
+    /** Bumped every time the roadmap is regenerated from the syllabus. */
+    generatedAt: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('roadmaps_member_idx').on(t.memberId)],
+  (t) => [
+    index('roadmaps_member_idx').on(t.memberId),
+    uniqueIndex('roadmaps_member_slot_unique').on(t.memberId, t.slot),
+  ],
 );
 
 export const roadmapWeeks = pgTable(
@@ -615,10 +660,71 @@ export const announcements = pgTable(
     title: varchar('title', { length: 160 }).notNull(),
     body: text('body').notNull(),
     isPinned: boolean('is_pinned').notNull().default(false),
+    /**
+     * Surface this as a modal when the student next enters the portal.
+     *
+     * Acknowledgement is recorded in `announcement_reads`, so a popup is shown once and
+     * then lives on in the announcement list like any other.
+     */
+    isPopup: boolean('is_popup').notNull().default(false),
+    /**
+     * Keep showing the popup on every entry, even after acknowledgement.
+     *
+     * Reserved for the rare "cohort starts Monday, read this" notice. Ordinary popups
+     * respect the acknowledgement.
+     */
+    isPersistent: boolean('is_persistent').notNull().default(false),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('announcements_cohort_idx').on(t.cohortId)],
+);
+
+/** One row per student per announcement they have acknowledged. */
+export const announcementReads = pgTable(
+  'announcement_reads',
+  {
+    announcementId: uuid('announcement_id')
+      .notNull()
+      .references(() => announcements.id, { onDelete: 'cascade' }),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => cohortMembers.id, { onDelete: 'cascade' }),
+    readAt: timestamp('read_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.announcementId, t.memberId] }),
+    index('announcement_reads_member_idx').on(t.memberId),
+  ],
+);
+
+/* --------------------------------------------------------------- waitlist */
+
+/**
+ * Next-cohort enquiries captured by the public landing page.
+ *
+ * Deliberately outside the cohort/member graph: these are people who do not have an
+ * account yet, and nothing here is ever exposed to a student-facing surface.
+ */
+export const waitlistEntries = pgTable(
+  'waitlist_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    fullName: varchar('full_name', { length: 120 }).notNull(),
+    whatsapp: varchar('whatsapp', { length: 32 }).notNull(),
+    email: varchar('email', { length: 255 }),
+    mbbsYear: smallint('mbbs_year'),
+    university: varchar('university', { length: 160 }),
+    /** Free text: the consistency problem they came here to solve. */
+    challenge: text('challenge'),
+    status: waitlistStatusEnum('status').notNull().default('new'),
+    note: text('note'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('waitlist_created_idx').on(t.createdAt),
+    uniqueIndex('waitlist_whatsapp_unique').on(t.whatsapp),
+  ],
 );
 
 /* --------------------------------------------------------- weekly reviews */
@@ -730,6 +836,10 @@ export type StudentAchievement = typeof studentAchievements.$inferSelect;
 export type Material = typeof materials.$inferSelect;
 export type CohortEvent = typeof events.$inferSelect;
 export type Announcement = typeof announcements.$inferSelect;
+export type AnnouncementRead = typeof announcementReads.$inferSelect;
+export type WaitlistEntry = typeof waitlistEntries.$inferSelect;
+export type RoadmapSlot = (typeof roadmapSlotEnum.enumValues)[number];
+export type WaitlistStatus = (typeof waitlistStatusEnum.enumValues)[number];
 export type WeeklyReview = typeof weeklyReviews.$inferSelect;
 export type Quiz = typeof quizzes.$inferSelect;
 export type QuizQuestion = typeof quizQuestions.$inferSelect;

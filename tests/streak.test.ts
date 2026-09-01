@@ -87,7 +87,7 @@ describe('calculateCurrentStreak', () => {
     expect(calculateCurrentStreak(cal, showedUpOn(dates), '2025-09-09').length).toBe(1);
   });
 
-  it('keeps yesterday\'s streak while today is still in progress', () => {
+  it("keeps yesterday's streak while today is still in progress", () => {
     const dates = ['2025-09-01', '2025-09-02'];
     // Wednesday has not been completed yet — the streak must not read as broken.
     expect(calculateCurrentStreak(cal, showedUpOn(dates), '2025-09-03').length).toBe(2);

@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { requireOnboardedUser } from '@/lib/auth/guards';
 import { BEHAVIOUR_EVENTS, POINT_EVENT_LABELS, maxDailyBehaviourPoints } from '@/lib/domain/points';
 import { getMemberContext } from '@/server/context';
+import { STUDENT_HOME } from '@/lib/routes';
 
 export const metadata: Metadata = { title: 'How points work' };
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,7 @@ export default async function HowPointsWorkPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <Link
-        href="/"
+        href={STUDENT_HOME}
         className="tap text-fg-muted hover:text-fg inline-flex items-center gap-1.5 rounded-lg px-1 py-2 text-sm font-semibold transition-colors"
       >
         <ArrowLeft className="size-4" aria-hidden />

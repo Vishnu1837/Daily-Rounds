@@ -10,13 +10,7 @@ import {
   schema,
 } from './helpers/db';
 import { ledgerKey } from '@/lib/domain/points';
-import {
-  awardPoints,
-  loadActivity,
-  recomputeDay,
-  settleDay,
-  totalPoints,
-} from '@/server/scoring';
+import { awardPoints, loadActivity, recomputeDay, settleDay, totalPoints } from '@/server/scoring';
 
 let ctx: TestCohort;
 
@@ -476,9 +470,24 @@ describe('attendance', () => {
     // Absent: no award at all.
 
     const [p, l, a] = await Promise.all([
-      recomputeDay({ memberId: present, date: '2025-09-01', calendar: ctx.calendar, rules: ctx.rules }),
-      recomputeDay({ memberId: late, date: '2025-09-01', calendar: ctx.calendar, rules: ctx.rules }),
-      recomputeDay({ memberId: absent, date: '2025-09-01', calendar: ctx.calendar, rules: ctx.rules }),
+      recomputeDay({
+        memberId: present,
+        date: '2025-09-01',
+        calendar: ctx.calendar,
+        rules: ctx.rules,
+      }),
+      recomputeDay({
+        memberId: late,
+        date: '2025-09-01',
+        calendar: ctx.calendar,
+        rules: ctx.rules,
+      }),
+      recomputeDay({
+        memberId: absent,
+        date: '2025-09-01',
+        calendar: ctx.calendar,
+        rules: ctx.rules,
+      }),
     ]);
 
     expect(p.score).toBeGreaterThan(l.score);

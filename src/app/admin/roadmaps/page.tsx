@@ -5,7 +5,6 @@ import { redirect } from 'next/navigation';
 import { db } from '@/db/client';
 import { subjects } from '@/db/schema';
 import { requireAdmin } from '@/lib/auth/guards';
-import { templateList } from '@/lib/roadmap-templates';
 import { getCohortContext, getPrimaryCohort } from '@/server/context';
 import {
   getAssignmentsForDate,
@@ -57,7 +56,6 @@ export default async function RoadmapAdminPage({
       selectedMemberId={selectedMemberId}
       roadmapRows={roadmapRows}
       subjects={subjectRows.map((s) => ({ id: s.id, name: s.name, slug: s.slug }))}
-      templates={templateList()}
       assignments={assignments}
     />
   );

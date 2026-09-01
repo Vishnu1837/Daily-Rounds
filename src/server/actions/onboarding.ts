@@ -1,31 +1,29 @@
 'use server';
 
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 
 import { db } from '@/db/client';
-import {
-  cohortMembers,
-  cohorts,
-  dailyAssignments,
-  roadmapTopics,
-  roadmapWeeks,
-  roadmaps,
-  studentGoals,
-  subjects,
-  users,
-} from '@/db/schema';
+import { cohortMembers, cohorts, studentGoals, subjects, users } from '@/db/schema';
 import { requireUserAction } from '@/lib/auth/guards';
 import { todayInTimezone } from '@/lib/domain/calendar';
-import { templateForSubject } from '@/lib/roadmap-templates';
 import { SUBJECTS } from '@/lib/subjects';
-import { fieldErrors, onboardingSchema, profileSchema } from '@/lib/validation';
+import {
+  CHALLENGE_TO_OBSTACLE,
+  challengesSchema,
+  fieldErrors,
+  onboardingSchema,
+  profileSchema,
+} from '@/lib/validation';
+
+import { ensureRoadmaps } from '../roadmap';
 
 import { type Result, fail, guarded, ok } from './shared';
+import { STUDENT_HOME } from '@/lib/routes';
 
 /**
  * Completes onboarding: stores the profile and baseline, joins the active cohort, and
- * builds a starting roadmap so the student has something real on day one.
+ * generates a roadmap for each chosen subject straight from the master syllabus.
  */
 export async function completeOnboardingAction(
   _prev: unknown,
@@ -39,6 +37,21 @@ export async function completeOnboardingAction(
       return fail('Some answers need a second look.', fieldErrors(parsed.error));
     }
     const input = parsed.data;
+
+    // Checkboxes share a field name, which `Object.fromEntries` above would collapse to a
+    // single value — so the challenge list is read off the FormData directly.
+    const parsedChallenges = challengesSchema.safeParse(formData.getAll('challenges'));
+    if (!parsedChallenges.success) {
+      return fail('Some answers need a second look.', {
+        challenges: 'Pick at least one — this is what the cohort is built to fix',
+      });
+    }
+    const challenges = parsedChallenges.data;
+
+    // `biggest_obstacle` still drives risk scoring and takes exactly one value, so it is
+    // projected from the student's first-picked challenge unless they set it explicitly.
+    const biggestObstacle =
+      input.biggestObstacle ?? CHALLENGE_TO_OBSTACLE[challenges[0]!] ?? 'other';
 
     const cohortRows = await db
       .select()
@@ -91,7 +104,8 @@ export async function completeOnboardingAction(
         baselineDaysStudiedLastWeek: input.baselineDaysStudiedLastWeek,
         baselineConsistencyRating: input.baselineConsistencyRating,
         baselineConfidence: input.baselineConfidence,
-        biggestObstacle: input.biggestObstacle,
+        biggestObstacle,
+        challenges,
         obstacleNote: input.obstacleNote ?? null,
       })
       .onConflictDoUpdate({
@@ -106,106 +120,54 @@ export async function completeOnboardingAction(
           baselineDaysStudiedLastWeek: input.baselineDaysStudiedLastWeek,
           baselineConsistencyRating: input.baselineConsistencyRating,
           baselineConfidence: input.baselineConfidence,
-          biggestObstacle: input.biggestObstacle,
+          biggestObstacle,
+          challenges,
           obstacleNote: input.obstacleNote ?? null,
         },
       });
 
-    await ensureStartingRoadmap({
+    // Both chosen subjects become roadmaps here and now. Neither the student nor an admin
+    // has to create topics afterwards — the syllabus already knows what they are.
+    const chosen = await subjectSlugsById([
+      input.primarySubjectId,
+      input.secondarySubjectId ?? null,
+    ]);
+
+    await ensureRoadmaps({
       memberId: membership.id,
-      subjectId: input.primarySubjectId,
+      primarySubjectSlug: chosen.get(input.primarySubjectId) ?? null,
+      secondarySubjectSlug: input.secondarySubjectId
+        ? (chosen.get(input.secondarySubjectId) ?? null)
+        : null,
       dailyMinutes: input.dailyCommitmentMinutes,
       cohortTimezone: cohort.timezone,
+      today: todayInTimezone(cohort.timezone),
     });
 
     return ok();
   }, 'We could not finish setting up your account. Nothing was lost — please try again.');
 
-  if (outcome.ok) redirect('/');
+  if (outcome.ok) redirect(STUDENT_HOME);
   return outcome;
 }
 
 /**
- * Gives a member a roadmap if they do not have one, seeded from the curated template for
- * their subject. Also assigns today's topic so the home screen is never empty.
+ * Maps subject ids to their curriculum slugs.
+ *
+ * Onboarding posts subject *ids* because that is what the picker renders, while the
+ * curriculum is keyed by slug. Nulls are dropped so callers can pass an optional second
+ * subject straight through.
  */
-export async function ensureStartingRoadmap(args: {
-  memberId: string;
-  subjectId: string;
-  dailyMinutes: number;
-  cohortTimezone: string;
-}): Promise<void> {
-  const existing = await db
-    .select({ id: roadmaps.id })
-    .from(roadmaps)
-    .where(eq(roadmaps.memberId, args.memberId))
-    .limit(1);
+async function subjectSlugsById(ids: (string | null)[]): Promise<Map<string, string>> {
+  const wanted = ids.filter((id): id is string => Boolean(id));
+  if (wanted.length === 0) return new Map();
 
-  if (existing.length > 0) return;
-
-  const subjectRows = await db
-    .select()
+  const rows = await db
+    .select({ id: subjects.id, slug: subjects.slug })
     .from(subjects)
-    .where(eq(subjects.id, args.subjectId))
-    .limit(1);
-  const subject = subjectRows[0];
-  if (!subject) return;
+    .where(inArray(subjects.id, wanted));
 
-  const template = templateForSubject(subject.slug);
-
-  const [roadmap] = await db
-    .insert(roadmaps)
-    .values({
-      memberId: args.memberId,
-      subjectId: subject.id,
-      title: template?.title ?? `${subject.name} — your roadmap`,
-      track: template?.track ?? null,
-    })
-    .returning();
-
-  if (!roadmap || !template) return;
-
-  const weekRows = await db
-    .insert(roadmapWeeks)
-    .values(
-      template.weeks.map((w, i) => ({
-        roadmapId: roadmap.id,
-        weekNumber: i + 1,
-        title: w.title,
-      })),
-    )
-    .returning();
-
-  const topicRows = await db
-    .insert(roadmapTopics)
-    .values(
-      template.weeks.flatMap((w, wi) =>
-        w.topics.map((title, ti) => ({
-          roadmapId: roadmap.id,
-          weekId: weekRows[wi]!.id,
-          title,
-          // Carries the week's place in the curriculum, so quizzes and materials attach.
-          curriculumRef: w.ref,
-          position: wi * 100 + ti,
-          estimatedMinutes: args.dailyMinutes,
-          status: (wi === 0 && ti === 0 ? 'in_progress' : 'upcoming') as 'in_progress' | 'upcoming',
-        })),
-      ),
-    )
-    .returning();
-
-  const first = topicRows.sort((a, b) => a.position - b.position)[0];
-  if (!first) return;
-
-  await db
-    .insert(dailyAssignments)
-    .values({
-      memberId: args.memberId,
-      date: todayInTimezone(args.cohortTimezone),
-      topicId: first.id,
-      plannedMinutes: args.dailyMinutes,
-    })
-    .onConflictDoNothing({ target: [dailyAssignments.memberId, dailyAssignments.date] });
+  return new Map(rows.map((r) => [r.id, r.slug]));
 }
 
 export async function updateProfileAction(_prev: unknown, formData: FormData): Promise<Result> {

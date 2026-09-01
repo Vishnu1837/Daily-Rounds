@@ -23,6 +23,7 @@ import {
   pauseSessionAction,
   startSessionAction,
 } from '@/server/actions/study';
+import { STUDENT_HOME } from '@/lib/routes';
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -192,7 +193,7 @@ export function StudySessionScreen({
       <CelebrationModal payload={celebration} onClose={() => setCelebration(null)} />
 
       <Link
-        href="/"
+        href={STUDENT_HOME}
         className="tap text-fg-muted hover:text-fg inline-flex items-center gap-1.5 rounded-lg px-1 py-2 text-sm font-semibold transition-colors"
       >
         <ArrowLeft className="size-4" aria-hidden />

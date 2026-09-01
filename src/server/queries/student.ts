@@ -19,6 +19,7 @@ import {
 import { db } from '@/db/client';
 import type { AttendanceStatus, DayBand, PointEvent } from '@/db/schema';
 import {
+  announcementReads,
   announcements,
   attendance,
   checkIns,
@@ -540,7 +541,9 @@ export type RoadmapView = {
   id: string;
   title: string;
   track: string | null;
+  slot: 'primary' | 'secondary';
   subjectName: string;
+  subjectSlug: string;
   completed: number;
   total: number;
   weeks: {
@@ -567,7 +570,9 @@ export async function getRoadmaps(ctx: MemberContext): Promise<RoadmapView[]> {
         roadmapId: roadmaps.id,
         roadmapTitle: roadmaps.title,
         track: roadmaps.track,
+        slot: roadmaps.slot,
         subjectName: subjects.name,
+        subjectSlug: subjects.slug,
         weekId: roadmapWeeks.id,
         weekNumber: roadmapWeeks.weekNumber,
         weekTitle: roadmapWeeks.title,
@@ -583,7 +588,8 @@ export async function getRoadmaps(ctx: MemberContext): Promise<RoadmapView[]> {
       .leftJoin(roadmapTopics, eq(roadmapTopics.roadmapId, roadmaps.id))
       .leftJoin(roadmapWeeks, eq(roadmapWeeks.id, roadmapTopics.weekId))
       .where(eq(roadmaps.memberId, memberId))
-      .orderBy(asc(roadmaps.createdAt), asc(roadmapTopics.position)),
+      // Slot order, so the primary subject is always the first tab.
+      .orderBy(asc(roadmaps.slot), asc(roadmapTopics.position)),
     db
       .select({ topicId: dailyAssignments.topicId })
       .from(dailyAssignments)
@@ -601,7 +607,9 @@ export async function getRoadmaps(ctx: MemberContext): Promise<RoadmapView[]> {
         id: row.roadmapId,
         title: row.roadmapTitle,
         track: row.track,
+        slot: row.slot,
         subjectName: row.subjectName,
+        subjectSlug: row.subjectSlug,
         completed: 0,
         total: 0,
         weeks: [],
@@ -1245,3 +1253,51 @@ export async function getPointsLog(memberId: string, limit = 40) {
 }
 
 export const BEHAVIOUR_EVENT_LIST = BEHAVIOUR_EVENTS;
+
+/* ---------------------------------------------------------- announcements */
+
+export type PopupAnnouncement = {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: Date;
+};
+
+/**
+ * Announcements that should interrupt the student on entry.
+ *
+ * "Unread" is a real per-student fact in `announcement_reads`, not a client-side flag, so a
+ * student who acknowledges on their phone is not shown the same modal again on a laptop.
+ * A persistent announcement ignores that and always returns, which is what makes it
+ * persistent — reserved for the rare notice that must be seen every time.
+ *
+ * Ordered oldest-first: if two are waiting, the student reads them in the order they were
+ * written rather than backwards.
+ */
+export async function getPopupAnnouncements(ctx: MemberContext): Promise<PopupAnnouncement[]> {
+  return db
+    .select({
+      id: announcements.id,
+      title: announcements.title,
+      body: announcements.body,
+      createdAt: announcements.createdAt,
+    })
+    .from(announcements)
+    .leftJoin(
+      announcementReads,
+      and(
+        eq(announcementReads.announcementId, announcements.id),
+        eq(announcementReads.memberId, ctx.memberId),
+      ),
+    )
+    .where(
+      and(
+        eq(announcements.cohortId, ctx.cohort.id),
+        eq(announcements.isPopup, true),
+        // Persistent notices reappear regardless of acknowledgement.
+        or(eq(announcements.isPersistent, true), isNull(announcementReads.announcementId)),
+      ),
+    )
+    .orderBy(asc(announcements.createdAt))
+    .limit(3);
+}

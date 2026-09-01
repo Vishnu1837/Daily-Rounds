@@ -21,6 +21,8 @@ import {
   updatePointRulesAction,
 } from '@/server/actions/admin';
 
+import { RestartCohortPanel } from './restart-cohort';
+
 const WEEKDAYS = [
   { value: 1, label: 'Mon' },
   { value: 2, label: 'Tue' },
@@ -314,6 +316,8 @@ export function SettingsScreen({
           </div>
         </div>
       </Card>
+
+      <RestartCohortPanel cohortId={cohort.id} cohortName={cohort.name} />
     </div>
   );
 }

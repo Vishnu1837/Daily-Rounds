@@ -20,6 +20,7 @@ import { submitCheckInAction } from '@/server/actions/check-in';
 import type { CheckInContext } from '@/server/queries/student';
 
 import { WeeklyReviewCard } from './weekly-review';
+import { STUDENT_HOME } from '@/lib/routes';
 
 type Completion = 'completed' | 'partial' | 'none';
 type Obstacle = (typeof obstacleValues)[number] | 'none';
@@ -178,7 +179,7 @@ export function CheckInScreen({
               That&apos;s today recorded. Nothing else is asked of you until tomorrow.
             </p>
             <div className="mx-auto mt-7 max-w-xs space-y-2.5">
-              <LinkButton href="/" variant="inverse" size="lg" fullWidth>
+              <LinkButton href={STUDENT_HOME} variant="inverse" size="lg" fullWidth>
                 Back to today
               </LinkButton>
               <LinkButton href="/progress" variant="inverse-soft" size="lg" fullWidth>

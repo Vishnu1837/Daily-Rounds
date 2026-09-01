@@ -14,17 +14,7 @@ import { useToast } from '@/components/ui/toast';
 import { levelFromPoints } from '@/lib/domain/level';
 import { type ActionState, changePasswordAction, logoutAction } from '@/server/actions/auth';
 import { updateProfileAction } from '@/server/actions/onboarding';
-
-const TIMEZONES = [
-  'Asia/Kolkata',
-  'Asia/Karachi',
-  'Asia/Dhaka',
-  'Asia/Colombo',
-  'Asia/Dubai',
-  'Europe/London',
-  'America/New_York',
-  'UTC',
-];
+import { TIMEZONE_GROUPS, timezoneLabel } from '@/lib/timezones';
 
 type Props = {
   user: {
@@ -113,7 +103,7 @@ export function ProfileScreen({ user, cohort, goals, points }: Props) {
           <Row label="University" value={user.university ?? 'Not set'} />
           <Row label="MBBS year" value={user.mbbsYear ? `Year ${user.mbbsYear}` : 'Not set'} />
           <Row label="WhatsApp" value={user.whatsapp ?? 'Not set'} />
-          <Row label="Timezone" value={user.timezone} />
+          <Row label="Timezone" value={timezoneLabel(user.timezone)} />
         </dl>
       </Card>
 
@@ -254,10 +244,14 @@ function EditProfileForm({ user, onDone }: { user: Props['user']; onDone: () => 
         ))}
       </Select>
       <Select label="Timezone" name="timezone" defaultValue={user.timezone}>
-        {TIMEZONES.map((tz) => (
-          <option key={tz} value={tz}>
-            {tz.replace('_', ' ')}
-          </option>
+        {TIMEZONE_GROUPS.map((group) => (
+          <optgroup key={group.region} label={group.region}>
+            {group.zones.map((zone) => (
+              <option key={zone.id} value={zone.id}>
+                {zone.label}
+              </option>
+            ))}
+          </optgroup>
         ))}
       </Select>
       <Button type="submit" size="lg" fullWidth loading={pending}>

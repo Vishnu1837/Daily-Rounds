@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ClipboardList } from 'lucide-react';
+import { ArrowLeft, ClipboardList, Trash2 } from 'lucide-react';
 
 import { ActivityHeatmap } from '@/components/charts/heatmap';
 import { WeekBars } from '@/components/charts/week-bars';
@@ -20,7 +20,11 @@ import { cn } from '@/lib/cn';
 import { POINT_EVENT_LABELS } from '@/lib/domain/points';
 import { RISK_LABELS } from '@/lib/domain/risk';
 import { OBSTACLE_LABELS } from '@/lib/validation';
-import { adjustPointsAction, updateStudentAction } from '@/server/actions/admin';
+import {
+  adjustPointsAction,
+  deleteStudentAction,
+  updateStudentAction,
+} from '@/server/actions/admin';
 import type { getStudentDetail } from '@/server/queries/admin';
 
 type Detail = NonNullable<Awaited<ReturnType<typeof getStudentDetail>>>;
@@ -412,7 +416,98 @@ function EditStudentForm({
       <Button type="submit" size="lg" fullWidth loading={pending}>
         Save changes
       </Button>
+
+      <DeleteStudent cohortId={cohortId} member={member} />
     </form>
+  );
+}
+
+/**
+ * Permanent removal of a student account.
+ *
+ * Kept visually separate from the save button and gated behind a typed confirmation. The
+ * dialog names what is destroyed rather than asking "are you sure", because an admin who
+ * only wants to stop counting someone should be reaching for the Left status above instead
+ * — and saying so here is the cheapest way to stop the wrong choice.
+ */
+function DeleteStudent({ cohortId, member }: { cohortId: string; member: Detail['member'] }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [pending, startTransition] = useTransition();
+  const [open, setOpen] = useState(false);
+  const [confirmation, setConfirmation] = useState('');
+
+  const matches = confirmation.trim().toLowerCase() === member.name.trim().toLowerCase();
+
+  return (
+    <>
+      <div className="border-border mt-2 border-t pt-4">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-danger"
+          onClick={() => {
+            setConfirmation('');
+            setOpen(true);
+          }}
+        >
+          <Trash2 className="size-3.5" aria-hidden />
+          Delete this student
+        </Button>
+      </div>
+
+      <Sheet open={open} onClose={() => setOpen(false)} title={`Delete ${member.name}?`}>
+        <div className="space-y-5 p-5">
+          <div className="border-danger/30 bg-danger/8 rounded-2xl border p-4">
+            <p className="text-fg text-sm">
+              This permanently deletes their account and everything attached to it — membership,
+              both roadmaps, check-ins, attendance and points. It cannot be undone.
+            </p>
+          </div>
+
+          <p className="text-fg-muted text-sm leading-relaxed">
+            If you only want them to stop appearing in cohort metrics, set their membership status
+            to <strong className="text-fg">Left</strong> instead and keep the record.
+          </p>
+
+          <TextInput
+            label={`Type "${member.name}" to confirm`}
+            value={confirmation}
+            onChange={(e) => setConfirmation(e.target.value)}
+            placeholder={member.name}
+            autoComplete="off"
+          />
+
+          <div className="flex gap-3">
+            <Button type="button" variant="ghost" fullWidth onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              fullWidth
+              disabled={!matches}
+              loading={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  const result = await deleteStudentAction(cohortId, member.userId);
+                  if (!result.ok) {
+                    toast.error('Could not delete', result.message);
+                    return;
+                  }
+                  toast.success('Student deleted');
+                  router.push('/admin/students');
+                  router.refresh();
+                })
+              }
+            >
+              Delete permanently
+            </Button>
+          </div>
+        </div>
+      </Sheet>
+    </>
   );
 }
 

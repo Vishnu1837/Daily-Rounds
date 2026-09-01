@@ -1,6 +1,8 @@
 import { loadEnv } from './env';
+import { assertDestructiveTargetAllowed } from './guard';
 
 loadEnv();
+assertDestructiveTargetAllowed('db:reset');
 
 /** Drops and recreates the public schema, then exits. Follow with `npm run db:setup`. */
 async function main() {

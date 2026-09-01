@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { getCurrentUser } from '@/lib/auth/session';
+import { homeForRole } from '@/lib/routes';
 
 import { LoginForm } from './login-form';
 
@@ -10,7 +11,7 @@ export const metadata: Metadata = { title: 'Sign in' };
 
 export default async function LoginPage() {
   const user = await getCurrentUser();
-  if (user) redirect(user.role === 'admin' ? '/admin' : '/');
+  if (user) redirect(homeForRole(user.role));
 
   return (
     <div className="animate-rise">

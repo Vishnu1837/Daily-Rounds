@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/feedback';
 import { requireOnboardedUser } from '@/lib/auth/guards';
 import { getCohortContext, getMemberContext } from '@/server/context';
 import { getEndOfCohortReport } from '@/server/queries/admin';
+import { STUDENT_HOME } from '@/lib/routes';
 
 export const metadata: Metadata = { title: 'Your cohort report' };
 export const dynamic = 'force-dynamic';
@@ -19,10 +20,10 @@ export default async function ReportPage() {
   if (!memberCtx) redirect('/admin');
 
   const ctx = await getCohortContext(memberCtx.cohort.id);
-  if (!ctx) redirect('/');
+  if (!ctx) redirect(STUDENT_HOME);
 
   const report = await getEndOfCohortReport(ctx, memberCtx.memberId);
-  if (!report) redirect('/');
+  if (!report) redirect(STUDENT_HOME);
 
   const daysLeft =
     new Date(`${ctx.calendar.endDate}T12:00:00Z`).getTime() -

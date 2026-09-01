@@ -163,7 +163,7 @@ export async function submitCheckInAction(
       rules: ctx.rules,
     });
 
-    revalidatePath('/');
+    revalidatePath('/today');
     revalidatePath('/check-in');
     revalidatePath('/progress');
     revalidatePath('/leaderboard');
@@ -233,7 +233,7 @@ export async function submitWeeklyReviewAction(
     });
 
     revalidatePath('/progress');
-    revalidatePath('/');
+    revalidatePath('/today');
     return ok({ points: paid ? ctx.rules.weekly_review : 0 });
   }, "We couldn't save your weekly review. Please try again.");
 }

@@ -64,15 +64,32 @@ course order, each carrying the phase it is taught in. `drizzle/0001_curriculum_
 backfills them into any existing database, additively — a subject that already has a row
 keeps its id, so existing roadmaps, goals, quizzes and materials are untouched.
 
-**Roadmap templates** (`src/lib/roadmap-templates.ts`) come from two sources with one shape:
+**Student roadmaps** (`src/lib/roadmap/generate.ts`) are generated from the tree, never
+authored separately. One mapping, applied across a whole subject:
 
-- _Curated_ — the hand-built exam-prep plans, grouped the way a cohort lead teaches them.
-- _Curriculum_ — one template per section, keyed `<subject>:<section>`. Each curriculum topic
-  becomes a week and its detail nodes become that week's roadmap topics, which is what turns
-  a syllabus into day-sized study items. Every subject in the course has one.
+| Curriculum   | Roadmap                        |
+| ------------ | ------------------------------ |
+| section      | module (a `roadmap_weeks` row) |
+| topic        | **the trackable unit**         |
+| detail nodes | the topic's description        |
 
-`templateForSubject()` prefers a curated plan when one exists and falls back to the subject's
-first curriculum section, so onboarding can always build a real roadmap on day one.
+The curriculum _topic_ is the trackable unit because it is one consistent level — nothing is
+double-counted the way it would be if a parent and its subtopics were both completable — and
+it is the right size: Anatomy is 47 topics across 8 modules rather than 370 detail nodes.
+
+Order comes from the array order in `data.ts`, which is written in teaching order, so
+`position` ascending is academically correct by construction. Any ordering correction belongs
+in the curriculum data, not in the generator.
+
+`src/server/roadmap.ts` is the only writer. It deliberately exposes no function that accepts a
+caller-supplied topic list — that is how the "syllabus is the single source of truth" rule
+stays true rather than merely documented. A student holds at most two roadmaps, one per `slot`
+(`primary` | `secondary`), enforced by the `roadmaps_member_slot_unique` index rather than by
+a check-then-insert that could race.
+
+**Roadmap templates** (`src/lib/roadmap-templates.ts`) are legacy. They still back the
+section-level admin tooling and the seed fixtures, but nothing on the student-facing path
+reads them any more.
 
 **Quizzes and materials** are filed against a curriculum ref rather than against a topic
 title, which is what makes cohort content reusable: write a quiz once for

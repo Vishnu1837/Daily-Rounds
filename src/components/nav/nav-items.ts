@@ -34,7 +34,7 @@ export type NavItem = {
 };
 
 export const STUDENT_NAV: NavItem[] = [
-  { href: '/', label: 'Today', short: 'Today', icon: 'home', primary: true, group: 'Daily' },
+  { href: '/today', label: 'Today', short: 'Today', icon: 'home', primary: true, group: 'Daily' },
   {
     href: '/roadmap',
     label: 'Roadmap',

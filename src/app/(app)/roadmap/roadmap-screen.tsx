@@ -2,10 +2,11 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Check, Clock, Loader2, Map as MapIcon } from 'lucide-react';
+import { Check, Clock, Loader2, Map as MapIcon, Repeat } from 'lucide-react';
 
 import { AnimatedCheck } from '@/components/gamification/celebration';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardAurora } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/feedback';
 import { PageHeader } from '@/components/ui/page-header';
@@ -14,11 +15,53 @@ import { Reveal } from '@/components/ui/reveal';
 import { ChipRail } from '@/components/ui/segmented';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/cn';
+import { progressPct } from '@/lib/roadmap/generate';
 import { setTopicStatusAction } from '@/server/actions/study';
 import type { RoadmapView } from '@/server/queries/student';
 
-export function RoadmapScreen({ roadmaps }: { roadmaps: RoadmapView[] }) {
+import { SwitchSubjectSheet } from './switch-subject';
+
+type TopicStatus = 'upcoming' | 'in_progress' | 'completed';
+type SubjectOption = { slug: string; name: string; phaseLabel: string };
+
+/**
+ * The student's two active roadmaps.
+ *
+ * Completion state is held *here* rather than inside each topic row, which is the fix for
+ * the stale-progress bug in the brief: the ring, the bar, the module counters and the
+ * subject tab percentages all read one override map, so ticking a topic moves every one of
+ * them on the same frame. The server stays the source of truth — a failed write rolls the
+ * override back — but nothing waits for a page refresh to look right.
+ */
+export function RoadmapScreen({
+  roadmaps,
+  subjectOptions,
+}: {
+  roadmaps: RoadmapView[];
+  subjectOptions: SubjectOption[];
+}) {
   const [activeId, setActiveId] = useState(roadmaps[0]?.id ?? '');
+  const [overrides, setOverrides] = useState<Record<string, TopicStatus>>({});
+
+  const setStatus = (topicId: string, status: TopicStatus) =>
+    setOverrides((prev) => ({ ...prev, [topicId]: status }));
+
+  /** Live counts per roadmap, folding in anything the server has not acknowledged yet. */
+  const counts = useMemo(() => {
+    const out = new Map<string, { completed: number; total: number; pct: number }>();
+    for (const roadmap of roadmaps) {
+      let completed = 0;
+      let total = 0;
+      for (const week of roadmap.weeks) {
+        for (const topic of week.topics) {
+          total += 1;
+          if ((overrides[topic.id] ?? topic.status) === 'completed') completed += 1;
+        }
+      }
+      out.set(roadmap.id, { completed, total, pct: progressPct(completed, total) });
+    }
+    return out;
+  }, [roadmaps, overrides]);
 
   const active = useMemo(
     () => roadmaps.find((r) => r.id === activeId) ?? roadmaps[0] ?? null,
@@ -31,44 +74,75 @@ export function RoadmapScreen({ roadmaps }: { roadmaps: RoadmapView[] }) {
         <PageHeader
           eyebrow="Your plan"
           title="Roadmap"
-          description="Your own topic plan, built around the subject you chose."
+          description="Your own topic plan, built around the subjects you chose."
         />
         <Card variant="outline">
           <EmptyState
             tone="iris"
             icon={<MapIcon className="size-6" aria-hidden />}
             title="Your roadmap is being built"
-            description="Your cohort lead is putting together the topic plan for your subject. It will appear here as soon as it's ready — until then, today's study block still counts."
+            description="Your cohort lead is putting together the topic plan for your subjects. It will appear here as soon as it is ready — until then, today's study block still counts."
           />
         </Card>
       </div>
     );
   }
 
+  const activeCount = counts.get(active.id) ?? { completed: 0, total: 0, pct: 0 };
+
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="Your plan"
         title="Roadmap"
-        description="Yours alone — built around the subject you chose, not your year group."
+        description="Up to two active subjects, straight from the MBBS syllabus."
       >
         {roadmaps.length > 1 && (
           <ChipRail
-            ariaLabel="Choose a roadmap"
+            ariaLabel="Choose a subject"
             value={active.id}
             onChange={setActiveId}
-            options={roadmaps.map((r) => ({ value: r.id, label: r.subjectName }))}
+            /*
+             * The percentage lives in the tab itself, so both subjects stay readable
+             * without switching — "Anatomy 22% · Physiology 15%" at a glance.
+             */
+            options={roadmaps.map((r) => ({
+              value: r.id,
+              label: `${r.subjectName} ${counts.get(r.id)?.pct ?? 0}%`,
+            }))}
           />
         )}
       </PageHeader>
 
-      <RoadmapBody key={active.id} roadmap={active} />
+      <RoadmapBody
+        key={active.id}
+        roadmap={active}
+        count={activeCount}
+        overrides={overrides}
+        onSetStatus={setStatus}
+        subjectOptions={subjectOptions}
+        otherSubjectSlug={roadmaps.find((r) => r.id !== active.id)?.subjectSlug ?? null}
+      />
     </div>
   );
 }
 
-function RoadmapBody({ roadmap }: { roadmap: RoadmapView }) {
-  const pct = roadmap.total === 0 ? 0 : Math.round((roadmap.completed / roadmap.total) * 100);
+function RoadmapBody({
+  roadmap,
+  count,
+  overrides,
+  onSetStatus,
+  subjectOptions,
+  otherSubjectSlug,
+}: {
+  roadmap: RoadmapView;
+  count: { completed: number; total: number; pct: number };
+  overrides: Record<string, TopicStatus>;
+  onSetStatus: (topicId: string, status: TopicStatus) => void;
+  subjectOptions: SubjectOption[];
+  otherSubjectSlug: string | null;
+}) {
+  const [switchOpen, setSwitchOpen] = useState(false);
 
   return (
     <div className="space-y-5">
@@ -77,33 +151,61 @@ function RoadmapBody({ roadmap }: { roadmap: RoadmapView }) {
         <Card variant="wash" tone="iris" padding="lg" className="overflow-hidden">
           <CardAurora tone="iris" />
           <div className="relative flex flex-wrap items-center gap-6">
-            <ProgressRing value={pct} size={104} stroke={10} tone="iris" label="Roadmap progress">
+            <ProgressRing
+              value={count.pct}
+              size={104}
+              stroke={10}
+              tone="iris"
+              label="Roadmap progress"
+            >
               <div className="text-center">
-                <span className="stat-num text-fg block text-xl">{pct}%</span>
+                <span className="stat-num text-fg block text-xl">{count.pct}%</span>
                 <span className="text-2xs text-fg-subtle font-bold uppercase">done</span>
               </div>
             </ProgressRing>
 
             <div className="min-w-0 flex-1">
-              <p className="eyebrow text-iris-700 dark:text-iris-300">{roadmap.subjectName}</p>
+              <p className="eyebrow text-iris-700 dark:text-iris-300">
+                {roadmap.slot === 'primary' ? 'Primary subject' : 'Secondary subject'}
+              </p>
               <h2 className="text-fg mt-1.5 text-xl font-extrabold text-balance sm:text-2xl">
-                {roadmap.track ?? roadmap.title}
+                {roadmap.subjectName}
               </h2>
               <p className="text-fg-muted mt-2 text-sm">
-                <strong className="text-fg">{roadmap.completed}</strong> of {roadmap.total} topics
+                <strong className="text-fg">{count.completed}</strong> of {count.total} topics
                 complete across {roadmap.weeks.length}{' '}
-                {roadmap.weeks.length === 1 ? 'week' : 'weeks'}.
+                {roadmap.weeks.length === 1 ? 'module' : 'modules'}.
               </p>
               <ProgressBar
-                value={pct}
+                value={count.pct}
                 tone="iris"
                 className="mt-4 max-w-md"
                 label="Roadmap progress"
               />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-3 -ml-2"
+                onClick={() => setSwitchOpen(true)}
+              >
+                <Repeat className="size-3.5" aria-hidden />
+                Change subject
+              </Button>
             </div>
           </div>
         </Card>
       </Reveal>
+
+      <SwitchSubjectSheet
+        open={switchOpen}
+        onClose={() => setSwitchOpen(false)}
+        slot={roadmap.slot}
+        currentSubjectName={roadmap.subjectName}
+        currentPct={count.pct}
+        subjects={subjectOptions.filter(
+          (s) => s.slug !== roadmap.subjectSlug && s.slug !== otherSubjectSlug,
+        )}
+      />
 
       {/*
         A timeline rather than a stack of cards.
@@ -116,15 +218,31 @@ function RoadmapBody({ roadmap }: { roadmap: RoadmapView }) {
           aria-hidden
         />
         {roadmap.weeks.map((week, i) => (
-          <WeekBlock key={week.id} week={week} index={i} />
+          <WeekBlock
+            key={week.id}
+            week={week}
+            index={i}
+            overrides={overrides}
+            onSetStatus={onSetStatus}
+          />
         ))}
       </ol>
     </div>
   );
 }
 
-function WeekBlock({ week, index }: { week: RoadmapView['weeks'][number]; index: number }) {
-  const done = week.topics.filter((t) => t.status === 'completed').length;
+function WeekBlock({
+  week,
+  index,
+  overrides,
+  onSetStatus,
+}: {
+  week: RoadmapView['weeks'][number];
+  index: number;
+  overrides: Record<string, TopicStatus>;
+  onSetStatus: (topicId: string, status: TopicStatus) => void;
+}) {
+  const done = week.topics.filter((t) => (overrides[t.id] ?? t.status) === 'completed').length;
   const complete = week.topics.length > 0 && done === week.topics.length;
   const hasToday = week.topics.some((t) => t.isToday);
 
@@ -147,7 +265,7 @@ function WeekBlock({ week, index }: { week: RoadmapView['weeks'][number]; index:
       <Card padding="none" className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 px-5 pt-4 pb-3">
           <div className="min-w-0">
-            <p className="eyebrow">Week {week.weekNumber}</p>
+            <p className="eyebrow">Module {week.weekNumber}</p>
             <h3 className="text-fg mt-1 truncate text-base font-bold">{week.title}</h3>
           </div>
           <div className="flex items-center gap-2">
@@ -161,7 +279,12 @@ function WeekBlock({ week, index }: { week: RoadmapView['weeks'][number]; index:
         <ul className="divide-border border-border divide-y border-t">
           {week.topics.map((topic, i) => (
             <li key={topic.id}>
-              <TopicRow topic={topic} index={i} />
+              <TopicRow
+                topic={topic}
+                index={i}
+                status={overrides[topic.id] ?? topic.status}
+                onSetStatus={onSetStatus}
+              />
             </li>
           ))}
         </ul>
@@ -173,23 +296,28 @@ function WeekBlock({ week, index }: { week: RoadmapView['weeks'][number]; index:
 function TopicRow({
   topic,
   index,
+  status,
+  onSetStatus,
 }: {
   topic: RoadmapView['weeks'][number]['topics'][number];
   index: number;
+  status: TopicStatus;
+  onSetStatus: (topicId: string, status: TopicStatus) => void;
 }) {
   const reduce = useReducedMotion();
   const toast = useToast();
-  const [status, setStatus] = useState(topic.status);
   const [pending, startTransition] = useTransition();
 
   const toggle = () => {
-    const next = status === 'completed' ? 'upcoming' : 'completed';
+    const next: TopicStatus = status === 'completed' ? 'upcoming' : 'completed';
     const previous = status;
-    setStatus(next); // optimistic — the tick lands on the same frame as the tap
+    // Optimistic and lifted: the tick, the module counter, the ring and the subject tab
+    // percentage all move on the same frame as the tap.
+    onSetStatus(topic.id, next);
     startTransition(async () => {
       const result = await setTopicStatusAction(topic.id, next);
       if (!result.ok) {
-        setStatus(previous);
+        onSetStatus(topic.id, previous);
         toast.error('Could not update that topic', result.message);
       }
     });

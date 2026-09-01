@@ -82,13 +82,23 @@ export function AttendanceSheet({
     };
   }, [draft, rows.length]);
 
+  /**
+   * Rows the server has confirmed, which is what `dirty` compares against.
+   *
+   * Previously `dirty` compared the draft to the `rows` prop, and the only thing that
+   * refreshed that prop was `router.refresh()` awaited *inside* the transition — so the
+   * button kept spinning until a full dynamic page render came back, and looked stuck. Now
+   * the confirmed baseline moves as soon as the action returns; the refresh still happens,
+   * but outside the transition, where nobody is waiting on it.
+   */
+  const [saved, setSaved] = useState<Record<string, Status>>(() =>
+    Object.fromEntries(rows.filter((r) => r.status).map((r) => [r.memberId, r.status!])),
+  );
+
   const dirty = useMemo(() => {
-    const original = Object.fromEntries(
-      rows.filter((r) => r.status).map((r) => [r.memberId, r.status!]),
-    );
-    const keys = new Set([...Object.keys(draft), ...Object.keys(original)]);
-    return [...keys].some((k) => draft[k] !== original[k]);
-  }, [draft, rows]);
+    const keys = new Set([...Object.keys(draft), ...Object.keys(saved)]);
+    return [...keys].some((k) => draft[k] !== saved[k]);
+  }, [draft, saved]);
 
   function setAll(status: Status) {
     setDraft(Object.fromEntries(filtered.map((r) => [r.memberId, status])));
@@ -100,16 +110,20 @@ export function AttendanceSheet({
       toast.error('Nothing to save', 'Mark at least one student first.');
       return;
     }
+    // The button is disabled while pending, so a second submission cannot start.
     startTransition(async () => {
       const result = await markAttendanceAction(cohortId, { date, entries });
       if (!result.ok) {
         toast.error('Attendance not saved', result.message);
         return;
       }
+      setSaved({ ...draft });
       toast.success(
         'Attendance saved',
         `${result.data.marked} students updated, points recalculated`,
       );
+      // Deliberately not awaited: the save is already confirmed, and this only refreshes
+      // derived figures elsewhere on the page.
       router.refresh();
     });
   }
@@ -263,7 +277,7 @@ export function AttendanceSheet({
           <p className="text-fg-muted text-sm">
             {dirty ? 'You have unsaved changes' : 'Everything is saved'}
           </p>
-          <Button size="md" loading={pending} disabled={!dirty} onClick={save}>
+          <Button size="md" loading={pending} disabled={!dirty || pending} onClick={save}>
             Save attendance
           </Button>
         </Card>

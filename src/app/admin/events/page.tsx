@@ -39,6 +39,8 @@ export default async function EventsPage() {
         title: a.title,
         body: a.body,
         isPinned: a.isPinned,
+        isPopup: a.isPopup,
+        isPersistent: a.isPersistent,
       }))}
     />
   );

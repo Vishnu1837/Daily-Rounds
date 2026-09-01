@@ -1,6 +1,8 @@
 import { loadEnv } from './env';
+import { assertDestructiveTargetAllowed } from './guard';
 
 loadEnv();
+assertDestructiveTargetAllowed('db:seed');
 
 import { sql } from 'drizzle-orm';
 
@@ -15,6 +17,8 @@ import {
 import { bestRefMatch } from '@/lib/curriculum';
 import { DEFAULT_POINT_RULES, ledgerKey, quizPoints } from '@/lib/domain/points';
 import { hashPassword } from '@/lib/auth/password';
+import { generateRoadmapForSubject } from '@/lib/roadmap/generate';
+import { type Challenge } from '@/lib/validation';
 
 import {
   ANNOUNCEMENTS,
@@ -25,6 +29,37 @@ import {
   SUBJECTS,
   type Archetype,
 } from './seed-data';
+
+/**
+ * The subject each legacy seed template belonged to.
+ *
+ * Seed rows still name a template key because that is how the 28 fixtures were written; the
+ * roadmap they produce now comes from the syllabus, so all the key has to do is name a
+ * subject. Kept as an explicit table rather than read off the template, so deleting the
+ * curated templates later does not silently change the demo data.
+ */
+const SEED_TEMPLATE_SUBJECT: Record<string, string> = {
+  general_pathology: 'pathology',
+  systemic_pathology: 'pathology',
+  pharmacology_core: 'pharmacology',
+  medicine_clinical: 'general-medicine',
+  anatomy_upper_limb: 'anatomy',
+  physiology_core: 'physiology',
+  microbiology_core: 'microbiology',
+  obgyn_core: 'obgyn',
+};
+
+/** Plausible multi-select challenge answers per archetype, for the admin student view. */
+const SEED_CHALLENGES: Record<Archetype, Challenge[]> = {
+  exemplary: ['consistency'],
+  strong: ['procrastination', 'distractions'],
+  steady: ['poor_time_management'],
+  improving: ['low_motivation', 'dont_know_where_to_start'],
+  declining: ['sticking_to_plans', 'distractions'],
+  comeback: ['backlogs', 'low_motivation'],
+  at_risk: ['procrastination', 'backlogs', 'sticking_to_plans'],
+  struggling: ['consistency', 'procrastination', 'backlogs', 'low_motivation'],
+};
 
 const TZ = process.env.SEED_TIMEZONE ?? 'Asia/Kolkata';
 const COHORT_WEEKS = 6;
@@ -309,12 +344,20 @@ async function main() {
 
   for (const student of SEED_STUDENTS) {
     const memberId = memberByEmail.get(student.email)!;
-    const template = ROADMAP_TEMPLATES[student.roadmap]!;
-    const subject = subjectBySlug.get(template.subject)!;
+    const primarySlug = SEED_TEMPLATE_SUBJECT[student.roadmap]!;
+    // A deterministic second subject so every seeded student exercises both slots, which is
+    // what the product actually ships. Offset by 7 in course order to avoid pairing two
+    // subjects from the same phase, and never the primary itself.
+    const primaryIndex = SUBJECTS.findIndex((s) => s.slug === primarySlug);
+    const secondarySlug = SUBJECTS[(primaryIndex + 7) % SUBJECTS.length]!.slug;
+
+    const primary = subjectBySlug.get(primarySlug)!;
+    const secondary = subjectBySlug.get(secondarySlug)!;
 
     await db.insert(schema.studentGoals).values({
       memberId,
-      primarySubjectId: subject.id,
+      primarySubjectId: primary.id,
+      secondarySubjectId: secondary.id,
       cohortGoal: student.goal,
       dailyCommitmentMinutes: student.dailyMinutes,
       examName: student.exam ?? null,
@@ -323,49 +366,80 @@ async function main() {
       baselineConsistencyRating: student.baselineConsistency,
       baselineConfidence: student.baselineConfidence,
       biggestObstacle: student.obstacle,
+      challenges: SEED_CHALLENGES[student.archetype],
     });
 
-    const [roadmap] = await db
-      .insert(schema.roadmaps)
-      .values({
-        memberId,
-        subjectId: subject.id,
-        title: template.title,
-        track: template.track,
-      })
-      .returning();
+    const memberTopics: { id: string; title: string; ref: string | null; position: number }[] = [];
 
-    const weekRows = await db
-      .insert(schema.roadmapWeeks)
-      .values(
-        template.weeks.map((w, i) => ({
+    for (const [slot, subject] of [
+      ['primary', primary],
+      ['secondary', secondary],
+    ] as const) {
+      // Straight from the master syllabus — the seed uses the same generator the app does,
+      // so a seeded roadmap and a real one can never drift apart.
+      const generated = generateRoadmapForSubject(subject.slug)!;
+
+      const [roadmap] = await db
+        .insert(schema.roadmaps)
+        .values({
+          memberId,
+          subjectId: subject.id,
+          slot,
+          title: generated.title,
+          track: generated.track,
+          curriculumRef: generated.subjectSlug,
+        })
+        .returning();
+
+      const weekRows = await db
+        .insert(schema.roadmapWeeks)
+        .values(
+          generated.weeks.map((w) => ({
+            roadmapId: roadmap!.id,
+            weekNumber: w.weekNumber,
+            title: w.title,
+          })),
+        )
+        .returning();
+
+      const weekIdByNumber = new Map(weekRows.map((w) => [w.weekNumber, w.id]));
+
+      const topicValues = generated.weeks.flatMap((w) =>
+        w.topics.map((t) => ({
           roadmapId: roadmap!.id,
-          weekNumber: i + 1,
-          title: w.title,
+          weekId: weekIdByNumber.get(w.weekNumber)!,
+          title: t.title,
+          curriculumRef: t.ref,
+          description: t.description,
+          position: t.position,
+          estimatedMinutes: student.dailyMinutes,
         })),
-      )
-      .returning();
+      );
 
-    const topicValues = template.weeks.flatMap((w, wi) =>
-      w.topics.map((title, ti) => ({
-        roadmapId: roadmap!.id,
-        weekId: weekRows[wi]!.id,
-        title,
-        curriculumRef: w.ref,
-        position: wi * 100 + ti,
-        estimatedMinutes: student.dailyMinutes,
-      })),
-    );
+      const topicRows = await db.insert(schema.roadmapTopics).values(topicValues).returning();
 
-    const topicRows = await db.insert(schema.roadmapTopics).values(topicValues).returning();
+      // Only the primary subject drives the seeded study history, so the demo data reads
+      // the way a real month does: one subject carried most days, the other picked up.
+      if (slot === 'primary') {
+        memberTopics.push(
+          ...topicRows.map((t) => ({
+            id: t.id,
+            title: t.title,
+            ref: t.curriculumRef,
+            position: t.position,
+          })),
+        );
+      }
+    }
+
     topicsByMember.set(
       memberId,
-      topicRows
+      memberTopics
         .sort((a, b) => a.position - b.position)
-        .map((t) => ({ id: t.id, title: t.title, ref: t.curriculumRef })),
+        .map((t) => ({ id: t.id, title: t.title, ref: t.ref })),
     );
   }
-  console.log(`  ✓ ${SEED_STUDENTS.length} personal roadmaps with weeks and topics`);
+  console.log(`  ✓ ${SEED_STUDENTS.length} students × 2 syllabus-generated roadmaps`);
 
   // ----------------------------------------------------- events & materials
   const eventValues: (typeof schema.events.$inferInsert)[] = [

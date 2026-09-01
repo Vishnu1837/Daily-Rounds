@@ -8,6 +8,7 @@ import { Logo } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
 import { StreakFlame } from '@/components/gamification/streak-flame';
 import { cn } from '@/lib/cn';
+import { STUDENT_HOME } from '@/lib/routes';
 
 /**
  * The theme lives on `<html>` (set by an inline script before first paint, so there is no
@@ -89,7 +90,7 @@ export function TopBar({
       <div className="mx-auto flex h-15 max-w-7xl items-center justify-between gap-3 px-4 lg:px-8">
         <div className="flex items-center gap-1 lg:hidden">
           {left}
-          <Link href="/" aria-label="Daily Rounds home">
+          <Link href={STUDENT_HOME} aria-label="Daily Rounds home">
             <Logo size={30} />
           </Link>
         </div>

@@ -16,6 +16,7 @@ import {
   signUpSchema,
 } from '@/lib/validation';
 import { createHash } from 'node:crypto';
+import { homeForRole } from '@/lib/routes';
 
 export type ActionState = {
   ok?: boolean;
@@ -86,7 +87,7 @@ export async function loginAction(_prev: ActionState, formData: FormData): Promi
 
   await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
   await createSession(user.id);
-  redirect(user.role === 'admin' ? '/admin' : '/');
+  redirect(homeForRole(user.role));
 }
 
 export async function logoutAction(): Promise<void> {

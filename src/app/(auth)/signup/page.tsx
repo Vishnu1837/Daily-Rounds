@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { getCurrentUser } from '@/lib/auth/session';
+import { homeForRole } from '@/lib/routes';
 
 import { SignUpForm } from './signup-form';
 
@@ -10,7 +11,7 @@ export const metadata: Metadata = { title: 'Create your account' };
 
 export default async function SignUpPage() {
   const user = await getCurrentUser();
-  if (user) redirect(user.role === 'admin' ? '/admin' : '/');
+  if (user) redirect(homeForRole(user.role));
 
   return (
     <div className="animate-rise">

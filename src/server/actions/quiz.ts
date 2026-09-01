@@ -106,7 +106,7 @@ export async function submitQuizAction(input: {
       rules: ctx.rules,
     });
 
-    revalidatePath('/');
+    revalidatePath('/today');
     return ok({ score, total: questions.length, pointsAwarded, review });
   }, 'We could not save your answers. Please try again.');
 }
