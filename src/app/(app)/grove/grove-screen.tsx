@@ -1,4 +1,5 @@
-import { Flame, Sprout, TreeDeciduous } from 'lucide-react';
+import Link from 'next/link';
+import { Flame, Sprout, TreeDeciduous, Users } from 'lucide-react';
 
 import { EmptyPlot, Tree } from '@/components/grove/tree';
 import { Avatar } from '@/components/ui/avatar';
@@ -41,10 +42,16 @@ export function GroveScreen({ data, today }: { data: GroveData; today: ISODate }
         title="What your focus actually grew"
         description="One Pomodoro round, sat all the way through, is one tree. Walk out on a round and the stump stays."
         actions={
-          <LinkButton href="/study" size="sm">
-            <Sprout className="size-4" aria-hidden />
-            Plant a tree
-          </LinkButton>
+          <>
+            <LinkButton href="/grove/cohort" size="sm" variant="outline">
+              <Users className="size-4" aria-hidden />
+              Student groves
+            </LinkButton>
+            <LinkButton href="/study" size="sm">
+              <Sprout className="size-4" aria-hidden />
+              Plant a tree
+            </LinkButton>
+          </>
         }
       />
 
@@ -188,30 +195,40 @@ export function GroveScreen({ data, today }: { data: GroveData; today: ISODate }
                 : `${cohort.treesToday} ${cohort.treesToday === 1 ? 'tree' : 'trees'} across ${cohort.studentsPlantingToday} ${cohort.studentsPlantingToday === 1 ? 'student' : 'students'}`}
             </p>
           </div>
+          <Link
+            href="/grove/cohort"
+            className="text-pulse-700 hover:text-pulse-500 dark:text-pulse-300 text-sm font-semibold"
+          >
+            See every grove
+          </Link>
         </div>
 
         {cohort.top.length > 0 && (
           <ul className="mt-4 space-y-2">
             {cohort.top.map((person) => (
-              <li
-                key={person.name}
-                className={cn(
-                  'rounded-panel flex items-center gap-3 p-2.5',
-                  person.isYou
-                    ? 'bg-pulse-500/8 ring-pulse-500/20 ring-1 ring-inset'
-                    : 'bg-bg-sunken',
-                )}
-              >
-                <Avatar name={person.name} src={person.avatarUrl} size="sm" glow={person.isYou} />
-                <span className="text-fg min-w-0 flex-1 truncate text-sm font-semibold">
-                  {person.isYou ? 'You' : person.name}
-                </span>
-                <span className="flex items-center gap-0.5">
-                  {Array.from({ length: Math.min(person.trees, 6) }).map((_, i) => (
-                    <Tree key={i} species="neem" size={18} className="text-fg" />
-                  ))}
-                </span>
-                <span className="text-fg-muted text-sm font-bold tabular-nums">{person.trees}</span>
+              <li key={person.memberId}>
+                <Link
+                  href={`/grove/cohort/${person.memberId}`}
+                  className={cn(
+                    'tap rounded-panel flex items-center gap-3 p-2.5 transition-colors',
+                    person.isYou
+                      ? 'bg-pulse-500/8 ring-pulse-500/20 ring-1 ring-inset'
+                      : 'bg-bg-sunken hover:bg-bg-inset',
+                  )}
+                >
+                  <Avatar name={person.name} src={person.avatarUrl} size="sm" glow={person.isYou} />
+                  <span className="text-fg min-w-0 flex-1 truncate text-sm font-semibold">
+                    {person.isYou ? 'You' : person.name}
+                  </span>
+                  <span className="flex items-center gap-0.5">
+                    {Array.from({ length: Math.min(person.trees, 6) }).map((_, i) => (
+                      <Tree key={i} species="neem" size={18} className="text-fg" />
+                    ))}
+                  </span>
+                  <span className="text-fg-muted text-sm font-bold tabular-nums">
+                    {person.trees}
+                  </span>
+                </Link>
               </li>
             ))}
           </ul>

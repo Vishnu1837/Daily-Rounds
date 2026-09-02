@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { cohortMembers, focusTrees, users } from '@/db/schema';
@@ -41,6 +41,8 @@ export type LiveTree = {
 };
 
 export type CohortPlanter = {
+  /** The cohort membership, so the card can link straight to that student's grove. */
+  memberId: string;
   name: string;
   avatarUrl: string | null;
   trees: number;
@@ -170,6 +172,7 @@ async function cohortPlantersToday(ctx: MemberContext): Promise<GroveData['cohor
 
   const top = counts
     .map((c) => ({
+      memberId: c.memberId,
       name: c.name,
       avatarUrl: c.avatarUrl,
       trees: c.trees,
@@ -254,5 +257,215 @@ function toLive(row: typeof focusTrees.$inferSelect): LiveTree {
     species: row.species,
     plantedAt: row.plantedAt.toISOString(),
     dueAt: row.dueAt.toISOString(),
+  };
+}
+
+/* ------------------------------------------------------------ the cohort */
+
+/** Grown trees, broken down by species. Withered rounds never appear in a cohort view. */
+export type SpeciesCounts = Record<TreeRecord['species'], number>;
+
+export type CohortGroveRow = {
+  memberId: string;
+  name: string;
+  avatarUrl: string | null;
+  /** Grown trees, all time. */
+  trees: number;
+  species: SpeciesCounts;
+  /** Minutes of verified focus — the sum of the promised lengths of grown rounds only. */
+  focusMinutes: number;
+  /** The most recent day this student grew something, or null if they never have. */
+  lastPlantedOn: ISODate | null;
+  isYou: boolean;
+};
+
+const EMPTY_SPECIES: SpeciesCounts = {
+  sprout: 0,
+  fern: 0,
+  neem: 0,
+  banyan: 0,
+  deodar: 0,
+};
+
+/**
+ * Every student in the cohort, with what their grove adds up to.
+ *
+ * Two rules are enforced here rather than in the screen, because a screen is not a security
+ * boundary:
+ *
+ *  - Only members of the caller's own cohort are selected. There is no parameter that could
+ *    widen it, so no request can ask for another cohort's groves.
+ *  - Only `grown` rows are counted, and the projection carries no email, phone number or
+ *    anything else private — a name and a picture are all a peer ever sees.
+ *
+ * The totals are read from `focus_trees` itself, not from any cached counter, so a round
+ * that completed a second ago is included the next time this page is rendered.
+ */
+export async function getCohortGroves(ctx: MemberContext): Promise<CohortGroveRow[]> {
+  const rows = await db
+    .select({
+      memberId: cohortMembers.id,
+      name: users.fullName,
+      avatarUrl: users.avatarUrl,
+      trees: sql<number>`count(${focusTrees.id})::int`,
+      focusMinutes: sql<number>`coalesce(sum(${focusTrees.focusMinutes}), 0)::int`,
+      lastPlantedOn: sql<ISODate | null>`max(${focusTrees.date})`,
+      sprout: sql<number>`count(*) FILTER (WHERE ${focusTrees.species} = 'sprout')::int`,
+      fern: sql<number>`count(*) FILTER (WHERE ${focusTrees.species} = 'fern')::int`,
+      neem: sql<number>`count(*) FILTER (WHERE ${focusTrees.species} = 'neem')::int`,
+      banyan: sql<number>`count(*) FILTER (WHERE ${focusTrees.species} = 'banyan')::int`,
+      deodar: sql<number>`count(*) FILTER (WHERE ${focusTrees.species} = 'deodar')::int`,
+    })
+    .from(cohortMembers)
+    .innerJoin(users, eq(users.id, cohortMembers.userId))
+    /*
+     * A left join, so a student who has never planted anything still appears with a bare
+     * plot. Hiding them would turn the page into a leaderboard of the people already doing
+     * well, which is the opposite of what an accountability wall is for.
+     */
+    .leftJoin(
+      focusTrees,
+      and(eq(focusTrees.memberId, cohortMembers.id), eq(focusTrees.status, 'grown')),
+    )
+    .where(and(eq(cohortMembers.cohortId, ctx.cohort.id), eq(cohortMembers.status, 'active')))
+    .groupBy(cohortMembers.id, users.fullName, users.avatarUrl);
+
+  return rows
+    .map((row) => ({
+      memberId: row.memberId,
+      name: row.name,
+      avatarUrl: row.avatarUrl,
+      trees: row.trees,
+      species: {
+        sprout: row.sprout,
+        fern: row.fern,
+        neem: row.neem,
+        banyan: row.banyan,
+        deodar: row.deodar,
+      },
+      focusMinutes: row.focusMinutes,
+      lastPlantedOn: row.lastPlantedOn ?? null,
+      isYou: row.memberId === ctx.memberId,
+    }))
+    .sort((a, b) => b.trees - a.trees || a.name.localeCompare(b.name));
+}
+
+export type PeerGrove = {
+  memberId: string;
+  name: string;
+  avatarUrl: string | null;
+  isYou: boolean;
+  trees: number;
+  species: SpeciesCounts;
+  focusMinutes: number;
+  streak: number;
+  /** Oldest first, one entry per day of the same fortnight the student's own grove shows. */
+  days: GroveDay[];
+  /** Today's grown trees, oldest first — the plot as it stands right now. */
+  todayTrees: { id: string; species: TreeRecord['species']; focusMinutes: number }[];
+  lastPlantedOn: ISODate | null;
+};
+
+/**
+ * One classmate's grove, read-only.
+ *
+ * Returns null — never a partial view — when the member is not an active student in the
+ * caller's own cohort. That check is the whole authorization story for this screen, and it
+ * lives on the query rather than the page so no future caller can skip it.
+ *
+ * Withered rounds are excluded even though the owner sees their own. The grove already
+ * makes that distinction deliberately: a failure you look at is a correction, and a failure
+ * the whole cohort watches is just a punishment.
+ */
+export async function getPeerGrove(
+  ctx: MemberContext,
+  memberId: string,
+): Promise<PeerGrove | null> {
+  const [member] = await db
+    .select({
+      memberId: cohortMembers.id,
+      name: users.fullName,
+      avatarUrl: users.avatarUrl,
+    })
+    .from(cohortMembers)
+    .innerJoin(users, eq(users.id, cohortMembers.userId))
+    .where(
+      and(
+        eq(cohortMembers.id, memberId),
+        eq(cohortMembers.cohortId, ctx.cohort.id),
+        eq(cohortMembers.status, 'active'),
+      ),
+    )
+    .limit(1);
+
+  if (!member) return null;
+
+  const since = addDays(ctx.today, -(HISTORY_DAYS - 1));
+
+  const [allGrown, recent] = await Promise.all([
+    db
+      .select({
+        species: focusTrees.species,
+        focusMinutes: focusTrees.focusMinutes,
+        date: focusTrees.date,
+      })
+      .from(focusTrees)
+      .where(and(eq(focusTrees.memberId, memberId), eq(focusTrees.status, 'grown'))),
+    db
+      .select({
+        id: focusTrees.id,
+        species: focusTrees.species,
+        focusMinutes: focusTrees.focusMinutes,
+        date: focusTrees.date,
+        plantedAt: focusTrees.plantedAt,
+      })
+      .from(focusTrees)
+      .where(
+        and(
+          eq(focusTrees.memberId, memberId),
+          eq(focusTrees.status, 'grown'),
+          gte(focusTrees.date, since),
+        ),
+      )
+      .orderBy(focusTrees.plantedAt),
+  ]);
+
+  const species = { ...EMPTY_SPECIES };
+  let focusMinutes = 0;
+  let lastPlantedOn: ISODate | null = null;
+  for (const tree of allGrown) {
+    species[tree.species] += 1;
+    focusMinutes += tree.focusMinutes;
+    if (!lastPlantedOn || tree.date > lastPlantedOn) lastPlantedOn = tree.date;
+  }
+
+  const byDay = new Map<ISODate, GroveDay>();
+  for (const date of datesBetween(since, ctx.today)) {
+    byDay.set(date, { date, grown: 0, withered: 0, focusMinutes: 0 });
+  }
+  for (const tree of recent) {
+    const day = byDay.get(tree.date);
+    if (!day) continue;
+    day.grown += 1;
+    day.focusMinutes += tree.focusMinutes;
+  }
+
+  return {
+    memberId: member.memberId,
+    name: member.name,
+    avatarUrl: member.avatarUrl,
+    isYou: member.memberId === ctx.memberId,
+    trees: allGrown.length,
+    species,
+    focusMinutes,
+    streak: plantingStreak(
+      allGrown.map((t) => t.date),
+      ctx.today,
+    ),
+    days: [...byDay.values()],
+    todayTrees: recent
+      .filter((t) => t.date === ctx.today)
+      .map((t) => ({ id: t.id, species: t.species, focusMinutes: t.focusMinutes })),
+    lastPlantedOn,
   };
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, ChevronUp, Map as MapIcon, Pencil, Plus, Trash2 } from 'lucide-react';
 
@@ -55,6 +56,8 @@ type Assignment = {
   topicTitle: string | null;
   plannedMinutes: number | null;
   note: string | null;
+  /** 'admin' when this student's topic was assigned individually rather than in bulk. */
+  source: 'auto' | 'admin' | null;
 };
 
 type Student = {
@@ -157,6 +160,49 @@ export function RoadmapAdminScreen({
   }, [roadmapRows]);
 
   const unassigned = assignments.filter((a) => !a.topicId).length;
+  const individual = assignments.filter((a) => a.source === 'admin').length;
+
+  /**
+   * The bulk run, with its one safety rail.
+   *
+   * The server refuses to touch students whose topic was assigned individually and reports
+   * who they were. Only then does the admin get the choice to overwrite them, and taking it
+   * re-runs the same request with the flag set — so "replace everyone" is always a second,
+   * deliberate click rather than a checkbox someone left ticked.
+   */
+  async function runBulkAssign(formData: FormData, overwrite = false) {
+    if (overwrite) formData.set('overwriteIndividual', 'true');
+
+    const result = await bulkAssignAction(null, formData);
+    if (!result.ok) {
+      toast.error('Could not assign topics', result.message);
+      return;
+    }
+
+    const { assigned, skipped, skippedNames } = result.data;
+    toast.success('Topics assigned', `${assigned} students now have a topic for ${date}`);
+    router.refresh();
+
+    if (skipped === 0) return;
+
+    const names = skippedNames.slice(0, 8).join(', ');
+    const more = skippedNames.length > 8 ? `, and ${skippedNames.length - 8} more` : '';
+    const replace = window.confirm(
+      `${skipped} ${skipped === 1 ? 'student was' : 'students were'} left alone because their topic for ${date} was assigned individually: ${names}${more}.
+
+` + 'Replace their topics with the next one on their roadmap as well?',
+    );
+    if (!replace) {
+      toast.toast({
+        title: 'Individual assignments kept',
+        description: `${skipped} left unchanged.`,
+        tone: 'info',
+      });
+      return;
+    }
+
+    startTransition(() => runBulkAssign(formData, true));
+  }
 
   return (
     <div className="space-y-5">
@@ -181,25 +227,12 @@ export function RoadmapAdminScreen({
           <Card className="p-5">
             <CardHeader
               title="Assign today's topics"
-              description="Gives every active student the next uncompleted topic on their own roadmap."
+              description="Gives every active student the next uncompleted topic on their own roadmap. Students with an individually assigned topic are left alone unless you confirm."
               className="p-0"
             />
             <form
               className="mt-4 flex flex-wrap items-end gap-3"
-              action={(formData) =>
-                startTransition(async () => {
-                  const result = await bulkAssignAction(null, formData);
-                  if (!result.ok) {
-                    toast.error('Could not assign topics', result.message);
-                    return;
-                  }
-                  toast.success(
-                    'Topics assigned',
-                    `${result.data.assigned} students now have a topic for ${date}`,
-                  );
-                  router.refresh();
-                })
-              }
+              action={(formData) => startTransition(() => runBulkAssign(formData))}
             >
               <input type="hidden" name="cohortId" value={cohortId} />
               <input type="hidden" name="strategy" value="next_topic" />
@@ -223,6 +256,32 @@ export function RoadmapAdminScreen({
                 Assign next topic to everyone
               </Button>
             </form>
+          </Card>
+
+          {/*
+            Two assignment actions, deliberately in two cards.
+            The brief asks for them to sit apart so the bulk button is never the one an
+            admin reaches for when they meant to move a single student.
+          */}
+          <Card className="p-5">
+            <CardHeader
+              title="Assign a topic to one student"
+              description="Pick any topic in a student's syllabus and make it their current topic. Nobody else is affected."
+              className="p-0"
+            />
+            <p className="text-fg-muted mt-3 text-sm">
+              Open a student below and use <strong className="text-fg">Manage topics</strong>, or
+              start from the{' '}
+              <Link
+                href="/admin/students"
+                className="text-pulse-700 dark:text-pulse-300 font-semibold"
+              >
+                students list
+              </Link>
+              .
+              {individual > 0 &&
+                ` ${individual} ${individual === 1 ? 'student has' : 'students have'} an individual topic for ${date}.`}
+            </p>
           </Card>
 
           <SectionTitle
@@ -349,6 +408,13 @@ function AssignmentRow({
           </p>
         </div>
         {!assignment.topicId && <Badge tone="warning">Unassigned</Badge>}
+        {assignment.source === 'admin' && <Badge tone="iris">Individual</Badge>}
+        <Link
+          href={`/admin/students/${assignment.memberId}`}
+          className="text-pulse-700 hover:text-pulse-500 dark:text-pulse-300 shrink-0 text-sm font-semibold"
+        >
+          Manage topics
+        </Link>
         <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
           <Pencil className="size-3.5" aria-hidden />
           Edit

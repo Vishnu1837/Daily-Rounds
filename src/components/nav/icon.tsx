@@ -3,6 +3,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Home,
+  Inbox,
   Library,
   Map,
   Settings,
@@ -32,6 +33,7 @@ const ICONS = {
   sparkles: Sparkles,
   timer: Timer,
   tree: TreeDeciduous,
+  inbox: Inbox,
 } as const satisfies Record<NavIconName, unknown>;
 
 export function NavIcon({

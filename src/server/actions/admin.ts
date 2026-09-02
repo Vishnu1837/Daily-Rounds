@@ -2,7 +2,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 import { db } from '@/db/client';
@@ -28,6 +28,7 @@ import {
   studentAchievements,
   studentGoals,
   studySessions,
+  subjects,
   users,
   weeklyReviews,
 } from '@/db/schema';
@@ -44,6 +45,7 @@ import {
   eventSchema,
   fieldErrors,
   holidaySchema,
+  individualAssignmentSchema,
   materialSchema,
   pointAdjustmentSchema,
   pointRuleSchema,
@@ -1075,25 +1077,50 @@ export async function setAssignmentAction(
 /**
  * Assigns every active student their next uncompleted roadmap topic for a date.
  * This is the action that turns "27 students" into one click.
+ *
+ * It steps around students whose topic for that date was chosen by an admin by hand, and
+ * reports how many it skipped so the caller can offer to overwrite them deliberately. A
+ * bulk button that silently undoes individual work is the failure mode this whole pair of
+ * features exists to avoid.
  */
 export async function bulkAssignAction(
   _prev: unknown,
   formData: FormData,
-): Promise<Result<{ assigned: number }>> {
+): Promise<Result<{ assigned: number; skipped: number; skippedNames: string[] }>> {
   return guarded(async () => {
     const user = await requireAdminAction();
     const parsed = bulkAssignmentSchema.safeParse(Object.fromEntries(formData));
     if (!parsed.success) return fail('Check the date and duration.', fieldErrors(parsed.error));
 
-    const { cohortId, date, plannedMinutes } = parsed.data;
+    const { cohortId, date, plannedMinutes, overwriteIndividual } = parsed.data;
 
     const members = await db
-      .select({ id: cohortMembers.id })
+      .select({ id: cohortMembers.id, name: users.fullName })
       .from(cohortMembers)
-      .where(and(eq(cohortMembers.cohortId, cohortId), eq(cohortMembers.status, 'active')));
+      .innerJoin(users, eq(users.id, cohortMembers.userId))
+      .where(and(eq(cohortMembers.cohortId, cohortId), eq(cohortMembers.status, 'active')))
+      .orderBy(asc(users.fullName));
+
+    const individual = await db
+      .select({ memberId: dailyAssignments.memberId })
+      .from(dailyAssignments)
+      .innerJoin(cohortMembers, eq(cohortMembers.id, dailyAssignments.memberId))
+      .where(
+        and(
+          eq(cohortMembers.cohortId, cohortId),
+          eq(dailyAssignments.date, date),
+          eq(dailyAssignments.source, 'admin'),
+        ),
+      );
+    const pinned = new Set(individual.map((row) => row.memberId));
 
     let assigned = 0;
+    const skippedNames: string[] = [];
     for (const member of members) {
+      if (!overwriteIndividual && pinned.has(member.id)) {
+        skippedNames.push(member.name);
+        continue;
+      }
       const next = await db
         .select({ id: roadmapTopics.id })
         .from(roadmapTopics)
@@ -1116,10 +1143,19 @@ export async function bulkAssignAction(
           date,
           topicId: next[0].id,
           plannedMinutes,
+          source: 'auto',
         })
         .onConflictDoUpdate({
           target: [dailyAssignments.memberId, dailyAssignments.date],
-          set: { topicId: next[0].id, plannedMinutes },
+          // The row reverts to `auto` on an overwrite, because that is now what it is: a
+          // later bulk run has no reason to treat it as hand-picked a second time.
+          set: {
+            topicId: next[0].id,
+            plannedMinutes,
+            source: 'auto',
+            assignedByUserId: null,
+            assignedAt: null,
+          },
         });
       assigned += 1;
     }
@@ -1129,13 +1165,156 @@ export async function bulkAssignAction(
       action: 'assignment.bulk',
       entity: 'cohort',
       entityId: cohortId,
-      payload: { date, assigned },
+      payload: { date, assigned, skipped: skippedNames.length, overwriteIndividual },
     });
 
     revalidatePath('/admin/roadmaps');
+    revalidatePath('/admin/students');
     revalidatePath('/today');
-    return ok({ assigned });
+    revalidatePath('/roadmap');
+    return ok({ assigned, skipped: skippedNames.length, skippedNames });
   }, 'We could not assign topics. Please try again.');
+}
+
+/* ------------------------------------------------- individual assignment */
+
+export type IndividualAssignmentOutcome = {
+  topicTitle: string;
+  subjectName: string;
+  /** True when the assigned topic had already been completed and is now current again. */
+  wasCompleted: boolean;
+};
+
+/**
+ * Makes one topic the current topic for one student.
+ *
+ * The bulk action answers "everyone moves on today". This answers the case the brief calls
+ * out: a student who picked Anatomy is not necessarily starting at the top of the Anatomy
+ * syllabus, and until now the only way to move them was to move the whole cohort.
+ *
+ * Three things change together, which is why they belong in one action rather than in three
+ * calls from the client:
+ *
+ *  - the topic becomes `in_progress`, and whatever *was* in progress on that roadmap drops
+ *    back to `upcoming`, so "current position in the subject" has exactly one answer;
+ *  - the day's assignment points at it, which is what "Today's Topic", the study screen and
+ *    the roadmap's today badge all read;
+ *  - the row is stamped `admin`, so the next bulk run has to ask before undoing it.
+ *
+ * Completed topics elsewhere on the roadmap are never touched, and no other student is read
+ * or written.
+ */
+export async function assignIndividualTopicAction(
+  cohortId: string,
+  input: {
+    memberId: string;
+    topicId: string;
+    date: string;
+    plannedMinutes?: number;
+    allowCompleted?: boolean;
+  },
+): Promise<Result<IndividualAssignmentOutcome>> {
+  return guarded(async () => {
+    const { user } = await adminContext(cohortId);
+
+    const parsed = individualAssignmentSchema.safeParse(input);
+    if (!parsed.success) return fail('Check the highlighted fields.', fieldErrors(parsed.error));
+
+    const { memberId, topicId, date, plannedMinutes, allowCompleted } = parsed.data;
+    await assertMemberInCohort(memberId, cohortId);
+
+    /*
+     * The topic is looked up *through* the student's own roadmap. That single join is the
+     * ownership check: a topic id belonging to another student's roadmap — or to no roadmap
+     * at all — simply returns no row, so a tampered request cannot move someone else's plan.
+     */
+    const [topic] = await db
+      .select({
+        id: roadmapTopics.id,
+        title: roadmapTopics.title,
+        status: roadmapTopics.status,
+        roadmapId: roadmapTopics.roadmapId,
+        subjectName: subjects.name,
+      })
+      .from(roadmapTopics)
+      .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
+      .innerJoin(subjects, eq(subjects.id, roadmaps.subjectId))
+      .where(and(eq(roadmapTopics.id, topicId), eq(roadmaps.memberId, memberId)))
+      .limit(1);
+
+    if (!topic) return fail('That topic is not on this student’s roadmap.');
+
+    const wasCompleted = topic.status === 'completed';
+    if (wasCompleted && !allowCompleted) {
+      return fail(
+        `${topic.title} has already been completed. Confirm the reassignment to make it current again.`,
+      );
+    }
+
+    // Only `in_progress` is cleared. Completed work stays completed — the brief is explicit
+    // that reassigning a topic must not erase what the student has already finished.
+    await db
+      .update(roadmapTopics)
+      .set({ status: 'upcoming' })
+      .where(
+        and(
+          eq(roadmapTopics.roadmapId, topic.roadmapId),
+          eq(roadmapTopics.status, 'in_progress'),
+          ne(roadmapTopics.id, topic.id),
+        ),
+      );
+
+    // `completedAt` is deliberately left as it was: it is the record of when this topic was
+    // first finished, and the warning above already told the admin this is a redo.
+    await db
+      .update(roadmapTopics)
+      .set({ status: 'in_progress' })
+      .where(eq(roadmapTopics.id, topic.id));
+
+    const stamp = {
+      topicId: topic.id,
+      plannedMinutes,
+      source: 'admin' as const,
+      assignedByUserId: user.id,
+      assignedAt: new Date(),
+    };
+
+    await db
+      .insert(dailyAssignments)
+      .values({ memberId, date, ...stamp })
+      .onConflictDoUpdate({
+        target: [dailyAssignments.memberId, dailyAssignments.date],
+        set: stamp,
+      });
+
+    await recordAudit({
+      actorUserId: user.id,
+      action: 'assignment.individual',
+      entity: 'cohort_member',
+      entityId: memberId,
+      payload: {
+        date,
+        topicId: topic.id,
+        topicTitle: topic.title,
+        subject: topic.subjectName,
+        reassignedCompleted: wasCompleted,
+      },
+    });
+
+    revalidatePath('/admin/roadmaps');
+    revalidatePath('/admin/students');
+    revalidatePath(`/admin/students/${memberId}`);
+    revalidatePath('/today');
+    revalidatePath('/roadmap');
+    revalidatePath('/study');
+    revalidatePath('/progress');
+
+    return ok({
+      topicTitle: topic.title,
+      subjectName: topic.subjectName,
+      wasCompleted,
+    });
+  }, 'We could not assign that topic. Please try again.');
 }
 
 /* ------------------------------------------------- events & announcements */

@@ -141,6 +141,13 @@ export async function growTreeAction(treeId: string): Promise<Result<GrowOutcome
       );
 
     revalidatePath('/grove');
+    /*
+     * The cohort wall counts this tree the moment it grows, so both cohort surfaces are
+     * invalidated here too — otherwise a classmate who had the list open would keep seeing
+     * the count from before the round finished.
+     */
+    revalidatePath('/grove/cohort');
+    revalidatePath(`/grove/cohort/${ctx.memberId}`);
     revalidatePath('/today');
     return ok({
       focusMinutes: tree.focusMinutes,

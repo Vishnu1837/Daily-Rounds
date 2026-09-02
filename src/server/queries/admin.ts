@@ -619,6 +619,8 @@ export async function getAssignmentsForDate(cohortId: string, date: ISODate) {
       topicTitle: roadmapTopics.title,
       plannedMinutes: dailyAssignments.plannedMinutes,
       note: dailyAssignments.note,
+      /** 'admin' when this topic was picked for this student individually. */
+      source: dailyAssignments.source,
     })
     .from(cohortMembers)
     .innerJoin(users, eq(users.id, cohortMembers.userId))
@@ -654,3 +656,130 @@ export async function getEndOfCohortReport(ctx: CohortCtx, memberId: string) {
 }
 
 export const nextWeekStart = (d: ISODate) => addDays(weekStart(d), 7);
+
+/* ----------------------------------------------- individual topic picker */
+
+export type TopicPlanTopic = {
+  id: string;
+  title: string;
+  status: 'upcoming' | 'in_progress' | 'completed';
+  position: number;
+  /** True for the topic today's assignment points at. */
+  isToday: boolean;
+};
+
+export type TopicPlanSubject = {
+  roadmapId: string;
+  slot: 'primary' | 'secondary';
+  subjectName: string;
+  subjectSlug: string;
+  completed: number;
+  total: number;
+  /** The topic the student is on: whatever is in progress, else the first one still to do. */
+  current: { id: string; title: string; position: number } | null;
+  /** Modules, in teaching order — the syllabus hierarchy the admin browses. */
+  modules: {
+    id: string;
+    number: number;
+    title: string;
+    topics: TopicPlanTopic[];
+  }[];
+};
+
+export type StudentTopicPlan = {
+  date: ISODate;
+  todayTopicId: string | null;
+  /** 'admin' when today's topic was chosen for this student by hand. */
+  todaySource: 'auto' | 'admin' | null;
+  subjects: TopicPlanSubject[];
+};
+
+/**
+ * One student's syllabus, shaped for the "assign an individual topic" picker.
+ *
+ * Built from the student's own roadmaps rather than from the master curriculum tree, and
+ * that is the important decision: a roadmap is generated *from* the syllabus in teaching
+ * order, so browsing it gives the admin the same hierarchy while guaranteeing that whatever
+ * they pick is a row that already exists for this student. Picking a raw curriculum node
+ * would leave the assignment pointing at nothing the roadmap, the progress bar or the
+ * "next topic" logic could see.
+ */
+export async function getStudentTopicPlan(
+  cohortId: string,
+  memberId: string,
+  date: ISODate,
+): Promise<StudentTopicPlan> {
+  const [rows, assignment] = await Promise.all([
+    getStudentRoadmaps(cohortId, memberId),
+    db
+      .select({ topicId: dailyAssignments.topicId, source: dailyAssignments.source })
+      .from(dailyAssignments)
+      .where(and(eq(dailyAssignments.memberId, memberId), eq(dailyAssignments.date, date)))
+      .limit(1),
+  ]);
+
+  const todayTopicId = assignment[0]?.topicId ?? null;
+  const subjects = new Map<string, TopicPlanSubject>();
+
+  for (const row of rows) {
+    let subject = subjects.get(row.roadmapId);
+    if (!subject) {
+      subject = {
+        roadmapId: row.roadmapId,
+        slot: row.slot,
+        subjectName: row.subjectName,
+        subjectSlug: row.subjectSlug,
+        completed: 0,
+        total: 0,
+        current: null,
+        modules: [],
+      };
+      subjects.set(row.roadmapId, subject);
+    }
+    if (!row.topicId) continue;
+
+    const moduleId = row.weekId ?? 'unscheduled';
+    let group = subject.modules.find((m) => m.id === moduleId);
+    if (!group) {
+      group = {
+        id: moduleId,
+        number: row.weekNumber ?? 99,
+        title: row.weekTitle ?? 'Unscheduled topics',
+        topics: [],
+      };
+      subject.modules.push(group);
+    }
+
+    group.topics.push({
+      id: row.topicId,
+      title: row.topicTitle!,
+      status: row.topicStatus!,
+      position: row.position ?? 0,
+      isToday: row.topicId === todayTopicId,
+    });
+
+    subject.total += 1;
+    if (row.topicStatus === 'completed') subject.completed += 1;
+  }
+
+  for (const subject of subjects.values()) {
+    subject.modules.sort((a, b) => a.number - b.number);
+    for (const group of subject.modules) group.topics.sort((a, b) => a.position - b.position);
+
+    const flat = subject.modules.flatMap((m) => m.topics).sort((a, b) => a.position - b.position);
+    const current =
+      flat.find((t) => t.status === 'in_progress') ?? flat.find((t) => t.status !== 'completed');
+    subject.current = current
+      ? { id: current.id, title: current.title, position: current.position }
+      : null;
+  }
+
+  return {
+    date,
+    todayTopicId,
+    todaySource: assignment[0]?.source ?? null,
+    subjects: [...subjects.values()].sort((a, b) =>
+      a.slot === b.slot ? 0 : a.slot === 'primary' ? -1 : 1,
+    ),
+  };
+}

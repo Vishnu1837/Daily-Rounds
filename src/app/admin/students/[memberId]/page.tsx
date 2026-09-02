@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 
 import { requireAdmin } from '@/lib/auth/guards';
 import { getCohortContext, getPrimaryCohort } from '@/server/context';
-import { getStudentDetail } from '@/server/queries/admin';
+import { getStudentDetail, getStudentTopicPlan } from '@/server/queries/admin';
 
 import { StudentDetailScreen } from './student-detail';
 
@@ -23,7 +23,13 @@ export default async function StudentDetailPage({
   if (!ctx) redirect('/admin/no-cohort');
 
   const { memberId } = await params;
-  const detail = await getStudentDetail(ctx, memberId);
+
+  // Both reads key on the same member and neither depends on the other, so they go out
+  // together rather than adding a serial round trip to the page.
+  const [detail, topicPlan] = await Promise.all([
+    getStudentDetail(ctx, memberId),
+    getStudentTopicPlan(cohort.id, memberId, ctx.today),
+  ]);
   if (!detail) notFound();
 
   return (
@@ -32,6 +38,7 @@ export default async function StudentDetailPage({
       today={ctx.today}
       cohortEnded={ctx.today > ctx.calendar.endDate}
       detail={detail}
+      topicPlan={topicPlan}
     />
   );
 }

@@ -82,6 +82,24 @@ export function WaitlistForm() {
           )}
         </EdField>
 
+        {/*
+          Email is optional but collected, because it is the second thing the backend
+          de-duplicates on: someone who comes back a fortnight later and types their number
+          slightly differently should update their own entry, not create a rival one.
+        */}
+        <EdField label="Email" optional error={errors?.email} hint="If you would rather we wrote.">
+          {(props) => (
+            <input
+              {...props}
+              name="email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@college.edu"
+              className="ed-input"
+            />
+          )}
+        </EdField>
+
         <EdField label="Year of study" optional>
           {(props) => (
             <select {...props} name="mbbsYear" defaultValue="" className="ed-input">

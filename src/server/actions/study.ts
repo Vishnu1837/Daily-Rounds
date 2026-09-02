@@ -1,6 +1,6 @@
 'use server';
 
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 import { db } from '@/db/client';
@@ -296,7 +296,15 @@ export async function completeTargetAction(): Promise<Result<SettleSummary>> {
   }, "We could not mark today's target complete. Please try again.");
 }
 
-/** Toggles a roadmap topic's state from the roadmap screen. */
+/**
+ * Toggles a roadmap topic's state from the roadmap screen.
+ *
+ * A student may record what they have *done* — tick a topic off, or untick one they ticked
+ * by mistake. They may not nominate what they do *next*: which topic is current is an admin
+ * decision, and `in_progress` is how that decision is stored. So the transition is refused
+ * here rather than merely being absent from the UI, because hiding a button is not a
+ * permission check and this action is a public endpoint like any other.
+ */
 export async function setTopicStatusAction(
   topicId: string,
   status: 'upcoming' | 'in_progress' | 'completed',
@@ -304,14 +312,22 @@ export async function setTopicStatusAction(
   return guarded(async () => {
     const ctx = await context();
 
-    const owned = await db
-      .select({ id: roadmapTopics.id })
+    if (status === 'in_progress') {
+      return fail('Your cohort lead sets which topic is current. You can still tick topics off.');
+    }
+
+    const [owned] = await db
+      .select({
+        id: roadmapTopics.id,
+        roadmapId: roadmapTopics.roadmapId,
+        position: roadmapTopics.position,
+      })
       .from(roadmapTopics)
       .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
       .where(and(eq(roadmapTopics.id, topicId), eq(roadmaps.memberId, ctx.memberId)))
       .limit(1);
 
-    if (owned.length === 0) return fail('That topic is not on your roadmap.');
+    if (!owned) return fail('That topic is not on your roadmap.');
 
     await db
       .update(roadmapTopics)
@@ -321,7 +337,7 @@ export async function setTopicStatusAction(
     // Move the pointer on. Completing a topic should make the next incomplete one current
     // straight away, so a student who finishes three topics in one sitting is never told to
     // wait for tomorrow — the brief is explicit that topics are not calendar-locked.
-    if (status === 'completed') await advanceCurrentTopic(ctx.memberId);
+    if (status === 'completed') await advanceCurrentTopic(ctx.memberId, owned);
 
     revalidatePath('/roadmap');
     revalidatePath('/today');
@@ -330,21 +346,64 @@ export async function setTopicStatusAction(
 }
 
 /**
- * Marks the earliest incomplete topic as in-progress, and nothing else.
+ * Marks the next incomplete topic as in-progress, and nothing else.
  *
- * Runs across both active roadmaps in slot order, so the primary subject is finished before
- * the secondary becomes 'current' — while leaving the student free to tick any topic in
- * either subject whenever they like.
+ * "Next" is relative to the topic that was just finished, not to the top of the roadmap.
+ * That matters now that an admin can drop a student anywhere in the syllabus: a student
+ * moved to Brachial Plexus should carry on to the topic *after* it, not be thrown back to
+ * the first thing in Anatomy they never did.
+ *
+ * The three attempts, in order:
+ *
+ *  1. the next topic by position in the same subject — the syllabus order the brief asks for;
+ *  2. failing that, anything still upcoming in that subject, which is how earlier topics an
+ *     admin skipped past are eventually picked back up;
+ *  3. failing that, the earliest upcoming topic across both roadmaps in slot order, so
+ *     finishing a subject hands over to the other one.
  */
-async function advanceCurrentTopic(memberId: string): Promise<void> {
-  const [next] = await db
-    .select({ id: roadmapTopics.id })
-    .from(roadmapTopics)
-    .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
-    .where(and(eq(roadmaps.memberId, memberId), eq(roadmapTopics.status, 'upcoming')))
-    .orderBy(asc(roadmaps.slot), asc(roadmapTopics.position))
-    .limit(1);
+async function advanceCurrentTopic(
+  memberId: string,
+  completed?: { roadmapId: string; position: number },
+): Promise<void> {
+  const upcoming = eq(roadmapTopics.status, 'upcoming');
 
+  const withinSubject = completed
+    ? await db
+        .select({ id: roadmapTopics.id })
+        .from(roadmapTopics)
+        .where(
+          and(
+            eq(roadmapTopics.roadmapId, completed.roadmapId),
+            upcoming,
+            gt(roadmapTopics.position, completed.position),
+          ),
+        )
+        .orderBy(asc(roadmapTopics.position))
+        .limit(1)
+    : [];
+
+  const earlierInSubject =
+    withinSubject.length === 0 && completed
+      ? await db
+          .select({ id: roadmapTopics.id })
+          .from(roadmapTopics)
+          .where(and(eq(roadmapTopics.roadmapId, completed.roadmapId), upcoming))
+          .orderBy(asc(roadmapTopics.position))
+          .limit(1)
+      : [];
+
+  const anywhere =
+    withinSubject.length === 0 && earlierInSubject.length === 0
+      ? await db
+          .select({ id: roadmapTopics.id })
+          .from(roadmapTopics)
+          .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
+          .where(and(eq(roadmaps.memberId, memberId), upcoming))
+          .orderBy(asc(roadmaps.slot), asc(roadmapTopics.position))
+          .limit(1)
+      : [];
+
+  const next = withinSubject[0] ?? earlierInSubject[0] ?? anywhere[0];
   if (!next) return;
 
   await db

@@ -53,28 +53,30 @@ Every seeded student uses the same password. Seed credentials are configurable �
 
 ### For students
 
-| Screen            | What it answers                                                       |
-| ----------------- | --------------------------------------------------------------------- |
-| **Home**          | What do I need to do today? How am I doing? What happens next?        |
-| **Study session** | Pomodoro rounds that plant a tree — leave the tab and it withers      |
-| **Grove**         | Every round you sat through, every one you walked out on              |
-| **Check-In**      | The 45-second daily ritual that records what actually happened        |
-| **Roadmap**       | My own topic plan, organised by subject rather than by year group     |
-| **Calendar**      | What was planned and what actually happened, day by day               |
-| **Progress**      | Consistency, heatmap, week-by-week trend, achievements, points ledger |
-| **Leaderboard**   | Where I stand — and five different ways to be recognised              |
-| **Syllabus**      | The whole MBBS course — 19 subjects, searchable down to the node      |
-| **Materials**     | Resources grouped by topic, plus optional knowledge checks            |
-| **Profile**       | My details, my commitment, my account                                 |
+| Screen            | What it answers                                                           |
+| ----------------- | ------------------------------------------------------------------------- |
+| **Home**          | What do I need to do today? How am I doing? What happens next?            |
+| **Study session** | Pomodoro rounds that plant a tree — leave the tab and it withers          |
+| **Grove**         | Every round you sat through, every one you walked out on                  |
+| **Cohort groves** | Every classmate's grove, read-only — who is actually putting the hours in |
+| **Check-In**      | The 45-second daily ritual that records what actually happened            |
+| **Roadmap**       | My own topic plan, organised by subject rather than by year group         |
+| **Calendar**      | What was planned and what actually happened, day by day                   |
+| **Progress**      | Consistency, heatmap, week-by-week trend, achievements, points ledger     |
+| **Leaderboard**   | Where I stand — and five different ways to be recognised                  |
+| **Syllabus**      | The whole MBBS course — 19 subjects, searchable down to the node          |
+| **Materials**     | Resources grouped by topic, plus optional knowledge checks                |
+| **Profile**       | My details, my commitment, my account                                     |
 
 ### For the cohort lead
 
 Overview with cohort health and a ranked "students needing attention" list · bulk attendance
 marking · per-student deep dive with full history · roadmap builder with reorder and curated
-templates · one-click daily topic assignment for the whole cohort · check-in review with
-obstacle patterns · events and announcements · materials · cohort settings covering study
-days, holidays, the Meet link, scoring values and risk thresholds · auditable score
-corrections · end-of-cohort reports.
+templates · one-click daily topic assignment for the whole cohort, plus per-student topic
+assignment anywhere in their syllabus · the next-cohort waitlist with status tracking and
+CSV export · check-in review with obstacle patterns · events and announcements · materials ·
+cohort settings covering study days, holidays, the Meet link, scoring values and risk
+thresholds · auditable score corrections · end-of-cohort reports.
 
 Everything an admin needs is in the UI. Running the cohort never requires touching the
 database.

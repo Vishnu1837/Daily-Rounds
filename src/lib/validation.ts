@@ -415,6 +415,16 @@ export const bulkAssignmentSchema = z.object({
   plannedMinutes: z.coerce.number().int().min(5).max(720),
   /** Assign each student the next uncompleted topic on their own roadmap. */
   strategy: z.literal('next_topic'),
+  /**
+   * Replace topics an admin assigned to individual students by hand.
+   *
+   * Absent, the bulk run skips those students and reports how many it left alone, so the
+   * admin gets a confirmation before a morning of individual work is overwritten.
+   */
+  overwriteIndividual: z
+    .union([z.boolean(), z.literal('true'), z.literal('false'), z.literal('on'), z.literal('')])
+    .optional()
+    .transform((v) => v === true || v === 'true' || v === 'on'),
 });
 
 export const materialSchema = z.object({
@@ -638,3 +648,39 @@ export function fieldErrors(error: z.ZodError): FieldErrors {
   }
   return out;
 }
+
+/* ------------------------------------------------------- waitlist (admin) */
+
+export const waitlistStatusSchema = z.object({
+  entryId: z.string().uuid(),
+  status: z.enum(['new', 'contacted', 'enrolled', 'declined']),
+});
+
+export const waitlistNoteSchema = z.object({
+  entryId: z.string().uuid(),
+  note: z
+    .string()
+    .trim()
+    .max(1000)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+});
+
+/* ------------------------------------------------ individual topic assign */
+
+/**
+ * An admin pinning one student to one topic.
+ *
+ * `allowCompleted` is the admin's answer to the "they already finished this" warning, and
+ * it is checked on the server rather than being a UI-only confirmation: the point of the
+ * warning is that reassigning finished work is a decision, so the decision has to reach the
+ * write that performs it.
+ */
+export const individualAssignmentSchema = z.object({
+  memberId: z.string().uuid(),
+  topicId: z.string().uuid(),
+  date: isoDateSchema,
+  plannedMinutes: z.coerce.number().int().min(5).max(720).default(90),
+  allowCompleted: z.coerce.boolean().optional().default(false),
+});

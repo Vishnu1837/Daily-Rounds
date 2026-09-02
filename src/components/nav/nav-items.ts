@@ -12,6 +12,7 @@ export type NavIconName =
   | 'sparkles'
   | 'timer'
   | 'tree'
+  | 'inbox'
   | 'users';
 
 export type NavItem = {
@@ -167,6 +168,14 @@ export const ADMIN_NAV: NavItem[] = [
     icon: 'book',
     primary: false,
     group: 'Content',
+  },
+  {
+    href: '/admin/waitlist',
+    label: 'Waitlist',
+    short: 'Waitlist',
+    icon: 'inbox',
+    primary: false,
+    group: 'Cohort admin',
   },
   {
     href: '/admin/settings',

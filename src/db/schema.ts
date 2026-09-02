@@ -412,10 +412,25 @@ export const dailyAssignments = pgTable(
     topicId: uuid('topic_id').references(() => roadmapTopics.id, { onDelete: 'set null' }),
     plannedMinutes: integer('planned_minutes').notNull().default(90),
     note: text('note'),
+    /**
+     * Where this row came from: `auto` for the bulk run and the onboarding fallback,
+     * `admin` for a topic an admin chose for this one student.
+     *
+     * Bulk assignment reads this before it writes. Without it, "assign the next topic to
+     * everyone" would quietly undo every individual assignment made that morning, which is
+     * the one thing the two features must never do to each other.
+     */
+    source: varchar('source', { length: 16 }).$type<AssignmentSource>().notNull().default('auto'),
+    assignedByUserId: uuid('assigned_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    assignedAt: timestamp('assigned_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('daily_assignment_unique').on(t.memberId, t.date)],
 );
+
+export type AssignmentSource = 'auto' | 'admin';
 
 /* --------------------------------------------------------- study sessions */
 
@@ -811,10 +826,19 @@ export const waitlistEntries = pgTable(
     status: waitlistStatusEnum('status').notNull().default('new'),
     note: text('note'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('waitlist_created_idx').on(t.createdAt),
     uniqueIndex('waitlist_whatsapp_unique').on(t.whatsapp),
+    /*
+     * Case-insensitive and partial, because most entries have no email at all and a plain
+     * unique index would let exactly one of them exist. Declared here so `drizzle-kit`
+     * stays in step with migration 0007; the migration is what actually creates it.
+     */
+    uniqueIndex('waitlist_email_unique')
+      .on(sql`lower(${t.email})`)
+      .where(sql`${t.email} IS NOT NULL`),
   ],
 );
 

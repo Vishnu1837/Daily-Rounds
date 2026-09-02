@@ -25,7 +25,9 @@ import {
   deleteStudentAction,
   updateStudentAction,
 } from '@/server/actions/admin';
-import type { getStudentDetail } from '@/server/queries/admin';
+import type { StudentTopicPlan, getStudentDetail } from '@/server/queries/admin';
+
+import { ManageTopicsPanel } from './assign-topic';
 
 type Detail = NonNullable<Awaited<ReturnType<typeof getStudentDetail>>>;
 
@@ -34,11 +36,13 @@ export function StudentDetailScreen({
   today,
   cohortEnded,
   detail,
+  topicPlan,
 }: {
   cohortId: string;
   today: string;
   cohortEnded: boolean;
   detail: Detail;
+  topicPlan: StudentTopicPlan;
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
@@ -133,6 +137,14 @@ export function StudentDetailScreen({
         <Stat label="Late" value={String(detail.attendance.late)} />
         <Stat label="Absent" value={String(detail.attendance.absent)} />
       </div>
+
+      {/* ----------------------------------------------------------- topics */}
+      <ManageTopicsPanel
+        cohortId={cohortId}
+        memberId={member.memberId}
+        studentName={member.name}
+        plan={topicPlan}
+      />
 
       {/* ----------------------------------------------------------- charts */}
       <Card>
