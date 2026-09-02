@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { requireOnboardedUser } from '@/lib/auth/guards';
 import { getMemberContext } from '@/server/context';
 import { getStudyGrove } from '@/server/queries/grove';
-import { getHomeData, getQuizForTopic } from '@/server/queries/student';
+import { getQuizForTopic, getStudySnapshot } from '@/server/queries/student';
 
 import { StudySessionScreen } from './study-screen';
 
@@ -16,21 +16,19 @@ export default async function StudyPage() {
   const ctx = await getMemberContext(user);
   if (!ctx) redirect('/admin');
 
-  const home = await getHomeData(ctx);
-  const [quiz, grove] = await Promise.all([
-    getQuizForTopic(home.assignment?.topicRef ?? null),
-    getStudyGrove(ctx),
-  ]);
+  // The grove does not depend on the snapshot, so it starts in the same tick.
+  const [snapshot, grove] = await Promise.all([getStudySnapshot(ctx), getStudyGrove(ctx)]);
+  const quiz = await getQuizForTopic(snapshot.assignment?.topicRef ?? null);
 
   return (
     <StudySessionScreen
-      topicTitle={home.assignment?.topicTitle ?? null}
-      subjectName={home.assignment?.subjectName ?? null}
-      plannedMinutes={home.assignment?.plannedMinutes ?? 90}
-      initialSession={home.session}
-      blockDone={home.tasks.find((t) => t.key === 'study_block_completed')?.done ?? false}
-      targetDone={home.tasks.find((t) => t.key === 'daily_target_completed')?.done ?? false}
-      checkedIn={home.checkedIn}
+      topicTitle={snapshot.assignment?.topicTitle ?? null}
+      subjectName={snapshot.assignment?.subjectName ?? null}
+      plannedMinutes={snapshot.assignment?.plannedMinutes ?? 90}
+      initialSession={snapshot.session}
+      blockDone={snapshot.blockDone}
+      targetDone={snapshot.targetDone}
+      checkedIn={snapshot.checkedIn}
       quizId={quiz?.id ?? null}
       serverNow={new Date().toISOString()}
       grove={grove}

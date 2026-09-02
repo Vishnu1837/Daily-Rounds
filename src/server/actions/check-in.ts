@@ -11,7 +11,7 @@ import { calculateComebackState } from '@/lib/domain/streak';
 import { minDate } from '@/lib/domain/calendar';
 import { checkInSchema, fieldErrors, weeklyReviewSchema } from '@/lib/validation';
 import { getMemberContext } from '@/server/context';
-import { awardPoints, loadActivity, settleDay } from '@/server/scoring';
+import { awardMany, awardPoints, loadActivity, settleDay } from '@/server/scoring';
 
 import type { SettleSummary } from './study';
 import { type Result, fail, guarded, ok } from './shared';
@@ -52,17 +52,15 @@ export async function submitCheckInAction(
       return fail('You can only check in for today.');
     }
 
-    const existing = await db
-      .select({ id: checkIns.id })
-      .from(checkIns)
-      .where(and(eq(checkIns.memberId, ctx.memberId), eq(checkIns.date, ctx.today)))
-      .limit(1);
-
-    const activity = await loadActivity(
-      ctx.memberId,
-      ctx.calendar.startDate,
-      minDate(ctx.today, ctx.calendar.endDate),
-    );
+    // Independent reads; neither needs the other's answer.
+    const [existing, activity] = await Promise.all([
+      db
+        .select({ id: checkIns.id })
+        .from(checkIns)
+        .where(and(eq(checkIns.memberId, ctx.memberId), eq(checkIns.date, ctx.today)))
+        .limit(1),
+      loadActivity(ctx.memberId, ctx.calendar.startDate, minDate(ctx.today, ctx.calendar.endDate)),
+    ]);
     const comeback = calculateComebackState(ctx.calendar, activity.showedUp, ctx.today);
 
     const values = {
@@ -98,63 +96,33 @@ export async function submitCheckInAction(
         },
       });
 
-    let pointsFromCheckIn = 0;
-
-    if (
-      await awardPoints({
+    /*
+     * Every behaviour this check-in can pay for, written in one statement. Each still
+     * carries its own idempotency key, so re-submitting a check-in pays nothing a second
+     * time; only the keys the database actually accepted are counted below.
+     *
+     * Completing the target through the check-in counts the same as doing it on the study
+     * screen — one idempotency key covers both routes.
+     */
+    const awards = [
+      { event: 'daily_check_in' as const, when: true },
+      { event: 'tomorrow_plan' as const, when: Boolean(input.tomorrowTarget) },
+      { event: 'reflection' as const, when: Boolean(input.reflection) },
+      { event: 'daily_target_completed' as const, when: input.completion === 'completed' },
+    ]
+      .filter((a) => a.when)
+      .map((a) => ({
         memberId: ctx.memberId,
-        event: 'daily_check_in',
-        points: ctx.rules.daily_check_in,
+        event: a.event,
+        points: ctx.rules[a.event],
         occurredOn: ctx.today,
-        idempotencyKey: ledgerKey.daily('daily_check_in', ctx.memberId, ctx.today),
-      })
-    ) {
-      pointsFromCheckIn += ctx.rules.daily_check_in;
-    }
+        idempotencyKey: ledgerKey.daily(a.event, ctx.memberId, ctx.today),
+      }));
 
-    if (input.tomorrowTarget) {
-      if (
-        await awardPoints({
-          memberId: ctx.memberId,
-          event: 'tomorrow_plan',
-          points: ctx.rules.tomorrow_plan,
-          occurredOn: ctx.today,
-          idempotencyKey: ledgerKey.daily('tomorrow_plan', ctx.memberId, ctx.today),
-        })
-      ) {
-        pointsFromCheckIn += ctx.rules.tomorrow_plan;
-      }
-    }
-
-    if (input.reflection) {
-      if (
-        await awardPoints({
-          memberId: ctx.memberId,
-          event: 'reflection',
-          points: ctx.rules.reflection,
-          occurredOn: ctx.today,
-          idempotencyKey: ledgerKey.daily('reflection', ctx.memberId, ctx.today),
-        })
-      ) {
-        pointsFromCheckIn += ctx.rules.reflection;
-      }
-    }
-
-    // Completing the target through the check-in counts the same as doing it on the
-    // study screen — one idempotency key covers both routes.
-    if (input.completion === 'completed') {
-      if (
-        await awardPoints({
-          memberId: ctx.memberId,
-          event: 'daily_target_completed',
-          points: ctx.rules.daily_target_completed,
-          occurredOn: ctx.today,
-          idempotencyKey: ledgerKey.daily('daily_target_completed', ctx.memberId, ctx.today),
-        })
-      ) {
-        pointsFromCheckIn += ctx.rules.daily_target_completed;
-      }
-    }
+    const written = await awardMany(awards);
+    const pointsFromCheckIn = awards
+      .filter((a) => written.has(a.idempotencyKey))
+      .reduce((sum, a) => sum + a.points, 0);
 
     const outcome = await settleDay({
       memberId: ctx.memberId,

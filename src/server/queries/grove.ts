@@ -73,11 +73,19 @@ export type GroveData = {
  * grove can never show a tree that has been "growing" since last Tuesday.
  */
 export async function getGroveData(ctx: MemberContext): Promise<GroveData> {
-  await sweepAbandonedTrees(ctx.memberId);
-
   const since = addDays(ctx.today, -(HISTORY_DAYS - 1));
 
-  const [rows, live, cohortRows] = await Promise.all([
+  /*
+   * The sweep only ever moves this student's own rows from `growing` to `withered`, and the
+   * cohort card counts `grown` rows across everyone else — so the two cannot affect each
+   * other and there is no reason for the cohort read to wait behind the write.
+   */
+  const [, cohortRows] = await Promise.all([
+    sweepAbandonedTrees(ctx.memberId),
+    cohortPlantersToday(ctx),
+  ]);
+
+  const [rows, live] = await Promise.all([
     db
       .select()
       .from(focusTrees)
@@ -89,7 +97,6 @@ export async function getGroveData(ctx: MemberContext): Promise<GroveData> {
       .where(and(eq(focusTrees.memberId, ctx.memberId), eq(focusTrees.status, 'growing')))
       .orderBy(desc(focusTrees.plantedAt))
       .limit(1),
-    cohortPlantersToday(ctx),
   ]);
 
   const trees = rows.map(toRecord);
@@ -133,39 +140,41 @@ export async function getGroveData(ctx: MemberContext): Promise<GroveData> {
  * correction and a failure shown to everyone else is just a punishment.
  */
 async function cohortPlantersToday(ctx: MemberContext): Promise<GroveData['cohort']> {
-  const members = await db
-    .select({ memberId: cohortMembers.id, name: users.fullName, avatarUrl: users.avatarUrl })
-    .from(cohortMembers)
-    .innerJoin(users, eq(users.id, cohortMembers.userId))
-    .where(and(eq(cohortMembers.cohortId, ctx.cohort.id), eq(cohortMembers.status, 'active')));
-
-  if (members.length === 0) return { treesToday: 0, studentsPlantingToday: 0, top: [] };
-
+  /*
+   * One grouped join rather than "fetch the roster, then count against it".
+   *
+   * Only members who actually grew something today can appear here, so joining the counts
+   * to the roster inside the database returns exactly the rows this card renders — and
+   * saves the round trip that fetching the roster first cost, on a screen where it was a
+   * third of the total time.
+   */
   const counts = await db
-    .select({ memberId: focusTrees.memberId, trees: sql<number>`count(*)::int` })
+    .select({
+      memberId: focusTrees.memberId,
+      name: users.fullName,
+      avatarUrl: users.avatarUrl,
+      trees: sql<number>`count(*)::int`,
+    })
     .from(focusTrees)
+    .innerJoin(cohortMembers, eq(cohortMembers.id, focusTrees.memberId))
+    .innerJoin(users, eq(users.id, cohortMembers.userId))
     .where(
       and(
-        inArray(
-          focusTrees.memberId,
-          members.map((m) => m.memberId),
-        ),
+        eq(cohortMembers.cohortId, ctx.cohort.id),
+        eq(cohortMembers.status, 'active'),
         eq(focusTrees.date, ctx.today),
         eq(focusTrees.status, 'grown'),
       ),
     )
-    .groupBy(focusTrees.memberId);
+    .groupBy(focusTrees.memberId, users.fullName, users.avatarUrl);
 
-  const byMember = new Map(counts.map((c) => [c.memberId, c.trees]));
-
-  const top = members
-    .map((m) => ({
-      name: m.name,
-      avatarUrl: m.avatarUrl,
-      trees: byMember.get(m.memberId) ?? 0,
-      isYou: m.memberId === ctx.memberId,
+  const top = counts
+    .map((c) => ({
+      name: c.name,
+      avatarUrl: c.avatarUrl,
+      trees: c.trees,
+      isYou: c.memberId === ctx.memberId,
     }))
-    .filter((m) => m.trees > 0)
     .sort((a, b) => b.trees - a.trees || a.name.localeCompare(b.name))
     .slice(0, 6);
 

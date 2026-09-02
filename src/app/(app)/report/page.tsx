@@ -19,7 +19,7 @@ export default async function ReportPage() {
   const memberCtx = await getMemberContext(user);
   if (!memberCtx) redirect('/admin');
 
-  const ctx = await getCohortContext(memberCtx.cohort.id);
+  const ctx = await getCohortContext(memberCtx.cohort);
   if (!ctx) redirect(STUDENT_HOME);
 
   const report = await getEndOfCohortReport(ctx, memberCtx.memberId);

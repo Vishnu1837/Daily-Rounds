@@ -568,6 +568,48 @@
   animation: dr-draw 0.45s var(--ease-out-soft) 0.1s forwards;
 }
 
+/*
+ * Toast entrance and exit.
+ *
+ * These are CSS rather than a JS animation library because the toast provider wraps the
+ * *entire* application, including the public landing page and the auth screens — importing
+ * an animation runtime for it put ~150 KB of JavaScript on pages that have no animation on
+ * them at all. Two keyframes do the same job.
+ *
+ * The reduced-motion block below collapses both to an instant, so a visitor who has asked
+ * for less movement gets an appearing and disappearing panel rather than a sliding one.
+ */
+@keyframes dr-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes dr-toast-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+
+.toast-in {
+  animation: dr-toast-in 0.26s var(--ease-out-soft) both;
+}
+
+.toast-out {
+  animation: dr-toast-out 0.22s var(--ease-out-soft) both;
+  pointer-events: none;
+}
+
 /* ---------------------------------------------------------- reduced motion */
 
 @media (prefers-reduced-motion: reduce) {

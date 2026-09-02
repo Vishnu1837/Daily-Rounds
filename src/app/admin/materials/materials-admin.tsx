@@ -13,7 +13,13 @@ import { Sheet } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/ui/page-header';
 import type { MaterialType } from '@/db/schema';
-import { type RefOption, resolveRef } from '@/lib/curriculum';
+/*
+ * Type-only. `@/lib/curriculum` eagerly indexes the whole MBBS tree at module load, and a
+ * value import of it from a client component put ~160 KB of curriculum data into this
+ * page's bundle just to render a badge. The badge text is resolved on the server now and
+ * arrives as `refPath`.
+ */
+import type { RefOption } from '@/lib/curriculum';
 import { deleteMaterialAction, saveMaterialAction } from '@/server/actions/admin';
 
 type Material = {
@@ -23,6 +29,8 @@ type Material = {
   type: MaterialType;
   url: string;
   curriculumRef: string | null;
+  /** The curriculum breadcrumb for `curriculumRef`, resolved server-side. */
+  refPath: string[] | null;
   subjectId: string | null;
   subjectName: string | null;
 };
@@ -93,9 +101,7 @@ export function MaterialsAdminScreen({
                   {m.description && <p className="text-fg-muted text-xs">{m.description}</p>}
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     {m.subjectName && <Badge tone="iris">{m.subjectName}</Badge>}
-                    {resolveRef(m.curriculumRef) && (
-                      <Badge>{resolveRef(m.curriculumRef)!.path.join(' · ')}</Badge>
-                    )}
+                    {m.refPath && <Badge>{m.refPath.join(' · ')}</Badge>}
                     <a
                       href={m.url}
                       target="_blank"

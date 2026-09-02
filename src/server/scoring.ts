@@ -1,4 +1,5 @@
 import { and, asc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { cache } from 'react';
 
 import { db } from '@/db/client';
 import type { PointEvent } from '@/db/schema';
@@ -72,12 +73,39 @@ export async function awardPoints(input: AwardInput): Promise<boolean> {
   return inserted.length > 0;
 }
 
-export async function awardMany(inputs: AwardInput[]): Promise<number> {
-  let written = 0;
-  for (const input of inputs) {
-    if (await awardPoints(input)) written += 1;
-  }
-  return written;
+/**
+ * Appends several ledger entries in one statement.
+ *
+ * The conflict target is still `idempotency_key`, so a batch containing an award that has
+ * already been paid writes the rest and skips that one, exactly as the single-entry path
+ * does. Awarding these one at a time cost a round trip each; a check-in that pays three
+ * behaviours took three.
+ *
+ * @returns the idempotency keys that were actually written, so a caller can total only the
+ *   points it just paid rather than the points it asked for.
+ */
+export async function awardMany(inputs: AwardInput[]): Promise<Set<string>> {
+  const payable = inputs.filter((input) => input.points !== 0);
+  if (payable.length === 0) return new Set();
+
+  const inserted = await db
+    .insert(pointsLedger)
+    .values(
+      payable.map((input) => ({
+        memberId: input.memberId,
+        event: input.event,
+        points: input.points,
+        occurredOn: input.occurredOn,
+        idempotencyKey: input.idempotencyKey,
+        reason: input.reason ?? null,
+        metadata: input.metadata ?? {},
+        createdBy: input.createdBy ?? null,
+      })),
+    )
+    .onConflictDoNothing({ target: pointsLedger.idempotencyKey })
+    .returning({ idempotencyKey: pointsLedger.idempotencyKey });
+
+  return new Set(inserted.map((row) => row.idempotencyKey));
 }
 
 /** Removes an award (used only when the underlying fact is deleted, e.g. attendance recut). */
@@ -182,9 +210,19 @@ export async function recomputeRange(args: {
       ),
     );
 
-  const all = new Set<ISODate>([...days, ...extra.map((e) => e.date)]);
-  for (const date of [...all].sort()) {
-    await recomputeDay({ memberId, date, calendar, rules });
+  const all = [...new Set<ISODate>([...days, ...extra.map((e) => e.date)])].sort();
+
+  /*
+   * Days are independent of one another — `recomputeDay` reads and writes exactly one
+   * student-day — so they run in bounded batches rather than one at a time. A cohort
+   * recalculation over a 30-day window was 30 serial round trips per student; it is now
+   * roughly four. The bound keeps a whole-cohort recalculation from opening the pool wide.
+   */
+  const BATCH = 8;
+  for (let i = 0; i < all.length; i += BATCH) {
+    await Promise.all(
+      all.slice(i, i + BATCH).map((date) => recomputeDay({ memberId, date, calendar, rules })),
+    );
   }
 }
 
@@ -257,7 +295,38 @@ export async function settleDay(args: {
   await recomputeDay({ memberId, date, calendar, rules });
 
   const to = minDate(date, calendar.endDate);
-  const activity = await loadActivity(memberId, calendar.startDate, to);
+
+  /*
+   * The activity cache and the achievement tallies both read what `recomputeDay` has just
+   * written, so both wait on it — but not on each other. Fetching them together halves the
+   * serial round trips on the path every scoring interaction takes.
+   */
+  const [activity, [existing, checkInCount, minutesRow, quizCount, comebackCount]] =
+    await Promise.all([
+      loadActivity(memberId, calendar.startDate, to),
+      Promise.all([
+        db
+          .select({ code: studentAchievements.code })
+          .from(studentAchievements)
+          .where(eq(studentAchievements.memberId, memberId)),
+        db
+          .select({ n: sql<number>`count(*)::int` })
+          .from(checkIns)
+          .where(eq(checkIns.memberId, memberId)),
+        db
+          .select({ n: sql<number>`coalesce(sum(${dailyActivity.studyMinutes}), 0)::int` })
+          .from(dailyActivity)
+          .where(eq(dailyActivity.memberId, memberId)),
+        db
+          .select({ n: sql<number>`count(*)::int` })
+          .from(quizAttempts)
+          .where(eq(quizAttempts.memberId, memberId)),
+        db
+          .select({ n: sql<number>`count(*)::int` })
+          .from(checkIns)
+          .where(and(eq(checkIns.memberId, memberId), eq(checkIns.isComeback, true))),
+      ]),
+    ]);
 
   const streak = calculateCurrentStreak(calendar, activity.showedUp, date);
   let pointsAwarded = 0;
@@ -276,29 +345,6 @@ export async function settleDay(args: {
     });
     if (written) pointsAwarded += bonus;
   }
-
-  const [existing, checkInCount, minutesRow, quizCount, comebackCount] = await Promise.all([
-    db
-      .select({ code: studentAchievements.code })
-      .from(studentAchievements)
-      .where(eq(studentAchievements.memberId, memberId)),
-    db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(checkIns)
-      .where(eq(checkIns.memberId, memberId)),
-    db
-      .select({ n: sql<number>`coalesce(sum(${dailyActivity.studyMinutes}), 0)::int` })
-      .from(dailyActivity)
-      .where(eq(dailyActivity.memberId, memberId)),
-    db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(quizAttempts)
-      .where(eq(quizAttempts.memberId, memberId)),
-    db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(checkIns)
-      .where(and(eq(checkIns.memberId, memberId), eq(checkIns.isComeback, true))),
-  ]);
 
   const earned = new Set(existing.map((e) => e.code));
   const newAchievements = evaluateAchievements(
@@ -337,17 +383,23 @@ export async function settleDay(args: {
     }
   }
 
-  if (pointsAwarded > 0) {
-    await recomputeDay({ memberId, date, calendar, rules });
+  /*
+   * Only a fresh award can change the day, and only a changed day can change the streak.
+   * When nothing was paid — the overwhelmingly common case, because every one of these
+   * writes is idempotent and most interactions replay an award that already exists — the
+   * streak computed above is still the answer, and the two extra round trips this used to
+   * spend re-deriving it are pure waste.
+   */
+  if (pointsAwarded === 0) {
+    return { pointsAwarded, streak: streak.length, milestone, newAchievements };
   }
+
+  await recomputeDay({ memberId, date, calendar, rules });
+  const settled = await loadActivity(memberId, calendar.startDate, to);
 
   return {
     pointsAwarded,
-    streak: calculateCurrentStreak(
-      calendar,
-      (await loadActivity(memberId, calendar.startDate, to)).showedUp,
-      date,
-    ).length,
+    streak: calculateCurrentStreak(calendar, settled.showedUp, date).length,
     milestone,
     newAchievements,
   };
@@ -367,6 +419,21 @@ export async function getComebackState(args: {
   return calculateComebackState(args.calendar, activity.showedUp, args.date);
 }
 
+/**
+ * Read-path variants of `loadActivity` / `totalPoints`, memoised for the lifetime of one
+ * request.
+ *
+ * A single dashboard render asks for the same student's activity from the layout, from
+ * `getHomeData` and from the rank calculation; before this they were three separate
+ * round trips to the same rows. Memoisation collapses them into one.
+ *
+ * They are deliberately *separate exports* rather than a `cache()` wrapped around the
+ * originals: `settleDay` re-reads activity immediately after writing it, and a memoised
+ * read would hand it the pre-write snapshot and report the wrong streak. Writers keep the
+ * uncached functions; readers use these.
+ */
+export const readActivity = cache(loadActivity);
+
 /** Total points to date, straight from the ledger. */
 export async function totalPoints(memberId: string): Promise<number> {
   const rows = await db
@@ -375,6 +442,9 @@ export async function totalPoints(memberId: string): Promise<number> {
     .where(eq(pointsLedger.memberId, memberId));
   return rows[0]?.total ?? 0;
 }
+
+/** Request-memoised `totalPoints`. See `readActivity` for why this is a separate export. */
+export const readTotalPoints = cache(totalPoints);
 
 export async function totalPointsForMembers(memberIds: string[]): Promise<Map<string, number>> {
   if (memberIds.length === 0) return new Map();

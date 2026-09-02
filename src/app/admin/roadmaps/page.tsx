@@ -26,7 +26,7 @@ export default async function RoadmapAdminPage({
   const cohort = await getPrimaryCohort();
   if (!cohort) redirect('/admin/no-cohort');
 
-  const ctx = await getCohortContext(cohort.id);
+  const ctx = await getCohortContext(cohort);
   if (!ctx) redirect('/admin/no-cohort');
 
   const { member, date } = await searchParams;

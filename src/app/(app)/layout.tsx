@@ -13,7 +13,7 @@ import { levelFromPoints } from '@/lib/domain/level';
 import { calculateCurrentStreak } from '@/lib/domain/streak';
 import { minDate } from '@/lib/domain/calendar';
 import { getMemberContext } from '@/server/context';
-import { loadActivity, totalPoints } from '@/server/scoring';
+import { readActivity, readTotalPoints } from '@/server/scoring';
 import { STUDENT_HOME } from '@/lib/routes';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -29,8 +29,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   const [activity, points] = await Promise.all([
-    loadActivity(ctx.memberId, ctx.calendar.startDate, minDate(ctx.today, ctx.calendar.endDate)),
-    totalPoints(ctx.memberId),
+    readActivity(ctx.memberId, ctx.calendar.startDate, minDate(ctx.today, ctx.calendar.endDate)),
+    readTotalPoints(ctx.memberId),
   ]);
   const streak = calculateCurrentStreak(ctx.calendar, activity.showedUp, ctx.today).length;
   const level = levelFromPoints(points);

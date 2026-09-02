@@ -6,7 +6,7 @@ import { db } from '@/db/client';
 import { studentGoals, subjects } from '@/db/schema';
 import { requireOnboardedUser } from '@/lib/auth/guards';
 import { getMemberContext } from '@/server/context';
-import { totalPoints } from '@/server/scoring';
+import { readTotalPoints } from '@/server/scoring';
 
 import { ProfileScreen } from './profile-screen';
 
@@ -18,7 +18,7 @@ export default async function ProfilePage() {
   const ctx = await getMemberContext(user);
   if (!ctx) redirect('/admin');
 
-  const points = await totalPoints(ctx.memberId);
+  const points = await readTotalPoints(ctx.memberId);
 
   const rows = await db
     .select({

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useReducedMotion } from 'framer-motion';
+import { usePrefersReducedMotion } from '@/lib/use-reduced-motion';
 
 import { cn } from '@/lib/cn';
 
@@ -40,7 +40,7 @@ export function Donut({
   centreValue?: string;
   className?: string;
 }) {
-  const reduce = useReducedMotion();
+  const reduce = usePrefersReducedMotion();
   const [entered, setEntered] = useState(false);
 
   useEffect(() => {

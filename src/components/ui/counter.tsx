@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useReducedMotion } from 'framer-motion';
+import { usePrefersReducedMotion } from '@/lib/use-reduced-motion';
 
 import { cn } from '@/lib/cn';
 
@@ -22,7 +22,7 @@ export function AnimatedCounter({
   suffix?: string;
   prefix?: string;
 }) {
-  const reduce = useReducedMotion();
+  const reduce = usePrefersReducedMotion();
   const [counted, setCounted] = useState(0);
   const fromRef = useRef(0);
 

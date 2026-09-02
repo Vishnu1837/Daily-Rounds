@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useReducedMotion } from 'framer-motion';
+import { usePrefersReducedMotion } from '@/lib/use-reduced-motion';
 
 import { cn } from '@/lib/cn';
 
@@ -23,7 +23,7 @@ export type WeekBar = {
  * can never leave a column showing a number it does not mean.
  */
 export function WeekBars({ weeks }: { weeks: WeekBar[] }) {
-  const reduce = useReducedMotion();
+  const reduce = usePrefersReducedMotion();
   const [ticked, setTicked] = useState(false);
   const [hovered, setHovered] = useState<number | null>(null);
   const scored = weeks.filter((w) => w.activeDays > 0);

@@ -20,7 +20,7 @@ export default async function AttendancePage({
   const cohort = await getPrimaryCohort();
   if (!cohort) redirect('/admin/no-cohort');
 
-  const ctx = await getCohortContext(cohort.id);
+  const ctx = await getCohortContext(cohort);
   if (!ctx) redirect('/admin/no-cohort');
 
   const { date } = await searchParams;

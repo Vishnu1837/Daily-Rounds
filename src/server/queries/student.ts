@@ -16,6 +16,7 @@ import {
   or,
   sql,
 } from 'drizzle-orm';
+import { cache } from 'react';
 
 import { db } from '@/db/client';
 import type { AttendanceStatus, DayBand, PointEvent } from '@/db/schema';
@@ -69,12 +70,13 @@ import { BEHAVIOUR_EVENTS, maxDailyBehaviourPoints } from '@/lib/domain/points';
 import { PRESENCE_STALE_SECONDS, parseHm } from '@/lib/domain/study-room';
 import {
   calculateBestStreak,
+  calculateCohortStreak,
   calculateCurrentStreak,
   calculateComebackState,
   nextMilestone,
 } from '@/lib/domain/streak';
 import type { MemberContext } from '@/server/context';
-import { loadActivity, totalPoints } from '@/server/scoring';
+import { readActivity, readTotalPoints } from '@/server/scoring';
 
 /* ------------------------------------------------------------------ home */
 
@@ -161,8 +163,9 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
     unseenRows,
     points,
     presenceRows,
+    standing,
   ] = await Promise.all([
-    loadActivity(memberId, calendar.startDate, upTo),
+    readActivity(memberId, calendar.startDate, upTo),
     db
       .select({
         plannedMinutes: dailyAssignments.plannedMinutes,
@@ -231,7 +234,7 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
       .select({ code: studentAchievements.code })
       .from(studentAchievements)
       .where(and(eq(studentAchievements.memberId, memberId), isNull(studentAchievements.seenAt))),
-    totalPoints(memberId),
+    readTotalPoints(memberId),
     db
       .select({
         memberId: studyRoomPresence.memberId,
@@ -250,6 +253,13 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
         ),
       )
       .orderBy(asc(studyRoomPresence.joinedAt)),
+    /*
+     * The student's rank needs the whole cohort's activity, so it is by far the most
+     * expensive thing on this page. It depends on nothing else here, which is the only
+     * reason it belongs *inside* this batch: awaited afterwards it added two more serial
+     * round trips to every dashboard render.
+     */
+    getRankFor(ctx),
   ]);
 
   const streak = calculateCurrentStreak(calendar, activity.showedUp, today);
@@ -305,7 +315,7 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
 
   const weekly = calculateCurrentWeekConsistency(calendar, activity.lookup, upTo);
   const topics = topicCounts[0] ?? { total: 0, completed: 0 };
-  const { rank, cohortSize } = await getRankFor(ctx);
+  const { rank, cohortSize } = standing;
 
   return {
     weekNumber: cohortWeekNumber(calendar, today),
@@ -365,6 +375,89 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
   };
 }
 
+/* --------------------------------------------------------------- study */
+
+export type StudySnapshot = {
+  assignment: HomeData['assignment'];
+  session: HomeData['session'];
+  blockDone: boolean;
+  targetDone: boolean;
+  checkedIn: boolean;
+};
+
+/**
+ * Just enough to open the study timer.
+ *
+ * The study screen used to read the whole of `getHomeData`, which meant every visit to it
+ * built the cohort leaderboard, the announcement feed, the events list and the study-room
+ * roster in order to answer four questions about one student. This asks only those four.
+ */
+export async function getStudySnapshot(ctx: MemberContext): Promise<StudySnapshot> {
+  const { memberId, today } = ctx;
+
+  const [assignmentRows, sessionRows, ledgerRows, checkInRows] = await Promise.all([
+    db
+      .select({
+        plannedMinutes: dailyAssignments.plannedMinutes,
+        note: dailyAssignments.note,
+        topicId: roadmapTopics.id,
+        topicTitle: roadmapTopics.title,
+        topicRef: roadmapTopics.curriculumRef,
+        subjectName: subjects.name,
+      })
+      .from(dailyAssignments)
+      .leftJoin(roadmapTopics, eq(roadmapTopics.id, dailyAssignments.topicId))
+      .leftJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
+      .leftJoin(subjects, eq(subjects.id, roadmaps.subjectId))
+      .where(and(eq(dailyAssignments.memberId, memberId), eq(dailyAssignments.date, today)))
+      .limit(1),
+    db
+      .select()
+      .from(studySessions)
+      .where(and(eq(studySessions.memberId, memberId), eq(studySessions.date, today)))
+      .orderBy(desc(studySessions.startedAt))
+      .limit(1),
+    db
+      .select({ event: pointsLedger.event })
+      .from(pointsLedger)
+      .where(and(eq(pointsLedger.memberId, memberId), eq(pointsLedger.occurredOn, today))),
+    db
+      .select({ id: checkIns.id })
+      .from(checkIns)
+      .where(and(eq(checkIns.memberId, memberId), eq(checkIns.date, today)))
+      .limit(1),
+  ]);
+
+  const assignment = assignmentRows[0] ?? null;
+  const session = sessionRows[0] ?? null;
+  const events = new Set(ledgerRows.map((r) => r.event));
+
+  return {
+    assignment: assignment
+      ? {
+          topicTitle: assignment.topicTitle,
+          topicId: assignment.topicId,
+          topicRef: assignment.topicRef,
+          subjectName: assignment.subjectName,
+          plannedMinutes: assignment.plannedMinutes,
+          note: assignment.note,
+        }
+      : null,
+    session: session
+      ? {
+          id: session.id,
+          status: session.status,
+          elapsedSeconds: session.elapsedSeconds,
+          resumedAt: session.resumedAt?.toISOString() ?? null,
+          plannedMinutes: session.plannedMinutes,
+        }
+      : null,
+    blockDone: events.has('study_block_completed'),
+    targetDone: events.has('daily_target_completed'),
+    checkedIn: checkInRows.length > 0,
+  };
+}
+
 /* ----------------------------------------------------------- leaderboard */
 
 export type LeaderboardRow = {
@@ -395,23 +488,65 @@ export type Recognitions = {
  * Builds the full cohort leaderboard in a handful of queries rather than per-student.
  * Ranking is by consistency first — process over result — with points as the tiebreak.
  */
-export async function getLeaderboard(
+export const getLeaderboard = cache(async function getLeaderboard(
   ctx: Pick<MemberContext, 'cohort' | 'calendar' | 'today'> & { memberId?: string },
 ): Promise<{ rows: LeaderboardRow[]; recognitions: Recognitions }> {
   const { cohort, calendar, today } = ctx;
   const upTo = minDate(today, calendar.endDate);
 
-  const members = await db
-    .select({
-      memberId: cohortMembers.id,
-      userId: users.id,
-      name: users.fullName,
-      avatarUrl: users.avatarUrl,
-      mbbsYear: users.mbbsYear,
-    })
+  /*
+   * The roster as a subquery, so the four reads below all start in the same tick.
+   *
+   * Fetching the member ids first and threading them through as `IN (...)` lists made this
+   * two serial waves — and this function is the single most expensive thing the dashboard
+   * does, because the student's rank needs the whole cohort. One wave instead of two takes
+   * a round trip off both the leaderboard and the dashboard.
+   */
+  const activeMembers = db
+    .select({ id: cohortMembers.id })
     .from(cohortMembers)
-    .innerJoin(users, eq(users.id, cohortMembers.userId))
     .where(and(eq(cohortMembers.cohortId, cohort.id), eq(cohortMembers.status, 'active')));
+
+  const [members, activityRows, pointRows, comebackRows] = await Promise.all([
+    db
+      .select({
+        memberId: cohortMembers.id,
+        userId: users.id,
+        name: users.fullName,
+        avatarUrl: users.avatarUrl,
+        mbbsYear: users.mbbsYear,
+      })
+      .from(cohortMembers)
+      .innerJoin(users, eq(users.id, cohortMembers.userId))
+      .where(and(eq(cohortMembers.cohortId, cohort.id), eq(cohortMembers.status, 'active'))),
+    db
+      .select()
+      .from(dailyActivity)
+      .where(
+        and(
+          inArray(dailyActivity.memberId, activeMembers),
+          gte(dailyActivity.date, calendar.startDate),
+          lte(dailyActivity.date, upTo),
+        ),
+      ),
+    db
+      .select({
+        memberId: pointsLedger.memberId,
+        total: sql<number>`coalesce(sum(${pointsLedger.points}), 0)::int`,
+      })
+      .from(pointsLedger)
+      .where(inArray(pointsLedger.memberId, activeMembers))
+      .groupBy(pointsLedger.memberId),
+    db
+      .select({
+        memberId: checkIns.memberId,
+        n: sql<number>`count(*)::int`,
+        latest: sql<string>`max(${checkIns.date})`,
+      })
+      .from(checkIns)
+      .where(and(inArray(checkIns.memberId, activeMembers), eq(checkIns.isComeback, true)))
+      .groupBy(checkIns.memberId),
+  ]);
 
   if (members.length === 0) {
     return {
@@ -425,38 +560,6 @@ export async function getLeaderboard(
       },
     };
   }
-
-  const memberIds = members.map((m) => m.memberId);
-
-  const [activityRows, pointRows, comebackRows] = await Promise.all([
-    db
-      .select()
-      .from(dailyActivity)
-      .where(
-        and(
-          inArray(dailyActivity.memberId, memberIds),
-          gte(dailyActivity.date, calendar.startDate),
-          lte(dailyActivity.date, upTo),
-        ),
-      ),
-    db
-      .select({
-        memberId: pointsLedger.memberId,
-        total: sql<number>`coalesce(sum(${pointsLedger.points}), 0)::int`,
-      })
-      .from(pointsLedger)
-      .where(inArray(pointsLedger.memberId, memberIds))
-      .groupBy(pointsLedger.memberId),
-    db
-      .select({
-        memberId: checkIns.memberId,
-        n: sql<number>`count(*)::int`,
-        latest: sql<string>`max(${checkIns.date})`,
-      })
-      .from(checkIns)
-      .where(and(inArray(checkIns.memberId, memberIds), eq(checkIns.isComeback, true)))
-      .groupBy(checkIns.memberId),
-  ]);
 
   const byMember = new Map<string, Map<ISODate, (typeof activityRows)[number]>>();
   for (const row of activityRows) {
@@ -560,7 +663,7 @@ export async function getLeaderboard(
       ),
     },
   };
-}
+});
 
 async function getRankFor(
   ctx: MemberContext,
@@ -839,7 +942,7 @@ export async function getProgressData(ctx: MemberContext): Promise<ProgressData>
 
   const [activity, attendanceRows, topicRows, goalRows, achievementRows, ledgerByEvent, points] =
     await Promise.all([
-      loadActivity(memberId, calendar.startDate, upTo),
+      readActivity(memberId, calendar.startDate, upTo),
       db
         .select({
           present: sql<number>`count(*) FILTER (WHERE ${attendance.status} <> 'absent')::int`,
@@ -878,7 +981,7 @@ export async function getProgressData(ctx: MemberContext): Promise<ProgressData>
         .from(pointsLedger)
         .where(eq(pointsLedger.memberId, memberId))
         .groupBy(pointsLedger.event),
-      totalPoints(memberId),
+      readTotalPoints(memberId),
     ]);
 
   const overall = calculateOverallConsistency(calendar, activity.lookup, upTo);
@@ -1019,7 +1122,7 @@ export async function getCheckInContext(ctx: MemberContext): Promise<CheckInCont
         .select({ elapsedSeconds: studySessions.elapsedSeconds })
         .from(studySessions)
         .where(and(eq(studySessions.memberId, memberId), eq(studySessions.date, today))),
-      loadActivity(memberId, calendar.startDate, minDate(today, calendar.endDate)),
+      readActivity(memberId, calendar.startDate, minDate(today, calendar.endDate)),
     ]);
 
   const comeback = calculateComebackState(calendar, activity.showedUp, today);
@@ -1083,15 +1186,6 @@ export async function getQuizForTopic(topicRef: string | null) {
 }
 
 export async function getAvailableQuizzes(ctx: MemberContext) {
-  const topicRefs = await db
-    .select({ ref: roadmapTopics.curriculumRef })
-    .from(roadmapTopics)
-    .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
-    .where(eq(roadmaps.memberId, ctx.memberId));
-
-  const refs = [...new Set(topicRefs.map((t) => t.ref).filter((r): r is string => r !== null))];
-  if (refs.length === 0) return [];
-
   /*
    * The question count is a grouped join rather than a correlated subquery.
    *
@@ -1100,7 +1194,17 @@ export async function getAvailableQuizzes(ctx: MemberContext) {
    * materials screen advertised every knowledge check as "0 questions" while the quiz
    * itself happily rendered five. A left join and a group-by cannot go wrong in that way.
    */
-  const [quizRows, countRows, attemptRows] = await Promise.all([
+  const [topicRefs, quizRows, countRows, attemptRows] = await Promise.all([
+    /*
+     * The student's own curriculum refs. Fetched alongside the catalogue rather than
+     * before it: the filtering happens in memory afterwards either way, so making the
+     * catalogue wait on this read only added a round trip.
+     */
+    db
+      .select({ ref: roadmapTopics.curriculumRef })
+      .from(roadmapTopics)
+      .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
+      .where(eq(roadmaps.memberId, ctx.memberId)),
     /*
      * Every filed quiz, filtered in memory rather than in SQL.
      *
@@ -1122,6 +1226,9 @@ export async function getAvailableQuizzes(ctx: MemberContext) {
       .from(quizAttempts)
       .where(eq(quizAttempts.memberId, ctx.memberId)),
   ]);
+
+  const refs = [...new Set(topicRefs.map((t) => t.ref).filter((r): r is string => r !== null))];
+  if (refs.length === 0) return [];
 
   const onMyRoadmap = quizRows.filter((q) =>
     refs.some((ref) => isSameBranch(q.curriculumRef!, ref)),
@@ -1152,42 +1259,41 @@ export async function getWeeklyReviewContext(ctx: MemberContext) {
   const thisWeek = weekStart(today);
   const lastWeek = addDays(thisWeek, -7);
 
-  const [activity, existingRows] = await Promise.all([
-    loadActivity(memberId, calendar.startDate, upTo),
+  // One wave: none of these four reads depends on another's result.
+  const [activity, existingRows, attendanceCount, topicsThisWeek] = await Promise.all([
+    readActivity(memberId, calendar.startDate, upTo),
     db
       .select({ weekStart: weeklyReviews.weekStart })
       .from(weeklyReviews)
       .where(eq(weeklyReviews.memberId, memberId)),
+    db
+      .select({
+        present: sql<number>`count(*) FILTER (WHERE ${attendance.status} <> 'absent')::int`,
+      })
+      .from(attendance)
+      .where(
+        and(
+          eq(attendance.memberId, memberId),
+          gte(attendance.date, thisWeek),
+          lte(attendance.date, upTo),
+        ),
+      ),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(roadmapTopics)
+      .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
+      .where(
+        and(
+          eq(roadmaps.memberId, memberId),
+          eq(roadmapTopics.status, 'completed'),
+          gte(roadmapTopics.completedAt, new Date(`${thisWeek}T00:00:00Z`)),
+        ),
+      ),
   ]);
 
   const current = calculateConsistency(calendar, activity.lookup, thisWeek, upTo);
   const previous = calculateConsistency(calendar, activity.lookup, lastWeek, addDays(lastWeek, 6));
   const submitted = new Set(existingRows.map((r) => r.weekStart));
-
-  const attendanceCount = await db
-    .select({
-      present: sql<number>`count(*) FILTER (WHERE ${attendance.status} <> 'absent')::int`,
-    })
-    .from(attendance)
-    .where(
-      and(
-        eq(attendance.memberId, memberId),
-        gte(attendance.date, thisWeek),
-        lte(attendance.date, upTo),
-      ),
-    );
-
-  const topicsThisWeek = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(roadmapTopics)
-    .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
-    .where(
-      and(
-        eq(roadmaps.memberId, memberId),
-        eq(roadmapTopics.status, 'completed'),
-        gte(roadmapTopics.completedAt, new Date(`${thisWeek}T00:00:00Z`)),
-      ),
-    );
 
   return {
     weekStart: thisWeek,
@@ -1203,17 +1309,49 @@ export async function getWeeklyReviewContext(ctx: MemberContext) {
 
 /* ------------------------------------------------------------- cohort feed */
 
-export async function getCohortPulse(ctx: Pick<MemberContext, 'cohort' | 'calendar' | 'today'>) {
+export const getCohortPulse = cache(async function getCohortPulse(
+  ctx: Pick<MemberContext, 'cohort' | 'calendar' | 'today'>,
+) {
   const { cohort, calendar, today } = ctx;
   const upTo = minDate(today, calendar.endDate);
 
-  const memberRows = await db
+  /*
+   * The roster is a subquery rather than a separate round trip. Fetching the member ids
+   * first only to send them straight back as an `IN (...)` list cost a full extra
+   * round trip on both the dashboard and the leaderboard, for a list the database already
+   * has in front of it.
+   */
+  const activeMembers = db
     .select({ id: cohortMembers.id })
     .from(cohortMembers)
     .where(and(eq(cohortMembers.cohortId, cohort.id), eq(cohortMembers.status, 'active')));
 
-  const memberIds = memberRows.map((m) => m.id);
-  if (memberIds.length === 0) {
+  const [sizeRows, rows] = await Promise.all([
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(cohortMembers)
+      .where(and(eq(cohortMembers.cohortId, cohort.id), eq(cohortMembers.status, 'active'))),
+    db
+      .select({
+        date: dailyActivity.date,
+        showedUp: sql<number>`count(*) FILTER (WHERE ${dailyActivity.showedUp})::int`,
+        avgScore: sql<number>`coalesce(round(avg(${dailyActivity.scorePct})), 0)::int`,
+        minutes: sql<number>`coalesce(sum(${dailyActivity.studyMinutes}), 0)::int`,
+      })
+      .from(dailyActivity)
+      .where(
+        and(
+          inArray(dailyActivity.memberId, activeMembers),
+          gte(dailyActivity.date, calendar.startDate),
+          lte(dailyActivity.date, upTo),
+          eq(dailyActivity.isActiveDay, true),
+        ),
+      )
+      .groupBy(dailyActivity.date),
+  ]);
+
+  const total = sizeRows[0]?.n ?? 0;
+  if (total === 0) {
     return {
       size: 0,
       showedUpToday: 0,
@@ -1224,28 +1362,8 @@ export async function getCohortPulse(ctx: Pick<MemberContext, 'cohort' | 'calend
     };
   }
 
-  const rows = await db
-    .select({
-      date: dailyActivity.date,
-      showedUp: sql<number>`count(*) FILTER (WHERE ${dailyActivity.showedUp})::int`,
-      avgScore: sql<number>`coalesce(round(avg(${dailyActivity.scorePct})), 0)::int`,
-      minutes: sql<number>`coalesce(sum(${dailyActivity.studyMinutes}), 0)::int`,
-    })
-    .from(dailyActivity)
-    .where(
-      and(
-        inArray(dailyActivity.memberId, memberIds),
-        gte(dailyActivity.date, calendar.startDate),
-        lte(dailyActivity.date, upTo),
-        eq(dailyActivity.isActiveDay, true),
-      ),
-    )
-    .groupBy(dailyActivity.date);
-
   const byDate = new Map(rows.map((r) => [r.date, r]));
-  const total = memberIds.length;
 
-  const { calculateCohortStreak } = await import('@/lib/domain/streak');
   const cohortStreak = calculateCohortStreak(
     calendar,
     (d) => ({ showedUp: byDate.get(d)?.showedUp ?? 0, total }),
@@ -1267,7 +1385,7 @@ export async function getCohortPulse(ctx: Pick<MemberContext, 'cohort' | 'calend
     cohortStreak: cohortStreak.length,
     thresholdPct: cohort.streakThresholdPct,
   };
-}
+});
 
 /* ------------------------------------------------------------- point log */
 

@@ -23,6 +23,15 @@ short-lived connections and will exhaust a direct connection limit. The app alre
 Any other Postgres works identically — Neon, RDS, Railway, or one you run yourself. Only the
 connection string changes.
 
+**Pick the region deliberately, and match it in `vercel.json`.** Every page here is
+server-rendered against this database, so a request's cost is the number of round trips it
+makes multiplied by the latency of one. Same-region that is a couple of milliseconds a trip;
+across an ocean it is 200–300 ms, and the dashboard's handful of trips becomes a visible
+second of blank screen. `vercel.json` pins the functions to `bom1` (Mumbai) to sit beside a
+Supabase project in `ap-south-1` — if you host the database anywhere else, change that
+entry to the matching Vercel region. It is the single largest performance setting in this
+project, and no amount of query tuning compensates for getting it wrong.
+
 ---
 
 ## 2. Apply migrations
@@ -124,14 +133,14 @@ Then sign in and finish setup in the UI:
 
 ## 5. Running the cohort day to day
 
-| When | Do |
-| --- | --- |
-| Each morning | **Assign today's topics** (one click for the whole cohort) |
-| After the study room | **Mark attendance** — points are awarded or withdrawn immediately |
-| During the day | Watch **Students needing attention** and message anyone flagged |
-| Each evening | Skim **Check-ins** for obstacle patterns worth acting on |
-| Weekly | Post an **announcement**; students get their weekly review from Friday |
-| End of cohort | Open each student's **end-of-cohort report** |
+| When                 | Do                                                                     |
+| -------------------- | ---------------------------------------------------------------------- |
+| Each morning         | **Assign today's topics** (one click for the whole cohort)             |
+| After the study room | **Mark attendance** — points are awarded or withdrawn immediately      |
+| During the day       | Watch **Students needing attention** and message anyone flagged        |
+| Each evening         | Skim **Check-ins** for obstacle patterns worth acting on               |
+| Weekly               | Post an **announcement**; students get their weekly review from Friday |
+| End of cohort        | Open each student's **end-of-cohort report**                           |
 
 Adding a holiday, changing the active weekdays, or editing the term dates recalculates every
 student's streak and consistency automatically. **Recalculate** on the overview rebuilds

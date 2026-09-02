@@ -50,7 +50,13 @@ export function createDatabase(): CreatedDatabase {
 
   if (url) {
     const client = postgres(url, {
-      max: Number(process.env.DATABASE_POOL_MAX ?? 10),
+      /*
+       * A dashboard render issues a dozen independent reads in one `Promise.all`. With a
+       * pool of ten, the last two waited for a free connection and turned one round trip
+       * into two — the pool size, not the database, was the bottleneck. Twenty is still
+       * far inside what a transaction-mode pooler is happy to hold.
+       */
+      max: Number(process.env.DATABASE_POOL_MAX ?? 20),
       // Supabase's transaction-mode pooler does not support prepared statements.
       prepare: false,
       idle_timeout: 20,

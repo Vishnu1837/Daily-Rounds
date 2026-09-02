@@ -259,6 +259,13 @@ export const cohortMembers = pgTable(
   (t) => [
     uniqueIndex('cohort_member_unique').on(t.cohortId, t.userId),
     index('cohort_member_cohort_idx').on(t.cohortId),
+    /*
+     * Every authenticated request resolves a session to a membership by `user_id` alone.
+     * The composite unique index above is keyed on the cohort first, so it cannot serve
+     * that lookup; without this one it was a sequential scan on the hottest path in the
+     * application.
+     */
+    index('cohort_member_user_idx').on(t.userId),
   ],
 );
 

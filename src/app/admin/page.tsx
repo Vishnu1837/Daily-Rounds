@@ -35,11 +35,15 @@ export default async function AdminOverviewPage() {
   const cohort = await getPrimaryCohort();
   if (!cohort) redirect('/admin/no-cohort');
 
-  const ctx = await getCohortContext(cohort.id);
+  const ctx = await getCohortContext(cohort);
   if (!ctx) redirect('/admin/no-cohort');
 
-  const students = await getCohortStudents(ctx);
-  const overview = await getCohortOverview(ctx, students);
+  /*
+   * The overview's turnout query no longer depends on the student roll-up, so both start
+   * in the same tick. `getCohortStudents` is request-memoised, so the roster is still read
+   * exactly once even though both of these ask for it.
+   */
+  const [students, overview] = await Promise.all([getCohortStudents(ctx), getCohortOverview(ctx)]);
 
   const turnout =
     overview.size === 0 ? 0 : Math.round((overview.activeToday / overview.size) * 100);

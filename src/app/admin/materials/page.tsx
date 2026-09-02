@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { db } from '@/db/client';
 import { subjects } from '@/db/schema';
 import { requireAdmin } from '@/lib/auth/guards';
-import { refOptionsBySubject } from '@/lib/curriculum';
+import { refOptionsBySubject, resolveRef } from '@/lib/curriculum';
 import { getPrimaryCohort } from '@/server/context';
 import { getCohortMaterials } from '@/server/queries/admin';
 
@@ -27,7 +27,11 @@ export default async function MaterialsAdminPage() {
   return (
     <MaterialsAdminScreen
       cohortId={cohort.id}
-      materials={materials}
+      materials={materials.map((m) => ({
+        ...m,
+        // Resolved here so the client never has to carry the curriculum tree to do it.
+        refPath: resolveRef(m.curriculumRef)?.path ?? null,
+      }))}
       subjects={subjectRows.map((s) => ({ id: s.id, name: s.name, slug: s.slug }))}
       refOptions={refOptionsBySubject()}
     />

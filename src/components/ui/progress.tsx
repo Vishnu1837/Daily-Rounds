@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useState } from 'react';
-import { useReducedMotion } from 'framer-motion';
+import { usePrefersReducedMotion } from '@/lib/use-reduced-motion';
 
 import { cn } from '@/lib/cn';
 
@@ -66,7 +66,7 @@ export function ProgressBar({
   label?: string;
   glow?: boolean;
 }) {
-  const reduce = useReducedMotion();
+  const reduce = usePrefersReducedMotion();
   const pct = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
   const entered = useEntered(reduce);
   const h = { xs: 'h-1', sm: 'h-1.5', md: 'h-2.5', lg: 'h-3.5' }[height];
@@ -112,7 +112,7 @@ export function ProgressRing({
   label?: string;
   trackClassName?: string;
 }) {
-  const reduce = useReducedMotion();
+  const reduce = usePrefersReducedMotion();
   const gradientId = useId();
   const pct = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
   const entered = useEntered(reduce);
@@ -184,7 +184,7 @@ export function ProgressSegments({
   className?: string;
   label?: string;
 }) {
-  const reduce = useReducedMotion();
+  const reduce = usePrefersReducedMotion();
   const entered = useEntered(reduce);
   const safeTotal = Math.max(0, Math.floor(total));
 

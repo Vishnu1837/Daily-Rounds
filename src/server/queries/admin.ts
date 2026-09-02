@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { cache } from 'react';
 
 import { db } from '@/db/client';
 import type { AttendanceStatus, RiskLevel } from '@/db/schema';
@@ -77,38 +78,46 @@ export type AdminStudentRow = {
  * One pass over the cohort producing every derived number the admin console needs.
  * Deliberately a handful of set-based queries rather than per-student work.
  */
-export async function getCohortStudents(ctx: CohortCtx): Promise<AdminStudentRow[]> {
+export const getCohortStudents = cache(async function getCohortStudents(
+  ctx: CohortCtx,
+): Promise<AdminStudentRow[]> {
   const { cohort, calendar, today, thresholds } = ctx;
   const upTo = minDate(today, calendar.endDate);
 
-  const members = await db
-    .select({
-      memberId: cohortMembers.id,
-      userId: users.id,
-      name: users.fullName,
-      avatarUrl: users.avatarUrl,
-      email: users.email,
-      mbbsYear: users.mbbsYear,
-      university: users.university,
-      status: cohortMembers.status,
-      joinedAt: cohortMembers.joinedAt,
-    })
+  /*
+   * The roster as a subquery. The six roll-up reads below used to wait for the member list
+   * to come back so they could be handed an `IN (...)` of ids the database already had —
+   * two serial waves where one will do, on every admin screen.
+   */
+  const cohortMemberIds = db
+    .select({ id: cohortMembers.id })
     .from(cohortMembers)
-    .innerJoin(users, eq(users.id, cohortMembers.userId))
-    .where(eq(cohortMembers.cohortId, cohort.id))
-    .orderBy(asc(users.fullName));
+    .where(eq(cohortMembers.cohortId, cohort.id));
 
-  if (members.length === 0) return [];
-  const memberIds = members.map((m) => m.memberId);
-
-  const [activityRows, pointRows, topicRows, subjectRows, attendanceRows, checkInRows] =
+  const [members, activityRows, pointRows, topicRows, subjectRows, attendanceRows, checkInRows] =
     await Promise.all([
+      db
+        .select({
+          memberId: cohortMembers.id,
+          userId: users.id,
+          name: users.fullName,
+          avatarUrl: users.avatarUrl,
+          email: users.email,
+          mbbsYear: users.mbbsYear,
+          university: users.university,
+          status: cohortMembers.status,
+          joinedAt: cohortMembers.joinedAt,
+        })
+        .from(cohortMembers)
+        .innerJoin(users, eq(users.id, cohortMembers.userId))
+        .where(eq(cohortMembers.cohortId, cohort.id))
+        .orderBy(asc(users.fullName)),
       db
         .select()
         .from(dailyActivity)
         .where(
           and(
-            inArray(dailyActivity.memberId, memberIds),
+            inArray(dailyActivity.memberId, cohortMemberIds),
             gte(dailyActivity.date, calendar.startDate),
             lte(dailyActivity.date, upTo),
           ),
@@ -119,7 +128,7 @@ export async function getCohortStudents(ctx: CohortCtx): Promise<AdminStudentRow
           total: sql<number>`coalesce(sum(${pointsLedger.points}), 0)::int`,
         })
         .from(pointsLedger)
-        .where(inArray(pointsLedger.memberId, memberIds))
+        .where(inArray(pointsLedger.memberId, cohortMemberIds))
         .groupBy(pointsLedger.memberId),
       db
         .select({
@@ -129,22 +138,24 @@ export async function getCohortStudents(ctx: CohortCtx): Promise<AdminStudentRow
         })
         .from(roadmaps)
         .leftJoin(roadmapTopics, eq(roadmapTopics.roadmapId, roadmaps.id))
-        .where(inArray(roadmaps.memberId, memberIds))
+        .where(inArray(roadmaps.memberId, cohortMemberIds))
         .groupBy(roadmaps.memberId),
       db
         .select({ memberId: studentGoals.memberId, subjectName: subjects.name })
         .from(studentGoals)
         .leftJoin(subjects, eq(subjects.id, studentGoals.primarySubjectId))
-        .where(inArray(studentGoals.memberId, memberIds)),
+        .where(inArray(studentGoals.memberId, cohortMemberIds)),
       db
         .select({ memberId: attendance.memberId, status: attendance.status })
         .from(attendance)
-        .where(and(inArray(attendance.memberId, memberIds), eq(attendance.date, today))),
+        .where(and(inArray(attendance.memberId, cohortMemberIds), eq(attendance.date, today))),
       db
         .select({ memberId: checkIns.memberId })
         .from(checkIns)
-        .where(and(inArray(checkIns.memberId, memberIds), eq(checkIns.date, today))),
+        .where(and(inArray(checkIns.memberId, cohortMemberIds), eq(checkIns.date, today))),
     ]);
+
+  if (members.length === 0) return [];
 
   const byMember = new Map<string, Map<ISODate, (typeof activityRows)[number]>>();
   for (const row of activityRows) {
@@ -218,7 +229,7 @@ export async function getCohortStudents(ctx: CohortCtx): Promise<AdminStudentRow
       checkedInToday: checkedIn.has(m.memberId),
     };
   });
-}
+});
 
 export type CohortOverview = {
   size: number;
@@ -234,34 +245,41 @@ export type CohortOverview = {
   needsAttention: AdminStudentRow[];
 };
 
-export async function getCohortOverview(
-  ctx: CohortCtx,
-  students: AdminStudentRow[],
-): Promise<CohortOverview> {
+export async function getCohortOverview(ctx: CohortCtx): Promise<CohortOverview> {
   const { cohort, calendar, today } = ctx;
   const upTo = minDate(today, calendar.endDate);
-  const active = students.filter((s) => s.status === 'active');
 
-  const turnoutRows = await db
-    .select({
-      date: dailyActivity.date,
-      showedUp: sql<number>`count(*) FILTER (WHERE ${dailyActivity.showedUp})::int`,
-      minutes: sql<number>`coalesce(sum(${dailyActivity.studyMinutes}), 0)::int`,
-    })
-    .from(dailyActivity)
-    .where(
-      and(
-        inArray(
-          dailyActivity.memberId,
-          active.length > 0
-            ? active.map((s) => s.memberId)
-            : ['00000000-0000-0000-0000-000000000000'],
+  /*
+   * The roster is a subquery rather than an id list built from `students`, so this read no
+   * longer has to wait for the student roll-up to come back first. Both now start in the
+   * same tick (see the admin overview page).
+   */
+  const activeMembers = db
+    .select({ id: cohortMembers.id })
+    .from(cohortMembers)
+    .where(and(eq(cohortMembers.cohortId, cohort.id), eq(cohortMembers.status, 'active')));
+
+  const [turnoutRows, students] = await Promise.all([
+    db
+      .select({
+        date: dailyActivity.date,
+        showedUp: sql<number>`count(*) FILTER (WHERE ${dailyActivity.showedUp})::int`,
+        minutes: sql<number>`coalesce(sum(${dailyActivity.studyMinutes}), 0)::int`,
+      })
+      .from(dailyActivity)
+      .where(
+        and(
+          inArray(dailyActivity.memberId, activeMembers),
+          gte(dailyActivity.date, calendar.startDate),
+          lte(dailyActivity.date, upTo),
         ),
-        gte(dailyActivity.date, calendar.startDate),
-        lte(dailyActivity.date, upTo),
-      ),
-    )
-    .groupBy(dailyActivity.date);
+      )
+      .groupBy(dailyActivity.date),
+    // Memoised, so the overview page's own call to this costs nothing extra.
+    getCohortStudents(ctx),
+  ]);
+
+  const active = students.filter((s) => s.status === 'active');
 
   const byDate = new Map(turnoutRows.map((r) => [r.date, r]));
   const cohortStreak = calculateCohortStreak(
@@ -324,98 +342,112 @@ export async function getStudentDetail(ctx: CohortCtx, memberId: string) {
   const { calendar, today } = ctx;
   const upTo = minDate(today, calendar.endDate);
 
-  const memberRows = await db
-    .select({
-      memberId: cohortMembers.id,
-      userId: users.id,
-      name: users.fullName,
-      avatarUrl: users.avatarUrl,
-      email: users.email,
-      whatsapp: users.whatsapp,
-      university: users.university,
-      mbbsYear: users.mbbsYear,
-      role: users.role,
-      status: cohortMembers.status,
-      joinedAt: cohortMembers.joinedAt,
-    })
-    .from(cohortMembers)
-    .innerJoin(users, eq(users.id, cohortMembers.userId))
-    .where(and(eq(cohortMembers.id, memberId), eq(cohortMembers.cohortId, ctx.cohort.id)))
-    .limit(1);
+  /*
+   * The member row is fetched *alongside* the seven roll-ups rather than before them. It
+   * used to gate them purely so a missing member could return early — but every one of the
+   * seven keys on `memberId` directly, so for a member who does not exist they simply come
+   * back empty. Guarding cost a serial round trip on every load of the page for the
+   * overwhelmingly common case where the member does exist.
+   */
+  const [
+    memberRows,
+    goalRows,
+    activityRows,
+    checkInRows,
+    ledgerRows,
+    topicRows,
+    reviewRows,
+    attendanceRows,
+  ] = await Promise.all([
+    db
+      .select({
+        memberId: cohortMembers.id,
+        userId: users.id,
+        name: users.fullName,
+        avatarUrl: users.avatarUrl,
+        email: users.email,
+        whatsapp: users.whatsapp,
+        university: users.university,
+        mbbsYear: users.mbbsYear,
+        role: users.role,
+        status: cohortMembers.status,
+        joinedAt: cohortMembers.joinedAt,
+      })
+      .from(cohortMembers)
+      .innerJoin(users, eq(users.id, cohortMembers.userId))
+      .where(and(eq(cohortMembers.id, memberId), eq(cohortMembers.cohortId, ctx.cohort.id)))
+      .limit(1),
+    db
+      .select({
+        cohortGoal: studentGoals.cohortGoal,
+        dailyCommitmentMinutes: studentGoals.dailyCommitmentMinutes,
+        examName: studentGoals.examName,
+        examDate: studentGoals.examDate,
+        baselineDaysStudiedLastWeek: studentGoals.baselineDaysStudiedLastWeek,
+        baselineConsistencyRating: studentGoals.baselineConsistencyRating,
+        baselineConfidence: studentGoals.baselineConfidence,
+        biggestObstacle: studentGoals.biggestObstacle,
+        subjectName: subjects.name,
+      })
+      .from(studentGoals)
+      .leftJoin(subjects, eq(subjects.id, studentGoals.primarySubjectId))
+      .where(eq(studentGoals.memberId, memberId))
+      .limit(1),
+    db
+      .select()
+      .from(dailyActivity)
+      .where(
+        and(
+          eq(dailyActivity.memberId, memberId),
+          gte(dailyActivity.date, calendar.startDate),
+          lte(dailyActivity.date, upTo),
+        ),
+      )
+      .orderBy(asc(dailyActivity.date)),
+    db
+      .select()
+      .from(checkIns)
+      .where(eq(checkIns.memberId, memberId))
+      .orderBy(desc(checkIns.date))
+      .limit(14),
+    db
+      .select({
+        id: pointsLedger.id,
+        event: pointsLedger.event,
+        points: pointsLedger.points,
+        occurredOn: pointsLedger.occurredOn,
+        reason: pointsLedger.reason,
+      })
+      .from(pointsLedger)
+      .where(eq(pointsLedger.memberId, memberId))
+      .orderBy(desc(pointsLedger.occurredOn), desc(pointsLedger.createdAt))
+      .limit(40),
+    db
+      .select({
+        total: sql<number>`count(*)::int`,
+        completed: sql<number>`count(*) FILTER (WHERE ${roadmapTopics.status} = 'completed')::int`,
+      })
+      .from(roadmapTopics)
+      .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
+      .where(eq(roadmaps.memberId, memberId)),
+    db
+      .select()
+      .from(weeklyReviews)
+      .where(eq(weeklyReviews.memberId, memberId))
+      .orderBy(desc(weeklyReviews.weekStart))
+      .limit(6),
+    db
+      .select({
+        present: sql<number>`count(*) FILTER (WHERE ${attendance.status} = 'present')::int`,
+        late: sql<number>`count(*) FILTER (WHERE ${attendance.status} = 'late')::int`,
+        absent: sql<number>`count(*) FILTER (WHERE ${attendance.status} = 'absent')::int`,
+      })
+      .from(attendance)
+      .where(and(eq(attendance.memberId, memberId), lte(attendance.date, upTo))),
+  ]);
 
   const member = memberRows[0];
   if (!member) return null;
-
-  const [goalRows, activityRows, checkInRows, ledgerRows, topicRows, reviewRows, attendanceRows] =
-    await Promise.all([
-      db
-        .select({
-          cohortGoal: studentGoals.cohortGoal,
-          dailyCommitmentMinutes: studentGoals.dailyCommitmentMinutes,
-          examName: studentGoals.examName,
-          examDate: studentGoals.examDate,
-          baselineDaysStudiedLastWeek: studentGoals.baselineDaysStudiedLastWeek,
-          baselineConsistencyRating: studentGoals.baselineConsistencyRating,
-          baselineConfidence: studentGoals.baselineConfidence,
-          biggestObstacle: studentGoals.biggestObstacle,
-          subjectName: subjects.name,
-        })
-        .from(studentGoals)
-        .leftJoin(subjects, eq(subjects.id, studentGoals.primarySubjectId))
-        .where(eq(studentGoals.memberId, memberId))
-        .limit(1),
-      db
-        .select()
-        .from(dailyActivity)
-        .where(
-          and(
-            eq(dailyActivity.memberId, memberId),
-            gte(dailyActivity.date, calendar.startDate),
-            lte(dailyActivity.date, upTo),
-          ),
-        )
-        .orderBy(asc(dailyActivity.date)),
-      db
-        .select()
-        .from(checkIns)
-        .where(eq(checkIns.memberId, memberId))
-        .orderBy(desc(checkIns.date))
-        .limit(14),
-      db
-        .select({
-          id: pointsLedger.id,
-          event: pointsLedger.event,
-          points: pointsLedger.points,
-          occurredOn: pointsLedger.occurredOn,
-          reason: pointsLedger.reason,
-        })
-        .from(pointsLedger)
-        .where(eq(pointsLedger.memberId, memberId))
-        .orderBy(desc(pointsLedger.occurredOn), desc(pointsLedger.createdAt))
-        .limit(40),
-      db
-        .select({
-          total: sql<number>`count(*)::int`,
-          completed: sql<number>`count(*) FILTER (WHERE ${roadmapTopics.status} = 'completed')::int`,
-        })
-        .from(roadmapTopics)
-        .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
-        .where(eq(roadmaps.memberId, memberId)),
-      db
-        .select()
-        .from(weeklyReviews)
-        .where(eq(weeklyReviews.memberId, memberId))
-        .orderBy(desc(weeklyReviews.weekStart))
-        .limit(6),
-      db
-        .select({
-          present: sql<number>`count(*) FILTER (WHERE ${attendance.status} = 'present')::int`,
-          late: sql<number>`count(*) FILTER (WHERE ${attendance.status} = 'late')::int`,
-          absent: sql<number>`count(*) FILTER (WHERE ${attendance.status} = 'absent')::int`,
-        })
-        .from(attendance)
-        .where(and(eq(attendance.memberId, memberId), lte(attendance.date, upTo))),
-    ]);
 
   const map = new Map(activityRows.map((r) => [r.date, r]));
   const lookup = (d: ISODate) => {

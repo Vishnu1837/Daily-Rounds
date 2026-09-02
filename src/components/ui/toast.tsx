@@ -1,14 +1,20 @@
 'use client';
 
 import { type ReactNode, createContext, useCallback, useContext, useMemo, useState } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { AlertTriangle, Check, Info, X } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
 
 type ToastTone = 'success' | 'error' | 'info';
 
-type Toast = { id: number; title: string; description?: string; tone: ToastTone };
+type Toast = {
+  id: number;
+  title: string;
+  description?: string;
+  tone: ToastTone;
+  /** Set while the exit animation plays; the row is dropped when it finishes. */
+  leaving?: boolean;
+};
 
 type ToastApi = {
   toast: (t: { title: string; description?: string; tone?: ToastTone }) => void;
@@ -26,6 +32,9 @@ export function useToast(): ToastApi {
 
 let nextId = 1;
 
+/** Must outlast `.toast-out` in globals.css, or a toast would vanish mid-fade. */
+const EXIT_MS = 260;
+
 const TONE = {
   success: {
     icon: Check,
@@ -40,18 +49,36 @@ const TONE = {
   },
 } as const;
 
+/**
+ * The application-wide toast host.
+ *
+ * Entrances and exits are CSS animations rather than a JavaScript animation library: this
+ * provider sits in the root layout, so anything it imports is downloaded by every visitor
+ * — including the ones who only ever see the public landing page.
+ *
+ * The exit is a two-step removal (mark `leaving`, drop after the animation) instead of an
+ * `<AnimatePresence>`. If the timer never fires the toast simply stays until the next one
+ * pushes it out, which is a far better failure than a stack that never clears.
+ */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const reduce = useReducedMotion();
 
   const remove = useCallback((id: number) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+    setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, leaving: true } : t)));
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, EXIT_MS);
   }, []);
 
   const toast = useCallback<ToastApi['toast']>(
     ({ title, description, tone = 'info' }) => {
       const id = nextId++;
-      setToasts((prev) => [...prev.slice(-2), { id, title, description, tone }]);
+      setToasts((prev) => {
+        // The cap counts only live toasts, so one on its way out never displaces a new one.
+        const live = prev.filter((t) => !t.leaving);
+        const dropped = new Set(live.slice(0, Math.max(0, live.length - 2)).map((t) => t.id));
+        return [...prev.filter((t) => !dropped.has(t.id)), { id, title, description, tone }];
+      });
       // Errors linger: they usually ask the reader to do something about them.
       window.setTimeout(() => remove(id), tone === 'error' ? 6500 : 4200);
     },
@@ -75,45 +102,41 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         role="region"
         aria-label="Notifications"
       >
-        <AnimatePresence initial={false}>
-          {toasts.map((t) => {
-            const { icon: Icon, accent, chip } = TONE[t.tone];
-            return (
-              <motion.div
-                key={t.id}
-                role="status"
-                aria-live={t.tone === 'error' ? 'assertive' : 'polite'}
-                layout
-                initial={reduce ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={reduce ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.97 }}
-                transition={{ duration: reduce ? 0 : 0.26, ease: [0.22, 1, 0.36, 1] }}
-                className="rounded-panel border-border bg-bg-elevated shadow-float pointer-events-auto relative flex w-full max-w-sm items-start gap-3 overflow-hidden border p-4 pl-5"
+        {toasts.map((t) => {
+          const { icon: Icon, accent, chip } = TONE[t.tone];
+          return (
+            <div
+              key={t.id}
+              role="status"
+              aria-live={t.tone === 'error' ? 'assertive' : 'polite'}
+              className={cn(
+                'rounded-panel border-border bg-bg-elevated shadow-float pointer-events-auto relative flex w-full max-w-sm items-start gap-3 overflow-hidden border p-4 pl-5',
+                t.leaving ? 'toast-out' : 'toast-in',
+              )}
+            >
+              {/* A colour bar rather than a coloured border: it survives a dark theme. */}
+              <span className={cn('absolute inset-y-0 left-0 w-1', accent)} aria-hidden />
+              <span
+                className={cn('grid size-6 shrink-0 place-items-center rounded-full', chip)}
+                aria-hidden
               >
-                {/* A colour bar rather than a coloured border: it survives a dark theme. */}
-                <span className={cn('absolute inset-y-0 left-0 w-1', accent)} aria-hidden />
-                <span
-                  className={cn('grid size-6 shrink-0 place-items-center rounded-full', chip)}
-                  aria-hidden
-                >
-                  <Icon className="size-3.5" strokeWidth={3} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-fg text-sm font-semibold">{t.title}</p>
-                  {t.description && <p className="text-fg-muted mt-0.5 text-sm">{t.description}</p>}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => remove(t.id)}
-                  aria-label="Dismiss"
-                  className="tap text-fg-subtle hover:bg-bg-sunken hover:text-fg -mt-1 -mr-1 grid size-7 place-items-center rounded-lg"
-                >
-                  <X className="size-3.5" aria-hidden />
-                </button>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
+                <Icon className="size-3.5" strokeWidth={3} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-fg text-sm font-semibold">{t.title}</p>
+                {t.description && <p className="text-fg-muted mt-0.5 text-sm">{t.description}</p>}
+              </div>
+              <button
+                type="button"
+                onClick={() => remove(t.id)}
+                aria-label="Dismiss"
+                className="tap text-fg-subtle hover:bg-bg-sunken hover:text-fg -mt-1 -mr-1 grid size-7 place-items-center rounded-lg"
+              >
+                <X className="size-3.5" aria-hidden />
+              </button>
+            </div>
+          );
+        })}
       </div>
     </ToastContext.Provider>
   );

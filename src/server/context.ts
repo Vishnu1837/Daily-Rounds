@@ -112,11 +112,8 @@ export const getMemberContext = cache(async (user: SessionUser): Promise<MemberC
   };
 });
 
-/** Cohort-level context for admin screens. */
-export const getCohortContext = cache(async (cohortId: string) => {
-  const rows = await db.select().from(cohorts).where(eq(cohorts.id, cohortId)).limit(1);
-  const cohort = rows[0];
-  if (!cohort) return null;
+/** Builds the cohort context from a cohort the caller already has in hand. */
+const cohortContextFor = cache(async (cohort: Cohort) => {
   const [calendar, rules] = await Promise.all([loadCalendar(cohort), loadPointRules(cohort.id)]);
   return {
     cohort,
@@ -125,6 +122,24 @@ export const getCohortContext = cache(async (cohortId: string) => {
     thresholds: thresholdsFor(cohort),
     today: todayInTimezone(cohort.timezone),
   };
+});
+
+export type CohortContext = NonNullable<Awaited<ReturnType<typeof cohortContextFor>>>;
+
+/**
+ * Cohort-level context for admin screens.
+ *
+ * Every admin page runs `getPrimaryCohort()` and then this, and this used to re-select the
+ * same cohort row by id — a wasted round trip at the very front of every render, before any
+ * of the page's own reads could start. Passing the row it already has skips it.
+ */
+export const getCohortContext = cache(async (cohort: Cohort | string) => {
+  if (typeof cohort !== 'string') return cohortContextFor(cohort);
+
+  const rows = await db.select().from(cohorts).where(eq(cohorts.id, cohort)).limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  return cohortContextFor(row);
 });
 
 /** The default cohort used by admin screens when none is specified. */
