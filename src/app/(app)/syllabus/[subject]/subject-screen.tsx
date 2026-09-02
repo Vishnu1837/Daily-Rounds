@@ -44,9 +44,12 @@ function subscribeToHash(onChange: () => void) {
 export function SubjectSyllabusScreen({
   subject,
   hasRoadmapForSubject,
+  basePath = '/syllabus',
 }: {
   subject: Subject;
   hasRoadmapForSubject: boolean;
+  /** The syllabus root this screen hangs off — `/syllabus`, or `/admin/syllabus`. */
+  basePath?: string;
 }) {
   const hash = useSyncExternalStore(
     subscribeToHash,
@@ -72,7 +75,7 @@ export function SubjectSyllabusScreen({
     <div className="space-y-5">
       <PageHeader
         eyebrow={
-          <Link href="/syllabus" className="hover:text-fg inline-flex items-center gap-1">
+          <Link href={basePath} className="hover:text-fg inline-flex items-center gap-1">
             <ArrowLeft className="size-3" aria-hidden />
             {subject.phaseLabel}
           </Link>

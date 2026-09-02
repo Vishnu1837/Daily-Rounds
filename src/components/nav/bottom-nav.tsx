@@ -9,7 +9,17 @@ import { cn } from '@/lib/cn';
 import { NavIcon } from './icon';
 import { type NavItem, groupNav } from './nav-items';
 
-function isActive(pathname: string, href: string): boolean {
+/*
+ * `pathname` is nullable, and that is the whole trick behind the prerendered shell.
+ *
+ * `usePathname()` cannot run while a route is being prerendered — the URL is not known yet —
+ * so the navigation is split in two. The presentational halves below take the path as a
+ * plain argument and render perfectly well without one; the `Suspense`-wrapped exports read
+ * the real path at request time. The prerendered shell therefore ships a complete, clickable
+ * navigation, and only the highlight on the current tab arrives a moment later.
+ */
+function isActive(pathname: string | null, href: string): boolean {
+  if (pathname === null) return false;
   if (href === '/' || href === '/admin') return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -25,8 +35,7 @@ function isActive(pathname: string, href: string): boolean {
  * One item may be raised into a centre action button. That slot is the product's single
  * daily ritual, so it is always in the same place and always the largest target.
  */
-export function BottomNav({ items }: { items: NavItem[] }) {
-  const pathname = usePathname();
+function BottomBar({ items, pathname }: { items: NavItem[]; pathname: string | null }) {
   const reduce = useReducedMotion();
   const primary = items.filter((i) => i.primary);
   const fab = primary.find((i) => i.fab);
@@ -107,8 +116,7 @@ export function BottomNav({ items }: { items: NavItem[] }) {
  * of eight. The active item gets a filled gradient pill *and* a brighter icon — colour
  * alone would not survive a monochrome display or a colour-blind reader.
  */
-export function SideNav({ items }: { items: NavItem[] }) {
-  const pathname = usePathname();
+function Rail({ items, pathname }: { items: NavItem[]; pathname: string | null }) {
   const reduce = useReducedMotion();
   const groups = groupNav(items);
 
@@ -158,4 +166,29 @@ export function SideNav({ items }: { items: NavItem[] }) {
       </div>
     </nav>
   );
+}
+
+/* ------------------------------------------------------------------ exports */
+
+/** The live navigation: knows which tab you are on. Must render inside `<Suspense>`. */
+export function BottomNav({ items }: { items: NavItem[] }) {
+  return <BottomBar items={items} pathname={usePathname()} />;
+}
+
+export function SideNav({ items }: { items: NavItem[] }) {
+  return <Rail items={items} pathname={usePathname()} />;
+}
+
+/**
+ * The same navigation with nothing highlighted — the prerendered stand-in.
+ *
+ * Not a skeleton: every destination is real and every link works from the first paint.
+ * Someone who taps through before the highlight resolves loses nothing at all.
+ */
+export function BottomNavFallback({ items }: { items: NavItem[] }) {
+  return <BottomBar items={items} pathname={null} />;
+}
+
+export function SideNavFallback({ items }: { items: NavItem[] }) {
+  return <Rail items={items} pathname={null} />;
 }

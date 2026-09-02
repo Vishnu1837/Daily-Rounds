@@ -25,10 +25,16 @@ export function SyllabusScreen({
   phases,
   totals,
   mySubjects,
+  basePath = '/syllabus',
 }: {
   phases: Phase[];
   totals: { subjects: number; sections: number; topics: number; nodes: number };
   mySubjects: string[];
+  /**
+   * Where a subject tile links to. The admin console mounts this same screen under
+   * `/admin/syllabus` so a cohort lead can read the course without leaving their shell.
+   */
+  basePath?: string;
 }) {
   const mine = new Set(mySubjects);
 
@@ -39,7 +45,7 @@ export function SyllabusScreen({
         title="Syllabus"
         description={`All ${totals.subjects} MBBS subjects, ${totals.sections} sections and ${totals.nodes.toLocaleString()} topic nodes — the map your roadmap is cut from.`}
       >
-        <SyllabusSearch />
+        <SyllabusSearch basePath={basePath} />
       </PageHeader>
 
       {phases.map((phase, phaseIndex) => (
@@ -52,7 +58,12 @@ export function SyllabusScreen({
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {phase.subjects.map((subject) => (
-                <SubjectTile key={subject.slug} subject={subject} isMine={mine.has(subject.name)} />
+                <SubjectTile
+                  key={subject.slug}
+                  subject={subject}
+                  isMine={mine.has(subject.name)}
+                  basePath={basePath}
+                />
               ))}
             </div>
           </section>
@@ -62,9 +73,17 @@ export function SyllabusScreen({
   );
 }
 
-function SubjectTile({ subject, isMine }: { subject: SubjectCard; isMine: boolean }) {
+function SubjectTile({
+  subject,
+  isMine,
+  basePath,
+}: {
+  subject: SubjectCard;
+  isMine: boolean;
+  basePath: string;
+}) {
   return (
-    <Link href={`/syllabus/${subject.slug}`} className="tap block rounded-2xl">
+    <Link href={`${basePath}/${subject.slug}`} className="tap block rounded-2xl">
       <Card interactive padding="md" className="h-full overflow-hidden">
         {isMine && <CardAurora tone="iris" />}
         <div className="relative flex items-start gap-3">
@@ -95,7 +114,7 @@ function SubjectTile({ subject, isMine }: { subject: SubjectCard; isMine: boolea
  * Search runs as a server action rather than over a client-side copy of the tree — the
  * curriculum is far too large to ship to the browser for this.
  */
-function SyllabusSearch() {
+function SyllabusSearch({ basePath }: { basePath: string }) {
   const [query, setQuery] = useState('');
   /** Results are stored with the query they answer, so a stale list is never rendered. */
   const [result, setResult] = useState<{ query: string; hits: CurriculumSearchHit[] } | null>(null);
@@ -156,7 +175,7 @@ function SyllabusSearch() {
               {hits.map((hit, i) => (
                 <li key={`${hit.subjectSlug}-${hit.sectionSlug}-${hit.topicTitle}-${i}`}>
                   <Link
-                    href={`/syllabus/${hit.subjectSlug}#${hit.sectionSlug}`}
+                    href={`${basePath}/${hit.subjectSlug}#${hit.sectionSlug}`}
                     onClick={() => setQuery('')}
                     className="hover:bg-bg-sunken block px-4 py-3"
                   >

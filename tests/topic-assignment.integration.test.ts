@@ -21,7 +21,18 @@ vi.mock('@/lib/auth/session', () => ({
   SESSION_COOKIE: 'dr_session',
 }));
 
-vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
+/*
+ * The cache primitives are no-ops here. `cacheTag` and `cacheLife` only annotate an entry,
+ * and `updateTag` clears one — outside a Next server there is nothing cached to annotate or
+ * clear, and the behaviour under test is the database write, not the bookkeeping around it.
+ */
+vi.mock('next/cache', () => ({
+  revalidatePath: () => {},
+  revalidateTag: () => {},
+  updateTag: () => {},
+  cacheTag: () => {},
+  cacheLife: () => {},
+}));
 
 function sessionUser(id: string, role: 'student' | 'admin'): SessionUser {
   return {
@@ -371,5 +382,235 @@ describe('what a student may do to their own topics', () => {
       .orderBy(asc(schema.roadmapTopics.position));
 
     expect(remaining[0]?.status).toBe('in_progress');
+  });
+});
+
+/* ------------------------------------------ assignment from the syllabus */
+
+const ANATOMY_REF = 'anatomy/general-anatomy-and-embryology/introduction-and-general-anatomy';
+const PHARM_REF = 'pharmacology/general-pharmacology/pharmacokinetics';
+
+/**
+ * A roadmap filed against a real curriculum subject slug.
+ *
+ * `createRoadmap` above randomises the slug so that parallel tests cannot collide, which is
+ * right for it and wrong here: the whole question under test is whether a curriculum ref
+ * finds the student's roadmap for that subject, and that match is made on the slug.
+ */
+async function createCurriculumRoadmap(memberId: string, slug: string, titles: string[]) {
+  await db
+    .insert(schema.subjects)
+    .values({ name: slug, slug })
+    .onConflictDoNothing({ target: schema.subjects.slug });
+
+  const [subject] = await db
+    .select()
+    .from(schema.subjects)
+    .where(eq(schema.subjects.slug, slug))
+    .limit(1);
+
+  const [roadmap] = await db
+    .insert(schema.roadmaps)
+    .values({ memberId, subjectId: subject!.id, slot: 'primary', title: slug })
+    .returning();
+
+  const topics = [];
+  for (const [index, title] of titles.entries()) {
+    const [topic] = await db
+      .insert(schema.roadmapTopics)
+      .values({
+        roadmapId: roadmap!.id,
+        title,
+        position: index,
+        status: index === 0 ? 'in_progress' : 'upcoming',
+      })
+      .returning();
+    topics.push(topic!);
+  }
+  return { roadmap: roadmap!, topics };
+}
+
+const topicsOn = async (roadmapId: string) =>
+  db
+    .select()
+    .from(schema.roadmapTopics)
+    .where(eq(schema.roadmapTopics.roadmapId, roadmapId))
+    .orderBy(asc(schema.roadmapTopics.position));
+
+describe('assignSyllabusTopicAction', () => {
+  it('adds the topic to the roadmap the student already has for that subject', async () => {
+    const { cohort } = await createTestCohort();
+    const admin = await createTestMember(cohort.id, { role: 'admin' });
+    const student = await createTestMember(cohort.id);
+    const { roadmap, topics } = await createCurriculumRoadmap(student.memberId, 'anatomy', [
+      'Shoulder',
+      'Arm',
+    ]);
+
+    state.user = sessionUser(admin.user.id, 'admin');
+    const { assignSyllabusTopicAction } = await import('@/server/actions/admin');
+
+    const result = await assignSyllabusTopicAction(cohort.id, {
+      memberId: student.memberId,
+      ref: ANATOMY_REF,
+      date: '2025-09-02',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.placement).toBe('added');
+
+    const rows = await topicsOn(roadmap.id);
+    expect(rows).toHaveLength(3);
+
+    const added = rows.find((t) => t.curriculumRef === ANATOMY_REF);
+    expect(added?.status).toBe('in_progress');
+    // It sits at the end, unscheduled — it was never part of the generated plan.
+    expect(added?.position).toBe(2);
+    expect(added?.weekId).toBeNull();
+
+    // The topic that *was* current steps back; nothing else is rewritten.
+    expect(await statusOf(topics[0]!.id)).toBe('upcoming');
+
+    const assignment = await assignmentFor(student.memberId, '2025-09-02');
+    expect(assignment?.topicId).toBe(added?.id);
+    expect(assignment?.customTopicTitle).toBeNull();
+    expect(assignment?.source).toBe('admin');
+  });
+
+  it('reuses the roadmap row when the topic is already there', async () => {
+    const { cohort } = await createTestCohort();
+    const admin = await createTestMember(cohort.id, { role: 'admin' });
+    const student = await createTestMember(cohort.id);
+    const { roadmap } = await createCurriculumRoadmap(student.memberId, 'anatomy', ['Shoulder']);
+
+    state.user = sessionUser(admin.user.id, 'admin');
+    const { assignSyllabusTopicAction } = await import('@/server/actions/admin');
+
+    const first = await assignSyllabusTopicAction(cohort.id, {
+      memberId: student.memberId,
+      ref: ANATOMY_REF,
+      date: '2025-09-02',
+    });
+    const second = await assignSyllabusTopicAction(cohort.id, {
+      memberId: student.memberId,
+      ref: ANATOMY_REF,
+      date: '2025-09-03',
+    });
+
+    expect(first.ok && second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.data.placement).toBe('roadmap');
+    // Assigning the same ref twice must not leave the student with two copies of it.
+    const copies = (await topicsOn(roadmap.id)).filter((t) => t.curriculumRef === ANATOMY_REF);
+    expect(copies).toHaveLength(1);
+  });
+
+  it('records a topic from a subject with no roadmap, leaving their roadmaps alone', async () => {
+    const { cohort } = await createTestCohort();
+    const admin = await createTestMember(cohort.id, { role: 'admin' });
+    const student = await createTestMember(cohort.id);
+    const { roadmap, topics } = await createCurriculumRoadmap(student.memberId, 'anatomy', [
+      'Shoulder',
+      'Arm',
+    ]);
+
+    state.user = sessionUser(admin.user.id, 'admin');
+    const { assignSyllabusTopicAction } = await import('@/server/actions/admin');
+
+    const result = await assignSyllabusTopicAction(cohort.id, {
+      memberId: student.memberId,
+      ref: PHARM_REF,
+      date: '2025-09-02',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.placement).toBe('off_roadmap');
+
+    const assignment = await assignmentFor(student.memberId, '2025-09-02');
+    expect(assignment?.topicId).toBeNull();
+    expect(assignment?.customTopicTitle).toBe('Pharmacokinetics');
+    expect(assignment?.customTopicRef).toBe(PHARM_REF);
+    expect(assignment?.customSubjectName).toBe('Pharmacology');
+
+    // The Anatomy roadmap is exactly as it was — no new row, no status change.
+    expect(await topicsOn(roadmap.id)).toHaveLength(2);
+    expect(await statusOf(topics[0]!.id)).toBe('in_progress');
+  });
+
+  it('clears an off-roadmap topic when the day is reassigned from the roadmap', async () => {
+    const { cohort } = await createTestCohort();
+    const admin = await createTestMember(cohort.id, { role: 'admin' });
+    const student = await createTestMember(cohort.id);
+    const { topics } = await createCurriculumRoadmap(student.memberId, 'anatomy', [
+      'Shoulder',
+      'Arm',
+    ]);
+
+    state.user = sessionUser(admin.user.id, 'admin');
+    const { assignSyllabusTopicAction, assignIndividualTopicAction } = await import(
+      '@/server/actions/admin'
+    );
+
+    await assignSyllabusTopicAction(cohort.id, {
+      memberId: student.memberId,
+      ref: PHARM_REF,
+      date: '2025-09-02',
+    });
+    await assignIndividualTopicAction(cohort.id, {
+      memberId: student.memberId,
+      topicId: topics[1]!.id,
+      date: '2025-09-02',
+    });
+
+    const assignment = await assignmentFor(student.memberId, '2025-09-02');
+    expect(assignment?.topicId).toBe(topics[1]!.id);
+    // Otherwise the day would show two topics at once.
+    expect(assignment?.customTopicTitle).toBeNull();
+    expect(assignment?.customTopicRef).toBeNull();
+    expect(assignment?.customSubjectName).toBeNull();
+  });
+
+  it('refuses a ref that is not in the curriculum, and a whole subject', async () => {
+    const { cohort } = await createTestCohort();
+    const admin = await createTestMember(cohort.id, { role: 'admin' });
+    const student = await createTestMember(cohort.id);
+
+    state.user = sessionUser(admin.user.id, 'admin');
+    const { assignSyllabusTopicAction } = await import('@/server/actions/admin');
+
+    const unknown = await assignSyllabusTopicAction(cohort.id, {
+      memberId: student.memberId,
+      ref: 'anatomy/not-a-section/not-a-topic',
+      date: '2025-09-02',
+    });
+    const wholeSubject = await assignSyllabusTopicAction(cohort.id, {
+      memberId: student.memberId,
+      ref: 'anatomy',
+      date: '2025-09-02',
+    });
+
+    expect(unknown.ok).toBe(false);
+    expect(wholeSubject.ok).toBe(false);
+    expect(await assignmentFor(student.memberId, '2025-09-02')).toBeUndefined();
+  });
+
+  it('is refused outright for a student', async () => {
+    const { cohort } = await createTestCohort();
+    const student = await createTestMember(cohort.id);
+    await createCurriculumRoadmap(student.memberId, 'anatomy', ['Shoulder']);
+
+    state.user = sessionUser(student.user.id, 'student');
+    const { assignSyllabusTopicAction } = await import('@/server/actions/admin');
+
+    const result = await assignSyllabusTopicAction(cohort.id, {
+      memberId: student.memberId,
+      ref: ANATOMY_REF,
+      date: '2025-09-02',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(await assignmentFor(student.memberId, '2025-09-02')).toBeUndefined();
   });
 });

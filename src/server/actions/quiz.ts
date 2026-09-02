@@ -101,6 +101,7 @@ export async function submitQuizAction(input: {
 
     await settleDay({
       memberId: ctx.memberId,
+      cohortId: ctx.cohort.id,
       date: ctx.today,
       calendar: ctx.calendar,
       rules: ctx.rules,

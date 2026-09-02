@@ -9,8 +9,6 @@ import { isoWeekday } from '@/lib/domain/calendar';
 import { CheckInScreen } from './check-in-screen';
 
 export const metadata: Metadata = { title: 'Daily check-in' };
-export const dynamic = 'force-dynamic';
-
 export default async function CheckInPage() {
   const user = await requireOnboardedUser();
   const ctx = await getMemberContext(user);

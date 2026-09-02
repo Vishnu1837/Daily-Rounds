@@ -2,13 +2,16 @@ import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 
 import { requireAdmin } from '@/lib/auth/guards';
+import { CURRICULUM_SUBJECTS, topicCount } from '@/lib/curriculum';
 import { getCohortContext, getPrimaryCohort } from '@/server/context';
 import { getStudentDetail, getStudentTopicPlan } from '@/server/queries/admin';
 
 import { StudentDetailScreen } from './student-detail';
 
 export const metadata: Metadata = { title: 'Student' };
-export const dynamic = 'force-dynamic';
+
+// Not prerendered — see the note in the admin layout. This page is all data.
+export const instant = false;
 
 export default async function StudentDetailPage({
   params,
@@ -39,6 +42,17 @@ export default async function StudentDetailPage({
       cohortEnded={ctx.today > ctx.calendar.endDate}
       detail={detail}
       topicPlan={topicPlan}
+      /*
+       * Names only. The picker fetches a subject's modules on demand, so the 5,000-line
+       * curriculum tree never reaches the browser just to fill a dropdown.
+       */
+      syllabusSubjects={CURRICULUM_SUBJECTS.map((subject) => ({
+        slug: subject.slug,
+        name: subject.name,
+        number: subject.number,
+        phaseLabel: subject.phaseLabel,
+        topicCount: topicCount(subject),
+      }))}
     />
   );
 }

@@ -14,7 +14,9 @@ import { getRecentCheckIns } from '@/server/queries/admin';
 import { ClipboardList } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'Check-ins' };
-export const dynamic = 'force-dynamic';
+
+// Not prerendered — see the note in the admin layout. This page is all data.
+export const instant = false;
 
 export default async function CheckInsPage() {
   await requireAdmin();

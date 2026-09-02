@@ -308,6 +308,13 @@ export const cohortSettingsSchema = z
       .optional()
       .or(z.literal(''))
       .transform((v) => v || undefined),
+    meetTitle: z
+      .string()
+      .trim()
+      .max(120)
+      .optional()
+      .or(z.literal(''))
+      .transform((v) => v || undefined),
     meetStartTime: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:MM'),
     meetEndTime: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:MM'),
     atRiskMissedDays: z.coerce.number().int().min(1).max(30),
@@ -677,6 +684,27 @@ export const waitlistNoteSchema = z.object({
  * warning is that reassigning finished work is a decision, so the decision has to reach the
  * write that performs it.
  */
+/**
+ * Assigning a topic straight from the syllabus.
+ *
+ * The topic is identified by its curriculum ref rather than by a database id, because the
+ * whole point is that the admin may pick something that has no row yet — a topic in a
+ * subject this student has never been given a roadmap for. The server resolves the ref
+ * against the tree, so an unknown path is refused before anything is written.
+ */
+export const syllabusAssignmentSchema = z.object({
+  memberId: z.string().uuid(),
+  ref: z
+    .string()
+    .trim()
+    .min(2)
+    .max(200)
+    .regex(/^[a-z0-9-]+(\/[a-z0-9-]+){1,2}$/, 'Pick a section or a topic'),
+  date: isoDateSchema,
+  plannedMinutes: z.coerce.number().int().min(5).max(720).default(90),
+  allowCompleted: z.coerce.boolean().optional().default(false),
+});
+
 export const individualAssignmentSchema = z.object({
   memberId: z.string().uuid(),
   topicId: z.string().uuid(),

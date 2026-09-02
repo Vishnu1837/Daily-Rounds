@@ -137,7 +137,13 @@ export async function joinStudyRoomAction(): Promise<Result<JoinResult>> {
         createdBy: ctx.user.id,
       });
 
-      await settleDay({ memberId, date: today, calendar: ctx.calendar, rules: ctx.rules });
+      await settleDay({
+        memberId,
+        cohortId: ctx.cohort.id,
+        date: today,
+        calendar: ctx.calendar,
+        rules: ctx.rules,
+      });
       revalidatePath('/today');
       revalidatePath('/admin/attendance');
     }

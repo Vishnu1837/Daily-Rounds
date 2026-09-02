@@ -1,47 +1,44 @@
-import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight } from 'lucide-react';
 
 import { Logo } from '@/components/brand/logo';
-import { LevelBadge, XPBar } from '@/components/gamification/level';
-import { BottomNav, SideNav } from '@/components/nav/bottom-nav';
-import { MobileMenu } from '@/components/nav/mobile-menu';
+import {
+  BottomNav,
+  BottomNavFallback,
+  SideNav,
+  SideNavFallback,
+} from '@/components/nav/bottom-nav';
+import { MobileMenu, MobileMenuFallback } from '@/components/nav/mobile-menu';
 import { STUDENT_NAV } from '@/components/nav/nav-items';
-import { TopBar } from '@/components/nav/top-bar';
-import { requireUser } from '@/lib/auth/guards';
-import { levelFromPoints } from '@/lib/domain/level';
-import { calculateCurrentStreak } from '@/lib/domain/streak';
-import { minDate } from '@/lib/domain/calendar';
-import { getMemberContext } from '@/server/context';
-import { readActivity, readTotalPoints } from '@/server/scoring';
+import { AvatarSkeleton, HeaderStatsSkeleton, TopBar } from '@/components/nav/top-bar';
 import { STUDENT_HOME } from '@/lib/routes';
 
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const user = await requireUser();
-  if (!user.onboardingCompletedAt && user.role !== 'admin') redirect('/onboarding');
+import {
+  AdminShortcutCompact,
+  AdminShortcutInline,
+  HeaderIdentity,
+  HeaderStanding,
+  HeaderSubtitle,
+  RailIdentity,
+  RailIdentitySkeleton,
+  RailStanding,
+  RailStandingSkeleton,
+  ShellSlot,
+} from './shell';
 
-  const ctx = await getMemberContext(user);
-
-  // Admins without a student membership belong in the admin console.
-  if (!ctx) {
-    if (user.role === 'admin') redirect('/admin');
-    redirect('/no-cohort');
-  }
-
-  const [activity, points] = await Promise.all([
-    readActivity(ctx.memberId, ctx.calendar.startDate, minDate(ctx.today, ctx.calendar.endDate)),
-    readTotalPoints(ctx.memberId),
-  ]);
-  const streak = calculateCurrentStreak(ctx.calendar, activity.showedUp, ctx.today).length;
-  const level = levelFromPoints(points);
-
-  const todayLabel = new Date(`${ctx.today}T12:00:00Z`).toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    timeZone: 'UTC',
-  });
-
+/**
+ * The student shell.
+ *
+ * Deliberately synchronous. Everything here — the rail, the navigation, the header frame,
+ * the main column — is the same for every student, so Next can prerender it once and hand
+ * it to a navigation instantly. The parts that differ per person are Suspense boundaries
+ * that stream in behind it.
+ *
+ * The rule this encodes: nothing in this file may `await`. The moment the layout reads a
+ * cookie or touches the database directly, the whole route loses its static shell and every
+ * tab switch goes back to waiting on the server before it can paint. See `./shell.tsx`.
+ */
+export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-dvh lg:flex">
       {/* ------------------------------------------------------ desktop rail */}
@@ -51,7 +48,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </Link>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <SideNav items={STUDENT_NAV} />
+          <Suspense fallback={<SideNavFallback items={STUDENT_NAV} />}>
+            <SideNav items={STUDENT_NAV} />
+          </Suspense>
         </div>
 
         {/*
@@ -59,55 +58,48 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           the last thing in their eyeline on every screen, and it is a reason to keep going.
         */}
         <div className="rounded-panel border-border bg-bg-sunken mt-6 border p-4">
-          <LevelBadge info={level} size="md" />
-          <XPBar info={level} className="mt-4" />
-          <p className="border-border eyebrow mt-4 truncate border-t pt-3">{ctx.cohort.name}</p>
-          <p className="text-fg mt-0.5 truncate text-sm font-semibold">{user.fullName}</p>
-          {user.role === 'admin' && (
-            <Link
-              href="/admin"
-              className="text-pulse-700 hover:text-pulse-500 dark:text-pulse-300 mt-3 inline-flex items-center gap-1 text-sm font-semibold"
-            >
-              Admin console
-              <ArrowUpRight className="size-3.5" aria-hidden />
-            </Link>
-          )}
+          <Suspense fallback={<RailStandingSkeleton />}>
+            <RailStanding />
+          </Suspense>
+          <Suspense fallback={<RailIdentitySkeleton />}>
+            <RailIdentity />
+          </Suspense>
         </div>
       </aside>
 
       <div className="min-w-0 flex-1">
         <TopBar
-          name={user.fullName}
-          avatarUrl={user.avatarUrl}
-          streak={streak}
-          xp={level.xp}
-          level={level.level}
-          subtitle={`${todayLabel} · ${ctx.cohort.name}`}
+          identity={
+            <Suspense fallback={<AvatarSkeleton />}>
+              <HeaderIdentity />
+            </Suspense>
+          }
+          stats={
+            <Suspense fallback={<HeaderStatsSkeleton />}>
+              <HeaderStanding />
+            </Suspense>
+          }
+          subtitle={
+            <ShellSlot>
+              <HeaderSubtitle />
+            </ShellSlot>
+          }
           left={
-            <MobileMenu
-              items={STUDENT_NAV}
-              footer={
-                user.role === 'admin' ? (
-                  <Link
-                    href="/admin"
-                    className="text-pulse-700 hover:text-pulse-500 dark:text-pulse-300 inline-flex items-center gap-1 px-3 text-sm font-semibold"
-                  >
-                    Admin console
-                    <ArrowUpRight className="size-3.5" aria-hidden />
-                  </Link>
-                ) : null
-              }
-            />
+            <Suspense fallback={<MobileMenuFallback items={STUDENT_NAV} />}>
+              <MobileMenu
+                items={STUDENT_NAV}
+                footer={
+                  <ShellSlot>
+                    <AdminShortcutInline />
+                  </ShellSlot>
+                }
+              />
+            </Suspense>
           }
           right={
-            user.role === 'admin' ? (
-              <Link
-                href="/admin"
-                className="tap rounded-field text-fg-muted hover:bg-bg-sunken hover:text-fg mr-1 hidden px-3 py-1.5 text-sm font-semibold sm:inline-block lg:hidden"
-              >
-                Admin
-              </Link>
-            ) : null
+            <ShellSlot>
+              <AdminShortcutCompact />
+            </ShellSlot>
           }
         />
 
@@ -123,7 +115,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </main>
       </div>
 
-      <BottomNav items={STUDENT_NAV} />
+      <Suspense fallback={<BottomNavFallback items={STUDENT_NAV} />}>
+        <BottomNav items={STUDENT_NAV} />
+      </Suspense>
     </div>
   );
 }

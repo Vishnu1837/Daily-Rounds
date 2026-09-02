@@ -1,12 +1,15 @@
 import { Skeleton, SkeletonCard, SkeletonStatGrid } from '@/components/ui/feedback';
 
 /**
- * The student shell's loading state.
+ * The fallback loading state, for screens that have not been given one of their own.
  *
- * It mirrors the *shape* of the dashboard rather than showing a spinner, so the layout does
- * not jump when the data lands and the wait reads as "nearly there" instead of "something is
- * happening somewhere". The shell itself — rail, header, nav — is already painted by the
- * layout above this, so only the page body needs standing in for.
+ * Every screen a student reaches daily has its own `loading.tsx` next to it, stating the
+ * real page title and sketching that page's actual composition. This generic shape covers
+ * the rest — the profile, a quiz, a single syllabus subject — where a neutral column is
+ * honest enough and a bespoke skeleton would be upkeep for a screen nobody waits on twice.
+ *
+ * The shell around it — rail, header, nav — is prerendered by the layout, so only the page
+ * body needs standing in for.
  */
 export default function AppLoading() {
   return (

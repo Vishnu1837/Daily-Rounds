@@ -11,7 +11,9 @@ import { cn } from '@/lib/cn';
 import { NavIcon } from './icon';
 import { type NavItem, groupNav } from './nav-items';
 
-function isActive(pathname: string, href: string): boolean {
+/** Nullable while the route is being prerendered — see the note in `bottom-nav.tsx`. */
+function isActive(pathname: string | null, href: string): boolean {
+  if (pathname === null) return false;
   if (href === '/' || href === '/admin') return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -24,8 +26,15 @@ function isActive(pathname: string, href: string): boolean {
  * unreachable on a phone. This is where those live, grouped exactly as they are in the
  * desktop rail so the two navigations describe the same product.
  */
-export function MobileMenu({ items, footer }: { items: NavItem[]; footer?: React.ReactNode }) {
-  const pathname = usePathname();
+function Menu_({
+  items,
+  footer,
+  pathname,
+}: {
+  items: NavItem[];
+  footer?: React.ReactNode;
+  pathname: string | null;
+}) {
   const [open, setOpen] = useState(false);
 
   const groups = groupNav(items.filter((i) => !i.primary));
@@ -85,4 +94,14 @@ export function MobileMenu({ items, footer }: { items: NavItem[]; footer?: React
       </Sheet>
     </>
   );
+}
+
+/** The live overflow menu. Must render inside `<Suspense>` — it reads the current path. */
+export function MobileMenu(props: { items: NavItem[]; footer?: React.ReactNode }) {
+  return <Menu_ {...props} pathname={usePathname()} />;
+}
+
+/** The prerendered stand-in: same destinations, nothing marked as current. */
+export function MobileMenuFallback(props: { items: NavItem[]; footer?: React.ReactNode }) {
+  return <Menu_ {...props} pathname={null} />;
 }

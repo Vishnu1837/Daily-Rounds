@@ -12,8 +12,6 @@ import { getEndOfCohortReport } from '@/server/queries/admin';
 import { STUDENT_HOME } from '@/lib/routes';
 
 export const metadata: Metadata = { title: 'Your cohort report' };
-export const dynamic = 'force-dynamic';
-
 export default async function ReportPage() {
   const user = await requireOnboardedUser();
   const memberCtx = await getMemberContext(user);

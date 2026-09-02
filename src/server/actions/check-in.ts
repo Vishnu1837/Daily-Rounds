@@ -126,6 +126,7 @@ export async function submitCheckInAction(
 
     const outcome = await settleDay({
       memberId: ctx.memberId,
+      cohortId: ctx.cohort.id,
       date: ctx.today,
       calendar: ctx.calendar,
       rules: ctx.rules,
@@ -195,6 +196,7 @@ export async function submitWeeklyReviewAction(
 
     await settleDay({
       memberId: ctx.memberId,
+      cohortId: ctx.cohort.id,
       date: ctx.today,
       calendar: ctx.calendar,
       rules: ctx.rules,

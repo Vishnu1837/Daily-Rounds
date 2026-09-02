@@ -28,7 +28,9 @@ import { getCohortOverview, getCohortStudents } from '@/server/queries/admin';
 import { RecalculateButton } from './recalculate-button';
 
 export const metadata: Metadata = { title: 'Admin overview' };
-export const dynamic = 'force-dynamic';
+
+// Not prerendered — see the note in the admin layout. This page is all data.
+export const instant = false;
 
 export default async function AdminOverviewPage() {
   await requireAdmin();

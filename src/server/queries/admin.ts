@@ -616,7 +616,11 @@ export async function getAssignmentsForDate(cohortId: string, date: ISODate) {
       name: users.fullName,
       assignmentId: dailyAssignments.id,
       topicId: dailyAssignments.topicId,
-      topicTitle: roadmapTopics.title,
+      // A syllabus topic assigned outside the student's two roadmaps lives on the
+      // assignment row itself and has no `roadmap_topics` row to join to.
+      topicTitle: sql<
+        string | null
+      >`coalesce(${roadmapTopics.title}, ${dailyAssignments.customTopicTitle})`,
       plannedMinutes: dailyAssignments.plannedMinutes,
       note: dailyAssignments.note,
       /** 'admin' when this topic was picked for this student individually. */
@@ -691,6 +695,11 @@ export type StudentTopicPlan = {
   todayTopicId: string | null;
   /** 'admin' when today's topic was chosen for this student by hand. */
   todaySource: 'auto' | 'admin' | null;
+  /**
+   * Today's topic when it came from a subject this student has no roadmap for — the one
+   * case where the day's topic is not a row on any of the roadmaps below.
+   */
+  todayOffRoadmap: { title: string; subjectName: string | null; ref: string | null } | null;
   subjects: TopicPlanSubject[];
 };
 
@@ -712,7 +721,13 @@ export async function getStudentTopicPlan(
   const [rows, assignment] = await Promise.all([
     getStudentRoadmaps(cohortId, memberId),
     db
-      .select({ topicId: dailyAssignments.topicId, source: dailyAssignments.source })
+      .select({
+        topicId: dailyAssignments.topicId,
+        source: dailyAssignments.source,
+        customTopicTitle: dailyAssignments.customTopicTitle,
+        customTopicRef: dailyAssignments.customTopicRef,
+        customSubjectName: dailyAssignments.customSubjectName,
+      })
       .from(dailyAssignments)
       .where(and(eq(dailyAssignments.memberId, memberId), eq(dailyAssignments.date, date)))
       .limit(1),
@@ -774,10 +789,19 @@ export async function getStudentTopicPlan(
       : null;
   }
 
+  const off = assignment[0]?.customTopicTitle
+    ? {
+        title: assignment[0].customTopicTitle,
+        subjectName: assignment[0].customSubjectName,
+        ref: assignment[0].customTopicRef,
+      }
+    : null;
+
   return {
     date,
     todayTopicId,
     todaySource: assignment[0]?.source ?? null,
+    todayOffRoadmap: off,
     subjects: [...subjects.values()].sort((a, b) =>
       a.slot === b.slot ? 0 : a.slot === 'primary' ? -1 : 1,
     ),

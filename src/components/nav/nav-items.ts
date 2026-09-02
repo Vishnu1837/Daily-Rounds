@@ -170,6 +170,22 @@ export const ADMIN_NAV: NavItem[] = [
     group: 'Content',
   },
   {
+    href: '/admin/syllabus',
+    label: 'Syllabus',
+    short: 'Syllabus',
+    icon: 'library',
+    primary: false,
+    group: 'Content',
+  },
+  {
+    href: '/admin/grove',
+    label: 'Grove',
+    short: 'Grove',
+    icon: 'tree',
+    primary: false,
+    group: 'Content',
+  },
+  {
     href: '/admin/waitlist',
     label: 'Waitlist',
     short: 'Waitlist',

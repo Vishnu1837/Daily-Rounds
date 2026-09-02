@@ -11,8 +11,6 @@ import { readTotalPoints } from '@/server/scoring';
 import { ProfileScreen } from './profile-screen';
 
 export const metadata: Metadata = { title: 'Profile' };
-export const dynamic = 'force-dynamic';
-
 export default async function ProfilePage() {
   const user = await requireOnboardedUser();
   const ctx = await getMemberContext(user);

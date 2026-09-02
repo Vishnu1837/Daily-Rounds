@@ -8,8 +8,6 @@ import { getAvailableQuizzes, getMaterials } from '@/server/queries/student';
 import { MaterialsScreen } from './materials-screen';
 
 export const metadata: Metadata = { title: 'Materials' };
-export const dynamic = 'force-dynamic';
-
 export default async function MaterialsPage() {
   const user = await requireOnboardedUser();
   const ctx = await getMemberContext(user);

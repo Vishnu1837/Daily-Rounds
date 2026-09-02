@@ -13,6 +13,7 @@ import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/ui/page-header';
 import { cn } from '@/lib/cn';
 import { POINT_EVENT_LABELS, type PointRules } from '@/lib/domain/points';
+import { roomTitle } from '@/lib/domain/study-room';
 import type { RiskThresholds } from '@/lib/domain/risk';
 import {
   addCalendarDayAction,
@@ -53,6 +54,7 @@ type Cohort = {
   activeWeekdays: number[];
   streakThresholdPct: number;
   meetUrl: string | null;
+  meetTitle: string | null;
   meetStartTime: string;
   meetEndTime: string;
 };
@@ -196,6 +198,14 @@ export function SettingsScreen({
               error={errors.meetUrl}
               placeholder="https://meet.google.com/abc-defg-hij"
               hint="Changing this here updates it everywhere — no code change needed."
+            />
+            <TextInput
+              label="Room name"
+              name="meetTitle"
+              defaultValue={cohort.meetTitle ?? ''}
+              error={errors.meetTitle}
+              placeholder={roomTitle(cohort.meetStartTime)}
+              hint="Leave this empty and the room is named after the hour it runs at — morning, afternoon, evening or night — in each student's own timezone."
             />
             <div className="grid grid-cols-2 gap-3">
               <TextInput

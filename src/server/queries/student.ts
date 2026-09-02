@@ -16,6 +16,7 @@ import {
   or,
   sql,
 } from 'drizzle-orm';
+import { cacheLife, cacheTag } from 'next/cache';
 import { cache } from 'react';
 
 import { db } from '@/db/client';
@@ -26,6 +27,7 @@ import {
   attendance,
   checkIns,
   cohortMembers,
+  cohorts,
   dailyActivity,
   dailyAssignments,
   events,
@@ -67,7 +69,7 @@ import {
   calculateWeeklyProgress,
 } from '@/lib/domain/consistency';
 import { BEHAVIOUR_EVENTS, maxDailyBehaviourPoints } from '@/lib/domain/points';
-import { PRESENCE_STALE_SECONDS, parseHm } from '@/lib/domain/study-room';
+import { PRESENCE_STALE_SECONDS, parseHm, roomTitle } from '@/lib/domain/study-room';
 import {
   calculateBestStreak,
   calculateCohortStreak,
@@ -75,7 +77,9 @@ import {
   calculateComebackState,
   nextMilestone,
 } from '@/lib/domain/streak';
-import type { MemberContext } from '@/server/context';
+import { formatTimeInZone, timezoneLabel } from '@/lib/timezones';
+import { cohortTag } from '@/server/cache';
+import { type MemberContext, loadCalendar } from '@/server/context';
 import { readActivity, readTotalPoints } from '@/server/scoring';
 
 /* ------------------------------------------------------------------ home */
@@ -115,8 +119,16 @@ export type HomeData = {
   } | null;
   studyRoom: {
     url: string | null;
+    /** What to call it: the cohort's own name, else one derived from the hour it runs at. */
+    title: string;
+    /** The window in COHORT time — what every attendance decision is made against. */
     startTime: string;
     endTime: string;
+    /** The same window as the student's own timezone renders it. What the card prints. */
+    displayStartTime: string;
+    displayEndTime: string;
+    /** Set only when the two zones differ, so the card can say whose clock it is showing. */
+    zoneNote: string | null;
     attended: AttendanceStatus | null;
     /** Cohort wall clock in minutes since midnight, so the card's countdown is not the browser's. */
     nowMinutes: number;
@@ -139,6 +151,7 @@ export type HomeData = {
     title: string;
     type: string;
     date: ISODate;
+    /** In the student's timezone, like every other time on this screen. */
     startTime: string;
     meetUrl: string | null;
   }[];
@@ -147,8 +160,25 @@ export type HomeData = {
 };
 
 export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
-  const { memberId, calendar, today, rules, cohort } = ctx;
+  const { memberId, calendar, today, rules, cohort, user } = ctx;
   const upTo = minDate(today, calendar.endDate);
+
+  /*
+   * Session times are stored as a wall clock against the *cohort's* zone, so a student in
+   * another country was being shown a time that was never theirs — the profile timezone
+   * picker changed nothing on the screen. Every clock time this page prints is translated
+   * once, here, and the untranslated cohort window travels alongside it because that is
+   * still what attendance is judged against.
+   */
+  const viewerZone = user.timezone || cohort.timezone;
+  const roomWindow = {
+    startTime: formatTimeInZone(cohort.meetStartTime, today, cohort.timezone, viewerZone),
+    endTime: formatTimeInZone(cohort.meetEndTime, today, cohort.timezone, viewerZone),
+    zoneNote:
+      viewerZone === cohort.timezone
+        ? null
+        : `${timezoneLabel(viewerZone)} · ${cohort.meetStartTime}–${cohort.meetEndTime} cohort time`,
+  };
 
   const [
     activity,
@@ -171,9 +201,21 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
         plannedMinutes: dailyAssignments.plannedMinutes,
         note: dailyAssignments.note,
         topicId: roadmapTopics.id,
-        topicTitle: roadmapTopics.title,
-        topicRef: roadmapTopics.curriculumRef,
-        subjectName: subjects.name,
+        /*
+         * An admin may set the day's topic from anywhere in the syllabus, including a
+         * subject this student has no roadmap for — that one has no `roadmap_topics` row to
+         * join to and is recorded on the assignment itself. The roadmap topic wins whenever
+         * there is one.
+         */
+        topicTitle: sql<
+          string | null
+        >`coalesce(${roadmapTopics.title}, ${dailyAssignments.customTopicTitle})`,
+        topicRef: sql<
+          string | null
+        >`coalesce(${roadmapTopics.curriculumRef}, ${dailyAssignments.customTopicRef})`,
+        subjectName: sql<
+          string | null
+        >`coalesce(${subjects.name}, ${dailyAssignments.customSubjectName})`,
       })
       .from(dailyAssignments)
       .leftJoin(roadmapTopics, eq(roadmapTopics.id, dailyAssignments.topicId))
@@ -350,8 +392,17 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
       : null,
     studyRoom: {
       url: cohort.meetUrl,
+      /*
+       * Named after the start time *the student sees*, not the cohort's. A 06:00 Delhi room
+       * is an evening room in Toronto, and a card that says "Morning Study Room · 20:30" is
+       * wrong in the only way that matters.
+       */
+      title: roomTitle(roomWindow.startTime, cohort.meetTitle),
       startTime: cohort.meetStartTime,
       endTime: cohort.meetEndTime,
+      displayStartTime: roomWindow.startTime,
+      displayEndTime: roomWindow.endTime,
+      zoneNote: roomWindow.zoneNote,
       attended: attendedStatus,
       nowMinutes: parseHm(timeInTimezone(cohort.timezone)) ?? 0,
       joined: presenceRows.some((row) => row.memberId === memberId),
@@ -366,7 +417,10 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
     rank,
     cohortSize,
     checkedIn: checkInRows.length > 0,
-    upcoming: upcomingRows,
+    upcoming: upcomingRows.map((e) => ({
+      ...e,
+      startTime: formatTimeInZone(e.startTime, e.date, cohort.timezone, viewerZone),
+    })),
     announcement: announcementRows[0] ?? null,
     unseenAchievements: unseenRows
       .map((r) => ACHIEVEMENTS_BY_CODE.get(r.code))
@@ -401,9 +455,21 @@ export async function getStudySnapshot(ctx: MemberContext): Promise<StudySnapsho
         plannedMinutes: dailyAssignments.plannedMinutes,
         note: dailyAssignments.note,
         topicId: roadmapTopics.id,
-        topicTitle: roadmapTopics.title,
-        topicRef: roadmapTopics.curriculumRef,
-        subjectName: subjects.name,
+        /*
+         * An admin may set the day's topic from anywhere in the syllabus, including a
+         * subject this student has no roadmap for — that one has no `roadmap_topics` row to
+         * join to and is recorded on the assignment itself. The roadmap topic wins whenever
+         * there is one.
+         */
+        topicTitle: sql<
+          string | null
+        >`coalesce(${roadmapTopics.title}, ${dailyAssignments.customTopicTitle})`,
+        topicRef: sql<
+          string | null
+        >`coalesce(${roadmapTopics.curriculumRef}, ${dailyAssignments.customTopicRef})`,
+        subjectName: sql<
+          string | null
+        >`coalesce(${subjects.name}, ${dailyAssignments.customSubjectName})`,
       })
       .from(dailyAssignments)
       .leftJoin(roadmapTopics, eq(roadmapTopics.id, dailyAssignments.topicId))
@@ -484,14 +550,43 @@ export type Recognitions = {
   perfectWeek: LeaderboardRow | null;
 };
 
+/** The ranking as the cohort sees it, before anyone's own row is picked out of it. */
+type CohortStandings = {
+  rows: Omit<LeaderboardRow, 'isSelf'>[];
+  /** Recognition winners as member ids, resolved back to rows once `isSelf` is known. */
+  recognitions: Record<keyof Recognitions, string | null>;
+};
+
 /**
  * Builds the full cohort leaderboard in a handful of queries rather than per-student.
  * Ranking is by consistency first — process over result — with points as the tiebreak.
+ *
+ * Cached for the whole cohort, because it is the same work for all of them. Every student
+ * loading the dashboard needs their rank, and computing a rank means ranking everybody — so
+ * a cohort of thirty opening the app in the same hour used to run this thirty times over
+ * identical rows. Keyed by cohort and by day, so it rolls over on its own at midnight in the
+ * cohort's timezone, and cleared the moment anybody's numbers actually move.
+ *
+ * `isSelf` is deliberately absent from what is cached. It is the one field that differs per
+ * viewer, and leaving it in would have given every student their own copy of the cache entry
+ * — the same thirty renders, just harder to see.
  */
-export const getLeaderboard = cache(async function getLeaderboard(
-  ctx: Pick<MemberContext, 'cohort' | 'calendar' | 'today'> & { memberId?: string },
-): Promise<{ rows: LeaderboardRow[]; recognitions: Recognitions }> {
-  const { cohort, calendar, today } = ctx;
+const loadCohortStandings = async (cohortId: string, today: ISODate): Promise<CohortStandings> => {
+  'use cache';
+  cacheTag(cohortTag.activity(cohortId), cohortTag.config(cohortId));
+  /*
+   * Short by the standards of a cache, and that is the point: this is a backstop, not the
+   * mechanism. Another student's check-in clears the tag immediately, so the only window
+   * this covers is a write that somehow bypassed `recomputeDay`. A minute of drift on
+   * someone else's position in a ranking is a fair price for that insurance; a stale view
+   * of your *own* numbers would not be, and the tag is what prevents it.
+   */
+  cacheLife({ stale: 60, revalidate: 60, expire: 300 });
+
+  const cohortRows = await db.select().from(cohorts).where(eq(cohorts.id, cohortId)).limit(1);
+  const cohort = cohortRows[0];
+  if (!cohort) return { rows: [], recognitions: EMPTY_RECOGNITIONS };
+  const calendar = await loadCalendar(cohort);
   const upTo = minDate(today, calendar.endDate);
 
   /*
@@ -548,18 +643,7 @@ export const getLeaderboard = cache(async function getLeaderboard(
       .groupBy(checkIns.memberId),
   ]);
 
-  if (members.length === 0) {
-    return {
-      rows: [],
-      recognitions: {
-        mostConsistent: null,
-        longestStreak: null,
-        mostImproved: null,
-        bestComeback: null,
-        perfectWeek: null,
-      },
-    };
-  }
+  if (members.length === 0) return { rows: [], recognitions: EMPTY_RECOGNITIONS };
 
   const byMember = new Map<string, Map<ISODate, (typeof activityRows)[number]>>();
   for (const row of activityRows) {
@@ -573,7 +657,7 @@ export const getLeaderboard = cache(async function getLeaderboard(
   const pointsBy = new Map(pointRows.map((r) => [r.memberId, r.total]));
   const comebacksBy = new Map(comebackRows.map((r) => [r.memberId, r]));
 
-  const rows: LeaderboardRow[] = members.map((m) => {
+  const rows: Omit<LeaderboardRow, 'isSelf'>[] = members.map((m) => {
     const days = byMember.get(m.memberId) ?? new Map();
     const lookup = (d: ISODate) => {
       const row = days.get(d);
@@ -606,7 +690,6 @@ export const getLeaderboard = cache(async function getLeaderboard(
       improvementPct: calculateImprovement(weeks).deltaPct,
       perfectWeeks: weeks.filter((w) => w.activeDays > 0 && w.completedDays === w.activeDays)
         .length,
-      isSelf: m.memberId === ctx.memberId,
     };
   });
 
@@ -627,9 +710,9 @@ export const getLeaderboard = cache(async function getLeaderboard(
   if (mostConsistent) claimed.add(mostConsistent.memberId);
 
   const award = (
-    candidates: LeaderboardRow[],
-    compare: (a: LeaderboardRow, b: LeaderboardRow) => number,
-  ): LeaderboardRow | null => {
+    candidates: Omit<LeaderboardRow, 'isSelf'>[],
+    compare: (a: Omit<LeaderboardRow, 'isSelf'>, b: Omit<LeaderboardRow, 'isSelf'>) => number,
+  ): Omit<LeaderboardRow, 'isSelf'> | null => {
     const sorted = [...candidates].sort(compare);
     const fresh = sorted.find((r) => !claimed.has(r.memberId));
     const winner = fresh ?? sorted[0] ?? null;
@@ -642,25 +725,74 @@ export const getLeaderboard = cache(async function getLeaderboard(
 
   return {
     rows,
+    /*
+     * Ids rather than rows. The winners are the very rows in the list above, and returning
+     * them directly worked only for as long as this was a plain function call: a cache entry
+     * is serialised, so the copy stored under `recognitions` would come back as a *different*
+     * object from the one in `rows`. Marking the viewer's own row would then update one and
+     * not the other, and the badge would quietly stop saying "You".
+     */
     recognitions: {
-      mostConsistent,
-      longestStreak: award(
-        rows.filter((r) => r.bestStreak > 0),
-        (a, b) => b.bestStreak - a.bestStreak,
-      ),
-      bestComeback: award(comebackCandidates, (a, a2) => {
-        const latestA = comebacksBy.get(a.memberId)?.latest ?? '';
-        const latestB = comebacksBy.get(a2.memberId)?.latest ?? '';
-        return latestB.localeCompare(latestA) || a2.streak - a.streak;
-      }),
-      mostImproved: award(
-        rows.filter((r) => r.improvementPct > 0),
-        (a, b) => b.improvementPct - a.improvementPct,
-      ),
-      perfectWeek: award(
-        rows.filter((r) => r.perfectWeeks > 0),
-        (a, b) => b.perfectWeeks - a.perfectWeeks,
-      ),
+      mostConsistent: mostConsistent?.memberId ?? null,
+      longestStreak:
+        award(
+          rows.filter((r) => r.bestStreak > 0),
+          (a, b) => b.bestStreak - a.bestStreak,
+        )?.memberId ?? null,
+      bestComeback:
+        award(comebackCandidates, (a, a2) => {
+          const latestA = comebacksBy.get(a.memberId)?.latest ?? '';
+          const latestB = comebacksBy.get(a2.memberId)?.latest ?? '';
+          return latestB.localeCompare(latestA) || a2.streak - a.streak;
+        })?.memberId ?? null,
+      mostImproved:
+        award(
+          rows.filter((r) => r.improvementPct > 0),
+          (a, b) => b.improvementPct - a.improvementPct,
+        )?.memberId ?? null,
+      perfectWeek:
+        award(
+          rows.filter((r) => r.perfectWeeks > 0),
+          (a, b) => b.perfectWeeks - a.perfectWeeks,
+        )?.memberId ?? null,
+    },
+  };
+};
+
+const EMPTY_RECOGNITIONS: CohortStandings['recognitions'] = {
+  mostConsistent: null,
+  longestStreak: null,
+  mostImproved: null,
+  bestComeback: null,
+  perfectWeek: null,
+};
+
+/**
+ * The cohort ranking with the viewer's own row marked.
+ *
+ * The only per-student work left: one pass to set `isSelf`, and a lookup to point the
+ * recognition badges back at the marked rows so "You" reads correctly on both.
+ */
+export const getLeaderboard = cache(async function getLeaderboard(
+  ctx: Pick<MemberContext, 'cohort' | 'today'> & { memberId?: string },
+): Promise<{ rows: LeaderboardRow[]; recognitions: Recognitions }> {
+  const standings = await loadCohortStandings(ctx.cohort.id, ctx.today);
+
+  const rows: LeaderboardRow[] = standings.rows.map((row) => ({
+    ...row,
+    isSelf: row.memberId === ctx.memberId,
+  }));
+  const byId = new Map(rows.map((row) => [row.memberId, row]));
+  const resolve = (id: string | null) => (id === null ? null : (byId.get(id) ?? null));
+
+  return {
+    rows,
+    recognitions: {
+      mostConsistent: resolve(standings.recognitions.mostConsistent),
+      longestStreak: resolve(standings.recognitions.longestStreak),
+      mostImproved: resolve(standings.recognitions.mostImproved),
+      bestComeback: resolve(standings.recognitions.bestComeback),
+      perfectWeek: resolve(standings.recognitions.perfectWeek),
     },
   };
 });
@@ -809,7 +941,8 @@ export type CalendarDay = {
 };
 
 export async function getCalendarMonth(ctx: MemberContext, month: ISODate): Promise<CalendarDay[]> {
-  const { memberId, calendar, today, cohort } = ctx;
+  const { memberId, calendar, today, cohort, user } = ctx;
+  const viewerZone = user.timezone || cohort.timezone;
   const first = `${month.slice(0, 7)}-01`;
   const firstAnchor = new Date(`${first}T12:00:00Z`);
   const daysInMonth = new Date(
@@ -832,7 +965,9 @@ export async function getCalendarMonth(ctx: MemberContext, month: ISODate): Prom
       .select({
         date: dailyAssignments.date,
         plannedMinutes: dailyAssignments.plannedMinutes,
-        topicTitle: roadmapTopics.title,
+        topicTitle: sql<
+          string | null
+        >`coalesce(${roadmapTopics.title}, ${dailyAssignments.customTopicTitle})`,
       })
       .from(dailyAssignments)
       .leftJoin(roadmapTopics, eq(roadmapTopics.id, dailyAssignments.topicId))
@@ -897,7 +1032,7 @@ export async function getCalendarMonth(ctx: MemberContext, month: ISODate): Prom
         id: e.id,
         title: e.title,
         type: e.type,
-        startTime: e.startTime,
+        startTime: formatTimeInZone(e.startTime, e.date, cohort.timezone, viewerZone),
       })),
       holidayLabel: null,
     };
@@ -1046,7 +1181,22 @@ function bandOf(score: number, active: boolean): DayBand {
 
 /* ------------------------------------------------------------- materials */
 
+/**
+ * The cohort's materials shelf.
+ *
+ * The same list for everyone in the cohort, and it changes only when a cohort lead adds or
+ * removes something — so it is cached on the library tag rather than the activity one. No
+ * expiry worth worrying about: an edit clears it, and nothing else can change it.
+ */
 export async function getMaterials(ctx: MemberContext) {
+  return loadMaterials(ctx.cohort.id);
+}
+
+const loadMaterials = async (cohortId: string) => {
+  'use cache';
+  cacheTag(cohortTag.library(cohortId));
+  cacheLife('hours');
+
   const rows = await db
     .select({
       id: materials.id,
@@ -1059,7 +1209,7 @@ export async function getMaterials(ctx: MemberContext) {
     })
     .from(materials)
     .leftJoin(subjects, eq(subjects.id, materials.subjectId))
-    .where(eq(materials.cohortId, ctx.cohort.id))
+    .where(eq(materials.cohortId, cohortId))
     .orderBy(asc(subjects.name), asc(materials.curriculumRef), asc(materials.title));
 
   // The heading a material groups under is resolved from its ref, so renaming a curriculum
@@ -1068,7 +1218,7 @@ export async function getMaterials(ctx: MemberContext) {
     ...row,
     topicLabel: resolveRef(row.curriculumRef)?.label ?? null,
   }));
-}
+};
 
 /* --------------------------------------------------------------- check-in */
 
@@ -1309,10 +1459,31 @@ export async function getWeeklyReviewContext(ctx: MemberContext) {
 
 /* ------------------------------------------------------------- cohort feed */
 
-export const getCohortPulse = cache(async function getCohortPulse(
-  ctx: Pick<MemberContext, 'cohort' | 'calendar' | 'today'>,
-) {
-  const { cohort, calendar, today } = ctx;
+/**
+ * How the cohort as a whole is doing today.
+ *
+ * Cached alongside the leaderboard and for the same reason: there is one answer per cohort
+ * per day, and the dashboard asks for it once per student. It shares the activity tag, so a
+ * check-in that changes the turnout figure clears both in one call.
+ */
+const loadCohortPulse = async (cohortId: string, today: ISODate) => {
+  'use cache';
+  cacheTag(cohortTag.activity(cohortId), cohortTag.config(cohortId));
+  cacheLife({ stale: 60, revalidate: 60, expire: 300 });
+
+  const cohortRows = await db.select().from(cohorts).where(eq(cohorts.id, cohortId)).limit(1);
+  const cohort = cohortRows[0];
+  if (!cohort) {
+    return {
+      size: 0,
+      showedUpToday: 0,
+      weeklyConsistency: 0,
+      totalStudyMinutes: 0,
+      cohortStreak: 0,
+      thresholdPct: 0,
+    };
+  }
+  const calendar = await loadCalendar(cohort);
   const upTo = minDate(today, calendar.endDate);
 
   /*
@@ -1385,6 +1556,12 @@ export const getCohortPulse = cache(async function getCohortPulse(
     cohortStreak: cohortStreak.length,
     thresholdPct: cohort.streakThresholdPct,
   };
+};
+
+export const getCohortPulse = cache(async function getCohortPulse(
+  ctx: Pick<MemberContext, 'cohort' | 'today'>,
+) {
+  return loadCohortPulse(ctx.cohort.id, ctx.today);
 });
 
 /* ------------------------------------------------------------- point log */

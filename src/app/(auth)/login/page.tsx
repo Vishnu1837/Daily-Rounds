@@ -1,20 +1,20 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 
-import { getCurrentUser } from '@/lib/auth/session';
-import { homeForRole } from '@/lib/routes';
+import { RedirectIfSignedIn } from '../redirect-if-signed-in';
 
 import { LoginForm } from './login-form';
 
 export const metadata: Metadata = { title: 'Sign in' };
 
-export default async function LoginPage() {
-  const user = await getCurrentUser();
-  if (user) redirect(homeForRole(user.role));
-
+export default function LoginPage() {
   return (
     <div className="animate-rise">
+      <Suspense fallback={null}>
+        <RedirectIfSignedIn />
+      </Suspense>
+
       <p className="eyebrow">Sign in</p>
       <h1 className="text-fg mt-2 text-3xl font-extrabold tracking-tight">Welcome back</h1>
       <p className="text-fg-muted mt-2.5 text-sm">

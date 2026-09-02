@@ -8,8 +8,6 @@ import { getCohortPulse, getLeaderboard } from '@/server/queries/student';
 import { LeaderboardScreen } from './leaderboard-screen';
 
 export const metadata: Metadata = { title: 'Leaderboard' };
-export const dynamic = 'force-dynamic';
-
 export default async function LeaderboardPage() {
   const user = await requireOnboardedUser();
   const ctx = await getMemberContext(user);

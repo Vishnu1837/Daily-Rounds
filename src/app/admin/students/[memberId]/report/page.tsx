@@ -9,7 +9,9 @@ import { getCohortContext, getPrimaryCohort } from '@/server/context';
 import { getEndOfCohortReport } from '@/server/queries/admin';
 
 export const metadata: Metadata = { title: 'Cohort report' };
-export const dynamic = 'force-dynamic';
+
+// Not prerendered — see the note in the admin layout. This page is all data.
+export const instant = false;
 
 export default async function AdminReportPage({
   params,

@@ -19,7 +19,18 @@ vi.mock('@/lib/auth/session', () => ({
   SESSION_COOKIE: 'dr_session',
 }));
 
-vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
+/*
+ * The cache primitives are no-ops here. `cacheTag` and `cacheLife` only annotate an entry,
+ * and `updateTag` clears one — outside a Next server there is nothing cached to annotate or
+ * clear, and the behaviour under test is the database write, not the bookkeeping around it.
+ */
+vi.mock('next/cache', () => ({
+  revalidatePath: () => {},
+  revalidateTag: () => {},
+  updateTag: () => {},
+  cacheTag: () => {},
+  cacheLife: () => {},
+}));
 
 function form(fields: Record<string, string>) {
   const data = new FormData();

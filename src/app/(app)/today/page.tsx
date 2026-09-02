@@ -10,8 +10,6 @@ import { redirect } from 'next/navigation';
 import { HomeScreen } from './home-screen';
 
 export const metadata: Metadata = { title: 'Today' };
-export const dynamic = 'force-dynamic';
-
 export default async function HomePage() {
   const user = await requireOnboardedUser();
   const ctx = await getMemberContext(user);

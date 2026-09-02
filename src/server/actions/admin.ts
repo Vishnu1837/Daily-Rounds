@@ -7,6 +7,11 @@ import { revalidatePath } from 'next/cache';
 
 import { db } from '@/db/client';
 import {
+  invalidateCohortActivity,
+  invalidateCohortConfig,
+  invalidateCohortLibrary,
+} from '@/server/cache';
+import {
   announcements,
   attendance,
   checkIns,
@@ -33,6 +38,7 @@ import {
   weeklyReviews,
 } from '@/db/schema';
 import { requireAdminAction } from '@/lib/auth/guards';
+import { curriculumSubject, resolveRef } from '@/lib/curriculum';
 import { hashPassword } from '@/lib/auth/password';
 import { ledgerKey } from '@/lib/domain/points';
 import {
@@ -52,6 +58,7 @@ import {
   roadmapSchema,
   roadmapWeekSchema,
   studentAdminSchema,
+  syllabusAssignmentSchema,
   topicReorderSchema,
   topicSchema,
   topicUpdateSchema,
@@ -86,6 +93,19 @@ async function assertMemberInCohort(memberId: string, cohortId: string): Promise
     .limit(1);
   if (rows.length === 0) throw new Error('That student is not in this cohort.');
 }
+
+/**
+ * Clears any ad-hoc syllabus topic left on a day's assignment.
+ *
+ * Every write that sets `topic_id` must also blank these, or a row that once carried a
+ * topic from outside the student's roadmaps would keep showing the old title alongside the
+ * new one. Spelled out once and spread into each upsert rather than trusted to memory.
+ */
+const NO_CUSTOM_TOPIC = {
+  customTopicTitle: null,
+  customTopicRef: null,
+  customSubjectName: null,
+} as const;
 
 /* ------------------------------------------------------------- attendance */
 
@@ -177,6 +197,7 @@ export async function markAttendanceAction(
 
           await settleDay({
             memberId: entry.memberId,
+            cohortId,
             date,
             calendar: ctx.calendar,
             rules: ctx.rules,
@@ -226,6 +247,7 @@ export async function updateCohortSettingsAction(
         activeWeekdays: input.activeWeekdays,
         streakThresholdPct: input.streakThresholdPct,
         meetUrl: input.meetUrl ?? null,
+        meetTitle: input.meetTitle ?? null,
         meetStartTime: input.meetStartTime,
         meetEndTime: input.meetEndTime,
         settings: {
@@ -245,6 +267,7 @@ export async function updateCohortSettingsAction(
       payload: { name: input.name },
     });
 
+    invalidateCohortConfig(input.cohortId);
     revalidatePath('/admin/settings');
     revalidatePath('/admin');
     revalidatePath('/today');
@@ -279,6 +302,7 @@ export async function updatePointRulesAction(
       payload: parsed.data.rules,
     });
 
+    invalidateCohortConfig(cohortId);
     revalidatePath('/admin/settings');
     return ok();
   }, 'We could not save the scoring rules. Please try again.');
@@ -303,6 +327,13 @@ export async function addCalendarDayAction(_prev: unknown, formData: FormData): 
       payload: { date, label },
     });
 
+    /*
+     * Before the recompute, not after. `recomputeCohort` reads the calendar back to work
+     * out which days were active, so clearing the cached calendar afterwards would have it
+     * rebuild every streak in the cohort from the very holiday list this action just
+     * replaced. The ordering is the correctness here, not the invalidation itself.
+     */
+    invalidateCohortConfig(cohortId);
     await recomputeCohort(cohortId);
     revalidatePath('/admin/settings');
     return ok();
@@ -327,6 +358,7 @@ export async function removeCalendarDayAction(
       payload: { id },
     });
 
+    invalidateCohortConfig(cohortId); // before the recompute — see `addCalendarDayAction`
     await recomputeCohort(cohortId);
     revalidatePath('/admin/settings');
     return ok();
@@ -351,6 +383,7 @@ export async function recomputeCohort(cohortId: string): Promise<Result<{ member
     for (const member of members) {
       await recomputeRange({
         memberId: member.id,
+        cohortId,
         from: ctx.calendar.startDate,
         to: ctx.today,
         calendar: ctx.calendar,
@@ -412,6 +445,13 @@ export async function createStudentAction(_prev: unknown, formData: FormData): P
       payload: { email: input.email, cohortId: input.cohortId },
     });
 
+    /*
+     * The ranking is cached for the whole cohort, and it carries each student's name and
+     * picture alongside their numbers — so who is in it, and what they are called, is part
+     * of what has just changed here. Scoring changes clear this tag from `recomputeDay`;
+     * roster and profile changes have to say so themselves.
+     */
+    invalidateCohortActivity(input.cohortId);
     revalidatePath('/admin/students');
     return ok();
   }, 'We could not create that student. Please try again.');
@@ -467,6 +507,7 @@ export async function updateStudentAction(
       payload: { role: input.role, status: input.status },
     });
 
+    invalidateCohortActivity(cohortId); // name and status both show in the ranking
     revalidatePath('/admin/students');
     return ok();
   }, 'We could not save those changes. Please try again.');
@@ -511,6 +552,7 @@ export async function deleteStudentAction(cohortId: string, userId: string): Pro
       payload: { email: target?.email, fullName: target?.fullName, cohortId },
     });
 
+    invalidateCohortActivity(cohortId);
     revalidatePath('/admin/students');
     revalidatePath('/admin');
     return ok();
@@ -584,6 +626,7 @@ export async function assignCohortAction(
       payload: { userId, cohortId, ...subjectSlugs },
     });
 
+    invalidateCohortActivity(cohortId);
     revalidatePath('/admin/students');
     revalidatePath('/admin/roadmaps');
     revalidatePath('/admin');
@@ -721,6 +764,9 @@ export async function restartCohortAction(cohortId: string, confirmation: string
       payload: { students: memberIds.length },
     });
 
+    // A restart resets the scores and the calendar together, so both tags go.
+    invalidateCohortActivity(cohortId);
+    invalidateCohortConfig(cohortId);
     revalidatePath('/admin');
     revalidatePath('/admin/students');
     revalidatePath('/admin/attendance');
@@ -755,6 +801,7 @@ export async function adjustPointsAction(
 
     await settleDay({
       memberId: input.memberId,
+      cohortId,
       date: input.date,
       calendar: ctx.calendar,
       rules: ctx.rules,
@@ -1065,6 +1112,7 @@ export async function setAssignmentAction(
           topicId: input.topicId ?? null,
           plannedMinutes: input.plannedMinutes,
           note: input.note ?? null,
+          ...NO_CUSTOM_TOPIC,
         },
       });
 
@@ -1155,6 +1203,7 @@ export async function bulkAssignAction(
             source: 'auto',
             assignedByUserId: null,
             assignedAt: null,
+            ...NO_CUSTOM_TOPIC,
           },
         });
       assigned += 1;
@@ -1277,6 +1326,7 @@ export async function assignIndividualTopicAction(
       source: 'admin' as const,
       assignedByUserId: user.id,
       assignedAt: new Date(),
+      ...NO_CUSTOM_TOPIC,
     };
 
     await db
@@ -1301,13 +1351,7 @@ export async function assignIndividualTopicAction(
       },
     });
 
-    revalidatePath('/admin/roadmaps');
-    revalidatePath('/admin/students');
-    revalidatePath(`/admin/students/${memberId}`);
-    revalidatePath('/today');
-    revalidatePath('/roadmap');
-    revalidatePath('/study');
-    revalidatePath('/progress');
+    revalidateAfterAssignment(memberId);
 
     return ok({
       topicTitle: topic.title,
@@ -1315,6 +1359,254 @@ export async function assignIndividualTopicAction(
       wasCompleted,
     });
   }, 'We could not assign that topic. Please try again.');
+}
+
+/* --------------------------------------- assignment from the full syllabus */
+
+export type SyllabusAssignmentOutcome = {
+  topicTitle: string;
+  subjectName: string;
+  /** True when the assigned topic had already been completed and is now current again. */
+  wasCompleted: boolean;
+  /**
+   * How the topic was attached:
+   *  - `roadmap` — it was already on one of the student's roadmaps;
+   *  - `added` — it was added to the roadmap they have for that subject;
+   *  - `off_roadmap` — they have no roadmap for that subject, so it is today's topic only.
+   */
+  placement: 'roadmap' | 'added' | 'off_roadmap';
+};
+
+/**
+ * Makes any topic in the MBBS syllabus today's topic for one student.
+ *
+ * `assignIndividualTopicAction` can only offer what is already on the student's two
+ * roadmaps, which is the wrong ceiling for an admin: a lead who wants to put someone on a
+ * Pharmacology topic during an Anatomy block had no way to say so without hand-building a
+ * roadmap first. This takes a curriculum ref — the same address quizzes and materials are
+ * filed under — and does whatever it takes to honour it:
+ *
+ *  - the topic is already on the matching roadmap → it simply becomes current;
+ *  - the student has that subject but not that topic → the topic is appended to the roadmap
+ *    (unscheduled, at the end) so their progress bar and "next topic" logic still see it;
+ *  - the student does not have that subject at all → there is no roadmap to extend without
+ *    breaking the two-subject rule, so the topic is recorded on the day's assignment
+ *    itself. It shows on Today's Focus and drives the matching knowledge check, and it
+ *    leaves the roadmaps they *are* working through untouched.
+ */
+export async function assignSyllabusTopicAction(
+  cohortId: string,
+  input: {
+    memberId: string;
+    ref: string;
+    date: string;
+    plannedMinutes?: number;
+    allowCompleted?: boolean;
+  },
+): Promise<Result<SyllabusAssignmentOutcome>> {
+  return guarded(async () => {
+    const { user } = await adminContext(cohortId);
+
+    const parsed = syllabusAssignmentSchema.safeParse(input);
+    if (!parsed.success) return fail('Check the highlighted fields.', fieldErrors(parsed.error));
+
+    const { memberId, ref, date, plannedMinutes, allowCompleted } = parsed.data;
+    await assertMemberInCohort(memberId, cohortId);
+
+    // The tree is the authority on what exists. An unresolvable ref never reaches a write.
+    const resolved = resolveRef(ref);
+    if (!resolved || resolved.depth === 1) {
+      return fail('Pick a topic (or a module) from the syllabus.');
+    }
+
+    const title = resolved.label;
+    const subjectName = resolved.subjectName;
+
+    /* The roadmap for this subject, if the student has one. */
+    const [roadmap] = await db
+      .select({ id: roadmaps.id })
+      .from(roadmaps)
+      .innerJoin(subjects, eq(subjects.id, roadmaps.subjectId))
+      .where(and(eq(roadmaps.memberId, memberId), eq(subjects.slug, resolved.subjectSlug)))
+      .limit(1);
+
+    if (!roadmap) {
+      /*
+       * Off-roadmap. Nothing about the student's roadmaps changes — deliberately: the topic
+       * is a detour for one day, and marking progress on a subject they are not tracking
+       * would put a number on their profile that no roadmap can account for.
+       */
+      const stamp = {
+        topicId: null,
+        customTopicTitle: title,
+        customTopicRef: ref,
+        customSubjectName: subjectName,
+        plannedMinutes,
+        source: 'admin' as const,
+        assignedByUserId: user.id,
+        assignedAt: new Date(),
+      };
+
+      await db
+        .insert(dailyAssignments)
+        .values({ memberId, date, ...stamp })
+        .onConflictDoUpdate({
+          target: [dailyAssignments.memberId, dailyAssignments.date],
+          set: stamp,
+        });
+
+      await recordAudit({
+        actorUserId: user.id,
+        action: 'assignment.syllabus',
+        entity: 'cohort_member',
+        entityId: memberId,
+        payload: { date, ref, topicTitle: title, subject: subjectName, placement: 'off_roadmap' },
+      });
+
+      revalidateAfterAssignment(memberId);
+      const outcome: SyllabusAssignmentOutcome = {
+        topicTitle: title,
+        subjectName,
+        wasCompleted: false,
+        placement: 'off_roadmap',
+      };
+      return ok(outcome);
+    }
+
+    /*
+     * On the roadmap, or about to be. Matching is by ref first — the join key — and falls
+     * back to the title, because a roadmap generated before refs were carried through has
+     * the same topics under the same names and should not gain a duplicate row.
+     */
+    const existing = await db
+      .select({
+        id: roadmapTopics.id,
+        title: roadmapTopics.title,
+        status: roadmapTopics.status,
+        curriculumRef: roadmapTopics.curriculumRef,
+      })
+      .from(roadmapTopics)
+      .where(eq(roadmapTopics.roadmapId, roadmap.id));
+
+    const match =
+      existing.find((t) => t.curriculumRef === ref) ??
+      existing.find((t) => t.title.trim().toLowerCase() === title.trim().toLowerCase()) ??
+      null;
+
+    let topicId: string;
+    let wasCompleted = false;
+    let placement: SyllabusAssignmentOutcome['placement'];
+
+    if (match) {
+      wasCompleted = match.status === 'completed';
+      if (wasCompleted && !allowCompleted) {
+        return fail(
+          `${match.title} has already been completed. Confirm the reassignment to make it current again.`,
+        );
+      }
+      topicId = match.id;
+      placement = 'roadmap';
+    } else {
+      const [row] = await db
+        .select({ next: sql<number>`coalesce(max(${roadmapTopics.position}), -1)::int + 1` })
+        .from(roadmapTopics)
+        .where(eq(roadmapTopics.roadmapId, roadmap.id));
+
+      // The detail nodes become the description, which is exactly what a generated roadmap
+      // topic carries — an added topic should be indistinguishable from a generated one.
+      const subject = curriculumSubject(resolved.subjectSlug);
+      const section = subject?.sections.find((sec) => sec.title === resolved.sectionTitle);
+      const topicNode = resolved.topicTitle
+        ? section?.topics.find((t) => t.title === resolved.topicTitle)
+        : null;
+      const description = topicNode
+        ? topicNode.nodes.join(' · ')
+        : (section?.topics.map((t) => t.title).join(' · ') ?? null);
+
+      const [created] = await db
+        .insert(roadmapTopics)
+        .values({
+          roadmapId: roadmap.id,
+          // No week: it was not part of the generated plan, so it groups under
+          // "Unscheduled topics" rather than pretending to belong to a module.
+          weekId: null,
+          title,
+          curriculumRef: ref,
+          description,
+          position: row?.next ?? 0,
+          status: 'upcoming',
+        })
+        .returning({ id: roadmapTopics.id });
+
+      topicId = created!.id;
+      placement = 'added';
+    }
+
+    // Same rule as the individual assignment: exactly one topic is in progress per roadmap,
+    // and completed work is never rewritten.
+    await db
+      .update(roadmapTopics)
+      .set({ status: 'upcoming' })
+      .where(
+        and(
+          eq(roadmapTopics.roadmapId, roadmap.id),
+          eq(roadmapTopics.status, 'in_progress'),
+          ne(roadmapTopics.id, topicId),
+        ),
+      );
+
+    await db
+      .update(roadmapTopics)
+      .set({ status: 'in_progress' })
+      .where(eq(roadmapTopics.id, topicId));
+
+    const stamp = {
+      topicId,
+      plannedMinutes,
+      source: 'admin' as const,
+      assignedByUserId: user.id,
+      assignedAt: new Date(),
+      ...NO_CUSTOM_TOPIC,
+    };
+
+    await db
+      .insert(dailyAssignments)
+      .values({ memberId, date, ...stamp })
+      .onConflictDoUpdate({
+        target: [dailyAssignments.memberId, dailyAssignments.date],
+        set: stamp,
+      });
+
+    await recordAudit({
+      actorUserId: user.id,
+      action: 'assignment.syllabus',
+      entity: 'cohort_member',
+      entityId: memberId,
+      payload: {
+        date,
+        ref,
+        topicId,
+        topicTitle: title,
+        subject: subjectName,
+        placement,
+        reassignedCompleted: wasCompleted,
+      },
+    });
+
+    revalidateAfterAssignment(memberId);
+    return ok({ topicTitle: title, subjectName, wasCompleted, placement });
+  }, 'We could not assign that topic. Please try again.');
+}
+
+/** Every screen that reads "today's topic", for either side of the product. */
+function revalidateAfterAssignment(memberId: string) {
+  revalidatePath('/admin/roadmaps');
+  revalidatePath('/admin/students');
+  revalidatePath(`/admin/students/${memberId}`);
+  revalidatePath('/today');
+  revalidatePath('/roadmap');
+  revalidatePath('/study');
+  revalidatePath('/progress');
 }
 
 /* ------------------------------------------------- events & announcements */
@@ -1483,6 +1775,7 @@ export async function saveMaterialAction(
       payload: { title: input.title },
     });
 
+    invalidateCohortLibrary(input.cohortId);
     revalidatePath('/admin/materials');
     revalidatePath('/materials');
     return ok();
@@ -1495,6 +1788,7 @@ export async function deleteMaterialAction(cohortId: string, materialId: string)
     await db
       .delete(materials)
       .where(and(eq(materials.id, materialId), eq(materials.cohortId, cohortId)));
+    invalidateCohortLibrary(cohortId);
     revalidatePath('/admin/materials');
     revalidatePath('/materials');
     return ok();

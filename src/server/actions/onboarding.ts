@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { db } from '@/db/client';
 import { cohortMembers, cohorts, studentGoals, subjects, users } from '@/db/schema';
 import { requireUserAction } from '@/lib/auth/guards';
+import { invalidateCohortActivity, invalidateOwnRanking } from '@/server/cache';
 import { todayInTimezone } from '@/lib/domain/calendar';
 import { SUBJECTS } from '@/lib/subjects';
 import {
@@ -152,6 +153,8 @@ export async function completeOnboardingAction(
       today: todayInTimezone(cohort.timezone),
     });
 
+    // A new member changes who is in the cohort ranking.
+    invalidateCohortActivity(cohort.id);
     return ok();
   }, 'We could not finish setting up your account. Nothing was lost — please try again.');
 
@@ -196,6 +199,8 @@ export async function updateProfileAction(_prev: unknown, formData: FormData): P
       })
       .where(eq(users.id, user.id));
 
+    // The student's name is carried in the cached cohort ranking.
+    await invalidateOwnRanking(user.id);
     return ok();
   }, 'We could not save your profile. Please try again.');
 }

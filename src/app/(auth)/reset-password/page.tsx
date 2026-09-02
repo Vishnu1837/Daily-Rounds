@@ -4,6 +4,9 @@ import { ResetPasswordForm } from './reset-form';
 
 export const metadata: Metadata = { title: 'Set a new password' };
 
+// Not prerendered: a one-off screen with no frame worth showing ahead of its data.
+export const instant = false;
+
 export default async function ResetPasswordPage({
   searchParams,
 }: {

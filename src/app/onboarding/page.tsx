@@ -8,7 +8,9 @@ import { OnboardingWizard } from './wizard';
 import { STUDENT_HOME } from '@/lib/routes';
 
 export const metadata: Metadata = { title: 'Set up your cohort' };
-export const dynamic = 'force-dynamic';
+
+// Not prerendered: a one-off screen with no frame worth showing ahead of its data.
+export const instant = false;
 
 export default async function OnboardingPage() {
   const user = await requireUser();

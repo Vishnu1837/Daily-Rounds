@@ -1,5 +1,5 @@
 /**
- * The morning study room.
+ * The cohort study room.
  *
  * The room is a recurring wall-clock window in the cohort's timezone — `06:00 – 07:00` by
  * default — not an instant, so every question about it ("is it open?", "am I late?") is
@@ -63,6 +63,29 @@ export function parseHm(value: string): number | null {
 export function formatHm(minutes: number): string {
   const m = ((Math.round(minutes) % 1440) + 1440) % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+/**
+ * What to call the room, given the hour it runs at.
+ *
+ * `custom` is the cohort's own name for it and always wins. Without one the name is read
+ * off the start time, so a room that moves from 06:00 to 19:00 renames itself instead of
+ * insisting it is still the morning session. Pass the start time *as the reader sees it* —
+ * a 06:00 Delhi room is an evening room to a student in Toronto, and the name should agree
+ * with the time printed next to it.
+ */
+export function roomTitle(startTime: string, custom?: string | null): string {
+  const named = custom?.trim();
+  if (named) return named;
+
+  // Ordered from midnight up, so the small hours land on "night" rather than falling
+  // through into the afternoon band.
+  const minutes = parseHm(startTime) ?? 6 * 60;
+  if (minutes < 4 * 60) return 'Night Study Room';
+  if (minutes < 12 * 60) return 'Morning Study Room';
+  if (minutes < 17 * 60) return 'Afternoon Study Room';
+  if (minutes < 21 * 60) return 'Evening Study Room';
+  return 'Night Study Room';
 }
 
 /** A human duration for a countdown: `2h 05m`, `47m`, `<1m`. */

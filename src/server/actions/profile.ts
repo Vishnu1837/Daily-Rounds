@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db/client';
 import { users } from '@/db/schema';
 import { requireUserAction } from '@/lib/auth/guards';
+import { invalidateOwnRanking } from '@/server/cache';
 import { avatarSchema, fieldErrors } from '@/lib/validation';
 
 import { type Result, fail, guarded, ok } from './shared';
@@ -34,6 +35,7 @@ export async function updateAvatarAction(dataUrl: string | null): Promise<Result
       .set({ avatarUrl: parsed.data.dataUrl, updatedAt: new Date() })
       .where(eq(users.id, user.id));
 
+    await invalidateOwnRanking(user.id);
     // The avatar rides in the header on every screen, so nothing narrower would do.
     revalidatePath('/', 'layout');
     return ok();

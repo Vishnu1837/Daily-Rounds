@@ -9,7 +9,9 @@ import { getCohortCalendarConfig } from '@/server/queries/admin';
 import { SettingsScreen } from './settings-screen';
 
 export const metadata: Metadata = { title: 'Cohort settings' };
-export const dynamic = 'force-dynamic';
+
+// Not prerendered — see the note in the admin layout. This page is all data.
+export const instant = false;
 
 export default async function SettingsPage() {
   await requireAdmin();
@@ -32,6 +34,7 @@ export default async function SettingsPage() {
         activeWeekdays: cohort.activeWeekdays,
         streakThresholdPct: cohort.streakThresholdPct,
         meetUrl: cohort.meetUrl,
+        meetTitle: cohort.meetTitle,
         meetStartTime: cohort.meetStartTime,
         meetEndTime: cohort.meetEndTime,
       }}

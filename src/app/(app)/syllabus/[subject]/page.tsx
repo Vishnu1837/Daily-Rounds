@@ -8,8 +8,6 @@ import { getRoadmaps } from '@/server/queries/student';
 
 import { SubjectSyllabusScreen } from './subject-screen';
 
-export const dynamic = 'force-dynamic';
-
 export async function generateMetadata({
   params,
 }: {

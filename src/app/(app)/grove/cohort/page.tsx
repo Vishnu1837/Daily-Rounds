@@ -8,8 +8,6 @@ import { getCohortGroves } from '@/server/queries/grove';
 import { CohortGroveScreen } from './cohort-grove-screen';
 
 export const metadata: Metadata = { title: 'Cohort groves' };
-export const dynamic = 'force-dynamic';
-
 /**
  * Every grove in the cohort.
  *
@@ -23,5 +21,11 @@ export default async function CohortGrovePage() {
 
   const rows = await getCohortGroves(ctx);
 
-  return <CohortGroveScreen rows={rows} cohortName={ctx.cohort.name} />;
+  return (
+    <CohortGroveScreen
+      rows={rows}
+      cohortName={ctx.cohort.name}
+      back={{ href: '/grove', label: 'Your grove' }}
+    />
+  );
 }

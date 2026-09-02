@@ -208,6 +208,7 @@ export async function finishSessionAction(sessionId: string): Promise<Result<Fin
 
     const outcome = await settleDay({
       memberId: ctx.memberId,
+      cohortId: ctx.cohort.id,
       date: session.date,
       calendar: ctx.calendar,
       rules: ctx.rules,
@@ -284,6 +285,7 @@ export async function completeTargetAction(): Promise<Result<SettleSummary>> {
 
     const outcome = await settleDay({
       memberId: ctx.memberId,
+      cohortId: ctx.cohort.id,
       date: ctx.today,
       calendar: ctx.calendar,
       rules: ctx.rules,

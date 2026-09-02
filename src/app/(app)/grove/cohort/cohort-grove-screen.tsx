@@ -26,9 +26,15 @@ const SPECIES_ORDER = ['deodar', 'banyan', 'neem', 'fern', 'sprout'] as const;
 export function CohortGroveScreen({
   rows,
   cohortName,
+  back,
+  rowBasePath = '/grove/cohort',
 }: {
   rows: CohortGroveRow[];
   cohortName: string;
+  /** The link out of the wall. Students go back to their own grove; an admin has none. */
+  back?: { href: string; label: string };
+  /** What a grove tile opens. The console sends a lead to the student's record instead. */
+  rowBasePath?: string;
 }) {
   const totalTrees = rows.reduce((sum, r) => sum + r.trees, 0);
   const totalMinutes = rows.reduce((sum, r) => sum + r.focusMinutes, 0);
@@ -36,13 +42,15 @@ export function CohortGroveScreen({
 
   return (
     <div className="space-y-4">
-      <Link
-        href="/grove"
-        className="tap text-fg-muted hover:text-fg inline-flex items-center gap-1.5 px-1 py-2 text-sm font-semibold"
-      >
-        <ArrowLeft className="size-4" aria-hidden />
-        Your grove
-      </Link>
+      {back && (
+        <Link
+          href={back.href}
+          className="tap text-fg-muted hover:text-fg inline-flex items-center gap-1.5 px-1 py-2 text-sm font-semibold"
+        >
+          <ArrowLeft className="size-4" aria-hidden />
+          {back.label}
+        </Link>
+      )}
 
       <PageHeader
         eyebrow={cohortName}
@@ -84,7 +92,7 @@ export function CohortGroveScreen({
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {rows.map((row) => (
-            <Link key={row.memberId} href={`/grove/cohort/${row.memberId}`} className="block">
+            <Link key={row.memberId} href={`${rowBasePath}/${row.memberId}`} className="block">
               <Card
                 interactive
                 padding="md"

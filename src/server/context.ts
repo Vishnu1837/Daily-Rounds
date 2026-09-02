@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { and, eq } from 'drizzle-orm';
+import { cacheLife, cacheTag } from 'next/cache';
 import { cache } from 'react';
 
 import { db } from '@/db/client';
@@ -22,6 +23,7 @@ import {
 } from '@/lib/domain/calendar';
 import { DEFAULT_POINT_RULES, type PointRules } from '@/lib/domain/points';
 import { DEFAULT_RISK_THRESHOLDS, type RiskThresholds } from '@/lib/domain/risk';
+import { cohortTag } from '@/server/cache';
 
 export type MemberContext = {
   user: SessionUser;
@@ -36,34 +38,70 @@ export type MemberContext = {
   joinedOn: ISODate;
 };
 
-/** Loads the calendar for a cohort, including holidays and extra study days. */
-export const loadCalendar = cache(async (cohort: Cohort): Promise<CohortCalendar> => {
+/*
+ * The two reads below used to run on every request of every screen, for data that changes
+ * when a cohort lead edits a setting — perhaps monthly. Together they were the single most
+ * repeated pair of queries in the application.
+ *
+ * They are cached across requests and across students, keyed only by cohort id, and cleared
+ * by `invalidateCohortConfig` from the handful of admin actions that can change them. The
+ * long `cacheLife` is safe precisely because the invalidation is exact: the expiry is a
+ * backstop for a missed tag, not the mechanism.
+ *
+ * Note what is *not* in here. `buildCalendar` and `todayInTimezone` stay outside the cached
+ * boundary — the first because a `CohortCalendar` holds `Set`s and would not survive being
+ * serialised into a cache entry, the second because caching a function of the current time
+ * is how a cohort wakes up still believing it is yesterday.
+ */
+const loadCalendarDays = async (cohortId: string) => {
+  'use cache';
+  cacheTag(cohortTag.config(cohortId));
+  cacheLife('hours');
+
   const [holidays, extras] = await Promise.all([
     db
       .select({ date: cohortHolidays.date })
       .from(cohortHolidays)
-      .where(eq(cohortHolidays.cohortId, cohort.id)),
+      .where(eq(cohortHolidays.cohortId, cohortId)),
     db
       .select({ date: cohortExtraStudyDays.date })
       .from(cohortExtraStudyDays)
-      .where(eq(cohortExtraStudyDays.cohortId, cohort.id)),
+      .where(eq(cohortExtraStudyDays.cohortId, cohortId)),
   ]);
+
+  return {
+    holidays: holidays.map((h) => h.date),
+    extraStudyDays: extras.map((e) => e.date),
+  };
+};
+
+/** Loads the calendar for a cohort, including holidays and extra study days. */
+export const loadCalendar = cache(async (cohort: Cohort): Promise<CohortCalendar> => {
+  const { holidays, extraStudyDays } = await loadCalendarDays(cohort.id);
 
   return buildCalendar({
     timezone: cohort.timezone,
     startDate: cohort.startDate,
     endDate: cohort.endDate,
     activeWeekdays: cohort.activeWeekdays,
-    holidays: holidays.map((h) => h.date),
-    extraStudyDays: extras.map((e) => e.date),
+    holidays,
+    extraStudyDays,
   });
 });
 
-export const loadPointRules = cache(async (cohortId: string): Promise<PointRules> => {
-  const rows = await db
+const loadPointRuleRows = async (cohortId: string) => {
+  'use cache';
+  cacheTag(cohortTag.config(cohortId));
+  cacheLife('hours');
+
+  return db
     .select({ event: pointRules.event, points: pointRules.points })
     .from(pointRules)
     .where(eq(pointRules.cohortId, cohortId));
+};
+
+export const loadPointRules = cache(async (cohortId: string): Promise<PointRules> => {
+  const rows = await loadPointRuleRows(cohortId);
 
   const rules = { ...DEFAULT_POINT_RULES };
   for (const row of rows) rules[row.event as PointEvent] = row.points;

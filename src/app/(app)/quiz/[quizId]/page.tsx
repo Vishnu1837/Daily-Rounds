@@ -11,8 +11,6 @@ import { getMemberContext } from '@/server/context';
 import { QuizScreen } from './quiz-screen';
 
 export const metadata: Metadata = { title: 'Knowledge check' };
-export const dynamic = 'force-dynamic';
-
 export default async function QuizPage({ params }: { params: Promise<{ quizId: string }> }) {
   const user = await requireOnboardedUser();
   const ctx = await getMemberContext(user);

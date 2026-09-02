@@ -203,6 +203,15 @@ export const cohorts = pgTable(
     /** % of members who must show up for the cohort streak to survive a day. */
     streakThresholdPct: smallint('streak_threshold_pct').notNull().default(70),
     meetUrl: text('meet_url'),
+    /**
+     * What the study room is called on a student's home screen.
+     *
+     * Null means "name it after the hour it runs at" — see `roomTitle` in
+     * src/lib/domain/study-room.ts. A cohort that moves its room from 06:00 to 19:00 should
+     * not still be told to attend the *morning* study room, and a cohort lead who wants to
+     * call it something else entirely sets this and the derived name steps aside.
+     */
+    meetTitle: varchar('meet_title', { length: 120 }),
     meetStartTime: varchar('meet_start_time', { length: 5 }).notNull().default('06:00'),
     meetEndTime: varchar('meet_end_time', { length: 5 }).notNull().default('07:00'),
     /** Risk thresholds & other admin-editable knobs. */
@@ -410,6 +419,22 @@ export const dailyAssignments = pgTable(
       .references(() => cohortMembers.id, { onDelete: 'cascade' }),
     date: date('date').notNull(),
     topicId: uuid('topic_id').references(() => roadmapTopics.id, { onDelete: 'set null' }),
+    /**
+     * A topic taken straight from the syllabus, for a subject this student has no roadmap
+     * for.
+     *
+     * A member gets at most two roadmaps (the `primary`/`secondary` slots), but an admin is
+     * allowed to point anyone at any topic in the whole curriculum on any day. When the
+     * subject *is* one of their two, the topic is materialised on that roadmap and `topicId`
+     * carries it, so roadmap progress stays coherent. When it is not, there is no roadmap to
+     * hang it on and the day's topic is recorded here instead: a title, the curriculum ref
+     * that quizzes and materials attach through, and the subject name to label it with.
+     *
+     * Reads coalesce the two — `topicId` wins when both are set.
+     */
+    customTopicTitle: varchar('custom_topic_title', { length: 200 }),
+    customTopicRef: varchar('custom_topic_ref', { length: 200 }),
+    customSubjectName: varchar('custom_subject_name', { length: 120 }),
     plannedMinutes: integer('planned_minutes').notNull().default(90),
     note: text('note'),
     /**

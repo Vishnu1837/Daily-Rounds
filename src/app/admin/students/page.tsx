@@ -8,7 +8,9 @@ import { getCohortStudents } from '@/server/queries/admin';
 import { StudentsScreen } from './students-screen';
 
 export const metadata: Metadata = { title: 'Students' };
-export const dynamic = 'force-dynamic';
+
+// Not prerendered — see the note in the admin layout. This page is all data.
+export const instant = false;
 
 export default async function StudentsPage() {
   await requireAdmin();

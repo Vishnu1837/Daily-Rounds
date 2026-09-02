@@ -8,8 +8,6 @@ import { getPeerGrove } from '@/server/queries/grove';
 import { PeerGroveScreen } from './peer-grove-screen';
 
 export const metadata: Metadata = { title: 'Grove' };
-export const dynamic = 'force-dynamic';
-
 /**
  * One classmate's grove, read-only.
  *

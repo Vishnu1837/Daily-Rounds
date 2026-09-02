@@ -8,6 +8,7 @@ import {
   isPresenceLive,
   parseHm,
   roomState,
+  roomTitle,
 } from '@/lib/domain/study-room';
 
 const ROOM = { startTime: '06:00', endTime: '07:00' };
@@ -95,5 +96,29 @@ describe('isPresenceLive', () => {
   it('holds a recent heartbeat and drops a stale one', () => {
     expect(isPresenceLive(new Date('2025-09-01T06:19:00Z'), now)).toBe(true);
     expect(isPresenceLive(new Date('2025-09-01T06:15:00Z'), now)).toBe(false);
+  });
+});
+
+describe('roomTitle', () => {
+  it('names the room after the hour it runs at', () => {
+    expect(roomTitle('06:00')).toBe('Morning Study Room');
+    expect(roomTitle('11:59')).toBe('Morning Study Room');
+    expect(roomTitle('12:00')).toBe('Afternoon Study Room');
+    expect(roomTitle('16:59')).toBe('Afternoon Study Room');
+    expect(roomTitle('17:00')).toBe('Evening Study Room');
+    expect(roomTitle('20:59')).toBe('Evening Study Room');
+    expect(roomTitle('21:00')).toBe('Night Study Room');
+    expect(roomTitle('03:00')).toBe('Night Study Room');
+  });
+
+  it('lets the cohort name it themselves', () => {
+    expect(roomTitle('06:00', 'Sunrise Rounds')).toBe('Sunrise Rounds');
+    // Whitespace is not a name — an empty field falls back to the derived one.
+    expect(roomTitle('19:00', '   ')).toBe('Evening Study Room');
+    expect(roomTitle('19:00', null)).toBe('Evening Study Room');
+  });
+
+  it('falls back to the morning room for a malformed time', () => {
+    expect(roomTitle('nonsense')).toBe('Morning Study Room');
   });
 });

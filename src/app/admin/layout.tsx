@@ -13,6 +13,18 @@ import { Badge } from '@/components/ui/badge';
 import { requireAdmin } from '@/lib/auth/guards';
 import { getPrimaryCohort } from '@/server/context';
 
+/**
+ * The admin console.
+ *
+ * Every page under here sets `export const instant = false`, opting out of the prerendered
+ * shell the student app uses. That is a judgement about who is on the other side of the
+ * screen, not an oversight: partial prerendering earns its keep on a dashboard someone
+ * opens twenty times a day, where a frame that paints before the data is the difference
+ * between fast and slow. The console is opened a few times a day by one or two cohort
+ * leads, and its screens are almost entirely table — there is no meaningful frame to show
+ * without the rows. Blocking until the render is ready keeps them plain, and keeps the
+ * cost of the refactor where the benefit was.
+ */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireAdmin();
   const cohort = await getPrimaryCohort();
@@ -58,8 +70,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
       <div className="min-w-0 flex-1">
         <TopBar
-          name={user.fullName}
-          avatarUrl={user.avatarUrl}
+          identity={<Avatar name={user.fullName} src={user.avatarUrl} size="sm" ring />}
           href="/admin/profile"
           subtitle={`${cohort.name} · admin console`}
           left={<MobileMenu items={ADMIN_NAV} footer={<SignOutButton size="sm" />} />}

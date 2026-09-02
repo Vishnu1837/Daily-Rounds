@@ -15,7 +15,9 @@ import {
 import { RoadmapAdminScreen } from './roadmap-admin';
 
 export const metadata: Metadata = { title: 'Roadmaps' };
-export const dynamic = 'force-dynamic';
+
+// Not prerendered — see the note in the admin layout. This page is all data.
+export const instant = false;
 
 export default async function RoadmapAdminPage({
   searchParams,

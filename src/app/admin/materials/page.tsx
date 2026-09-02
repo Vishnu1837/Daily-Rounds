@@ -12,7 +12,9 @@ import { getCohortMaterials } from '@/server/queries/admin';
 import { MaterialsAdminScreen } from './materials-admin';
 
 export const metadata: Metadata = { title: 'Materials' };
-export const dynamic = 'force-dynamic';
+
+// Not prerendered — see the note in the admin layout. This page is all data.
+export const instant = false;
 
 export default async function MaterialsAdminPage() {
   await requireAdmin();

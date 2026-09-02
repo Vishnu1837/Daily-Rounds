@@ -9,7 +9,9 @@ import { logoutAction } from '@/server/actions/auth';
 import { Clock } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'No cohort yet' };
-export const dynamic = 'force-dynamic';
+
+// Not prerendered: a one-off screen with no frame worth showing ahead of its data.
+export const instant = false;
 
 export default async function NoCohortPage() {
   const user = await requireUser();

@@ -11,8 +11,6 @@ import { getMemberContext } from '@/server/context';
 import { STUDENT_HOME } from '@/lib/routes';
 
 export const metadata: Metadata = { title: 'How points work' };
-export const dynamic = 'force-dynamic';
-
 export default async function HowPointsWorkPage() {
   const user = await requireOnboardedUser();
   const ctx = await getMemberContext(user);

@@ -27,7 +27,12 @@ import type { HomeData } from '@/server/queries/student';
 type Room = HomeData['studyRoom'];
 
 /**
- * The morning study room.
+ * The cohort's study room.
+ *
+ * The name and the times on the card are the student's, not the cohort's: the window is
+ * translated into their own timezone before it gets here, and the heading is derived from
+ * that translated start time unless the cohort lead named the room themselves. The clock
+ * the card *counts* against is still the cohort's — see below.
  *
  * The card runs on the COHORT's clock, not the browser's: the server hands over the current
  * wall-clock minute at render, and this ticks it forward locally. A student sitting in a
@@ -170,13 +175,14 @@ export function StudyRoomCard({ room }: { room: Room }) {
           {open ? (
             <LiveDot label={state.started ? 'Live study room' : 'Room open'} />
           ) : (
-            <p className="eyebrow">Morning study room</p>
+            <p className="eyebrow">Study room</p>
           )}
-          <p className="text-fg mt-3 text-lg font-extrabold">Morning Study Room</p>
+          <p className="text-fg mt-3 text-lg font-extrabold">{room.title}</p>
           <p className="text-fg-muted flex items-center gap-1.5 text-sm">
             <Clock className="size-3.5" aria-hidden />
-            {room.startTime} – {room.endTime}
+            {room.displayStartTime} – {room.displayEndTime}
           </p>
+          {room.zoneNote && <p className="text-fg-subtle mt-0.5 text-xs">{room.zoneNote}</p>}
         </div>
         {attendedLabel && (
           <Badge
@@ -228,7 +234,7 @@ export function StudyRoomCard({ room }: { room: Room }) {
             Opens in {formatCountdown(state.minutesToOpen)}
           </Button>
           <p className="text-fg-subtle mt-2.5 text-center text-xs">
-            Doors open a few minutes early; the room starts at {room.startTime}.
+            Doors open a few minutes early; the room starts at {room.displayStartTime}.
           </p>
         </>
       ) : state.phase === 'ended' ? (
@@ -237,7 +243,7 @@ export function StudyRoomCard({ room }: { room: Room }) {
             Room closed for today
           </Button>
           <p className="text-fg-subtle mt-2.5 text-center text-xs">
-            Back tomorrow at {room.startTime}.
+            Back tomorrow at {room.displayStartTime}.
           </p>
         </>
       ) : (

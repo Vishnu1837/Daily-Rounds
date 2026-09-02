@@ -301,7 +301,14 @@ const EMPTY_SPECIES: SpeciesCounts = {
  * The totals are read from `focus_trees` itself, not from any cached counter, so a round
  * that completed a second ago is included the next time this page is rendered.
  */
-export async function getCohortGroves(ctx: MemberContext): Promise<CohortGroveRow[]> {
+export async function getCohortGroves(
+  /**
+   * A member's own context, or a bare cohort — the admin console has no membership and no
+   * grove of its own, but a cohort lead still needs to see the wall their students see.
+   */
+  ctx: MemberContext | { cohort: { id: string }; memberId?: null },
+): Promise<CohortGroveRow[]> {
+  const viewerId = 'memberId' in ctx ? (ctx.memberId ?? null) : null;
   const rows = await db
     .select({
       memberId: cohortMembers.id,
@@ -345,7 +352,7 @@ export async function getCohortGroves(ctx: MemberContext): Promise<CohortGroveRo
       },
       focusMinutes: row.focusMinutes,
       lastPlantedOn: row.lastPlantedOn ?? null,
-      isYou: row.memberId === ctx.memberId,
+      isYou: row.memberId === viewerId,
     }))
     .sort((a, b) => b.trees - a.trees || a.name.localeCompare(b.name));
 }

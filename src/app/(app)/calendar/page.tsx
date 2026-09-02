@@ -8,8 +8,6 @@ import { getCalendarMonth } from '@/server/queries/student';
 import { CalendarScreen } from './calendar-screen';
 
 export const metadata: Metadata = { title: 'Calendar' };
-export const dynamic = 'force-dynamic';
-
 export default async function CalendarPage({
   searchParams,
 }: {

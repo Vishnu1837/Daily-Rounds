@@ -19,6 +19,15 @@ import { WaitlistForm } from './waitlist-form';
  * promise the cohort then has to keep.
  */
 
+/*
+ * Fixed when the site is built rather than read from the clock on every render.
+ *
+ * The landing page is prerendered, and a value that can change between renders forces
+ * the whole page to be rendered per request instead. A footer line is not worth giving
+ * up a static marketing page for; a deploy in January refreshes it.
+ */
+const COPYRIGHT_YEAR = new Date().getFullYear();
+
 const HERO_FACTS = [
   { value: 'Mon–Fri', label: 'Monitored study rooms' },
   { value: '19', label: 'MBBS subjects in the syllabus' },
@@ -1081,7 +1090,7 @@ function SiteFooter() {
         </p>
 
         <p className="mt-6 text-[12px]" style={{ color: 'var(--ed-faint)' }}>
-          © {new Date().getFullYear()} {SITE.name}. Built by {SITE.founder}.
+          © {COPYRIGHT_YEAR} {SITE.name}. Built by {SITE.founder}.
         </p>
       </div>
     </footer>

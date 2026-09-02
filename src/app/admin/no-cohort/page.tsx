@@ -7,7 +7,9 @@ import { requireAdmin } from '@/lib/auth/guards';
 import { Building2 } from 'lucide-react';
 
 export const metadata: Metadata = { title: 'No cohort' };
-export const dynamic = 'force-dynamic';
+
+// Not prerendered — see the note in the admin layout. This page is all data.
+export const instant = false;
 
 export default async function AdminNoCohortPage() {
   await requireAdmin();

@@ -44,7 +44,13 @@ async function completeDay(memberId: string, date: string) {
       idempotencyKey: ledgerKey.daily(event, memberId, date),
     });
   }
-  return settleDay({ memberId, date, calendar: ctx.calendar, rules: ctx.rules });
+  return settleDay({
+    memberId,
+    cohortId: ctx.cohort.id,
+    date,
+    calendar: ctx.calendar,
+    rules: ctx.rules,
+  });
 }
 
 describe('points ledger', () => {
@@ -196,6 +202,7 @@ describe('daily activity derivation', () => {
     });
     const record = await recomputeDay({
       memberId,
+      cohortId: ctx.cohort.id,
       date: '2025-09-02',
       calendar: ctx.calendar,
       rules: ctx.rules,
@@ -224,6 +231,7 @@ describe('daily activity derivation', () => {
 
     const record = await recomputeDay({
       memberId,
+      cohortId: ctx.cohort.id,
       date: '2025-09-03',
       calendar: ctx.calendar,
       rules: ctx.rules,
@@ -246,6 +254,7 @@ describe('daily activity derivation', () => {
     });
     const record = await recomputeDay({
       memberId,
+      cohortId: ctx.cohort.id,
       date: '2025-09-06',
       calendar: ctx.calendar,
       rules: ctx.rules,
@@ -260,12 +269,14 @@ describe('daily activity derivation', () => {
     await completeDay(memberId, '2025-09-01');
     const first = await recomputeDay({
       memberId,
+      cohortId: ctx.cohort.id,
       date: '2025-09-01',
       calendar: ctx.calendar,
       rules: ctx.rules,
     });
     const second = await recomputeDay({
       memberId,
+      cohortId: ctx.cohort.id,
       date: '2025-09-01',
       calendar: ctx.calendar,
       rules: ctx.rules,
@@ -309,6 +320,7 @@ describe('streaks and milestones through the real pipeline', () => {
     for (let i = 0; i < 3; i++) {
       await settleDay({
         memberId,
+        cohortId: ctx.cohort.id,
         date: '2025-09-05',
         calendar: ctx.calendar,
         rules: ctx.rules,
@@ -333,6 +345,7 @@ describe('streaks and milestones through the real pipeline', () => {
     expect(activity.showedUp('2025-09-17')).toBe(false); // holiday, never recorded
     const outcome = await settleDay({
       memberId,
+      cohortId: ctx.cohort.id,
       date: '2025-09-18',
       calendar: ctx.calendar,
       rules: ctx.rules,
@@ -362,6 +375,7 @@ describe('streaks and milestones through the real pipeline', () => {
     const before = earned.length;
     await settleDay({
       memberId,
+      cohortId: ctx.cohort.id,
       date: '2025-09-01',
       calendar: ctx.calendar,
       rules: ctx.rules,
@@ -380,10 +394,17 @@ describe('streaks and milestones through the real pipeline', () => {
 
     // Two missed days, then recompute the whole range.
     for (const date of ['2025-09-02', '2025-09-03']) {
-      await recomputeDay({ memberId, date, calendar: ctx.calendar, rules: ctx.rules });
+      await recomputeDay({
+        memberId,
+        cohortId: ctx.cohort.id,
+        date,
+        calendar: ctx.calendar,
+        rules: ctx.rules,
+      });
     }
     await settleDay({
       memberId,
+      cohortId: ctx.cohort.id,
       date: '2025-09-03',
       calendar: ctx.calendar,
       rules: ctx.rules,
@@ -472,18 +493,21 @@ describe('attendance', () => {
     const [p, l, a] = await Promise.all([
       recomputeDay({
         memberId: present,
+        cohortId: ctx.cohort.id,
         date: '2025-09-01',
         calendar: ctx.calendar,
         rules: ctx.rules,
       }),
       recomputeDay({
         memberId: late,
+        cohortId: ctx.cohort.id,
         date: '2025-09-01',
         calendar: ctx.calendar,
         rules: ctx.rules,
       }),
       recomputeDay({
         memberId: absent,
+        cohortId: ctx.cohort.id,
         date: '2025-09-01',
         calendar: ctx.calendar,
         rules: ctx.rules,

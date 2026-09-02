@@ -8,8 +8,6 @@ import { getRoadmaps } from '@/server/queries/student';
 import { SyllabusScreen } from './syllabus-screen';
 
 export const metadata: Metadata = { title: 'Syllabus' };
-export const dynamic = 'force-dynamic';
-
 export default async function SyllabusPage() {
   const user = await requireOnboardedUser();
   const ctx = await getMemberContext(user);

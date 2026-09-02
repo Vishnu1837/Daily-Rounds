@@ -27,7 +27,7 @@ import {
 } from '@/server/actions/admin';
 import type { StudentTopicPlan, getStudentDetail } from '@/server/queries/admin';
 
-import { ManageTopicsPanel } from './assign-topic';
+import { ManageTopicsPanel, type SyllabusSubject } from './assign-topic';
 
 type Detail = NonNullable<Awaited<ReturnType<typeof getStudentDetail>>>;
 
@@ -37,12 +37,14 @@ export function StudentDetailScreen({
   cohortEnded,
   detail,
   topicPlan,
+  syllabusSubjects,
 }: {
   cohortId: string;
   today: string;
   cohortEnded: boolean;
   detail: Detail;
   topicPlan: StudentTopicPlan;
+  syllabusSubjects: SyllabusSubject[];
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
@@ -144,6 +146,7 @@ export function StudentDetailScreen({
         memberId={member.memberId}
         studentName={member.name}
         plan={topicPlan}
+        syllabusSubjects={syllabusSubjects}
       />
 
       {/* ----------------------------------------------------------- charts */}

@@ -6,7 +6,9 @@ import { getWaitlistEntries } from '@/server/queries/waitlist';
 import { WaitlistScreen } from './waitlist-screen';
 
 export const metadata: Metadata = { title: 'Waitlist' };
-export const dynamic = 'force-dynamic';
+
+// Not prerendered — see the note in the admin layout. This page is all data.
+export const instant = false;
 
 /**
  * The waitlist console — the only place next-cohort contact details are ever rendered.

@@ -813,11 +813,18 @@ async function main() {
   const { recomputeRange, settleDay } = await import('@/server/scoring');
   for (const student of SEED_STUDENTS) {
     const memberId = memberByEmail.get(student.email)!;
-    await recomputeRange({ memberId, from: startDate, to: today, calendar, rules });
+    await recomputeRange({
+      memberId,
+      cohortId: cohort.id,
+      from: startDate,
+      to: today,
+      calendar,
+      rules,
+    });
     // settleDay on each elapsed active day so streak milestones and achievements land on
     // the day they were actually earned.
     for (const date of elapsedDays) {
-      await settleDay({ memberId, date, calendar, rules });
+      await settleDay({ memberId, cohortId: cohort.id, date, calendar, rules });
     }
   }
   // Seeded history is not "news" — mark it seen so students are not greeted by a

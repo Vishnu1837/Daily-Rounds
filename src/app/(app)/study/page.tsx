@@ -9,8 +9,6 @@ import { getQuizForTopic, getStudySnapshot } from '@/server/queries/student';
 import { StudySessionScreen } from './study-screen';
 
 export const metadata: Metadata = { title: 'Study session' };
-export const dynamic = 'force-dynamic';
-
 export default async function StudyPage() {
   const user = await requireOnboardedUser();
   const ctx = await getMemberContext(user);

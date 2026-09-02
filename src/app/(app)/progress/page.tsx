@@ -8,8 +8,6 @@ import { getPointsLog, getProgressData } from '@/server/queries/student';
 import { ProgressScreen } from './progress-screen';
 
 export const metadata: Metadata = { title: 'Progress' };
-export const dynamic = 'force-dynamic';
-
 export default async function ProgressPage() {
   const user = await requireOnboardedUser();
   const ctx = await getMemberContext(user);

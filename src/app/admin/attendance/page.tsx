@@ -9,7 +9,9 @@ import { getAttendanceSheet } from '@/server/queries/admin';
 import { AttendanceSheet } from './attendance-sheet';
 
 export const metadata: Metadata = { title: 'Attendance' };
-export const dynamic = 'force-dynamic';
+
+// Not prerendered — see the note in the admin layout. This page is all data.
+export const instant = false;
 
 export default async function AttendancePage({
   searchParams,

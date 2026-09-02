@@ -2,6 +2,7 @@ import { and, asc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import { cache } from 'react';
 
 import { db } from '@/db/client';
+import { invalidateCohortActivity } from '@/server/cache';
 import type { PointEvent } from '@/db/schema';
 import {
   checkIns,
@@ -118,9 +119,17 @@ export async function revokeAward(idempotencyKey: string): Promise<void> {
 /**
  * Recomputes the derived `daily_activity` row for one student-day from source records.
  * Safe to run repeatedly; it is the only writer of that table.
+ *
+ * Being the only writer is why cache invalidation lives here rather than in the actions
+ * that trigger it. A check-in, a finished study block, a quiz, an attendance mark and an
+ * admin points adjustment all end up in this function, so clearing the cohort's activity
+ * tag once here covers every one of them — and covers the next feature that scores
+ * something without its author having to know a cache exists. `cohortId` is required for
+ * exactly that reason: the compiler, not a code review, is what keeps it supplied.
  */
 export async function recomputeDay(args: {
   memberId: string;
+  cohortId: string;
   date: ISODate;
   calendar: CohortCalendar;
   rules: PointRules;
@@ -185,18 +194,21 @@ export async function recomputeDay(args: {
       },
     });
 
+  invalidateCohortActivity(args.cohortId);
+
   return record;
 }
 
 /** Rebuilds every day in a range. Used by the admin "recalculate" action and the seeder. */
 export async function recomputeRange(args: {
   memberId: string;
+  cohortId: string;
   from: ISODate;
   to: ISODate;
   calendar: CohortCalendar;
   rules: PointRules;
 }): Promise<void> {
-  const { memberId, calendar, rules } = args;
+  const { memberId, cohortId, calendar, rules } = args;
   const days = activeStudyDaysBetween(calendar, args.from, args.to);
   // Also refresh non-active days that carry data, so the calendar shows weekend effort.
   const extra = await db
@@ -221,7 +233,9 @@ export async function recomputeRange(args: {
   const BATCH = 8;
   for (let i = 0; i < all.length; i += BATCH) {
     await Promise.all(
-      all.slice(i, i + BATCH).map((date) => recomputeDay({ memberId, date, calendar, rules })),
+      all
+        .slice(i, i + BATCH)
+        .map((date) => recomputeDay({ memberId, cohortId, date, calendar, rules })),
     );
   }
 }
@@ -286,13 +300,14 @@ export type ScoringOutcome = {
  */
 export async function settleDay(args: {
   memberId: string;
+  cohortId: string;
   date: ISODate;
   calendar: CohortCalendar;
   rules: PointRules;
 }): Promise<ScoringOutcome> {
-  const { memberId, date, calendar, rules } = args;
+  const { memberId, cohortId, date, calendar, rules } = args;
 
-  await recomputeDay({ memberId, date, calendar, rules });
+  await recomputeDay({ memberId, cohortId, date, calendar, rules });
 
   const to = minDate(date, calendar.endDate);
 
@@ -394,7 +409,7 @@ export async function settleDay(args: {
     return { pointsAwarded, streak: streak.length, milestone, newAchievements };
   }
 
-  await recomputeDay({ memberId, date, calendar, rules });
+  await recomputeDay({ memberId, cohortId, date, calendar, rules });
   const settled = await loadActivity(memberId, calendar.startDate, to);
 
   return {
