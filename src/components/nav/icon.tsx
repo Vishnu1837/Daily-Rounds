@@ -8,6 +8,7 @@ import {
   Settings,
   Sparkles,
   Timer,
+  TreeDeciduous,
   TrendingUp,
   Trophy,
   User,
@@ -30,6 +31,7 @@ const ICONS = {
   settings: Settings,
   sparkles: Sparkles,
   timer: Timer,
+  tree: TreeDeciduous,
 } as const satisfies Record<NavIconName, unknown>;
 
 export function NavIcon({

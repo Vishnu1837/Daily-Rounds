@@ -56,7 +56,8 @@ Every seeded student uses the same password. Seed credentials are configurable �
 | Screen            | What it answers                                                       |
 | ----------------- | --------------------------------------------------------------------- |
 | **Home**          | What do I need to do today? How am I doing? What happens next?        |
-| **Study session** | A real timer for the block you committed to, with pause and finish    |
+| **Study session** | Pomodoro rounds that plant a tree — leave the tab and it withers      |
+| **Grove**         | Every round you sat through, every one you walked out on              |
 | **Check-In**      | The 45-second daily ritual that records what actually happened        |
 | **Roadmap**       | My own topic plan, organised by subject rather than by year group     |
 | **Calendar**      | What was planned and what actually happened, day by day               |
@@ -221,6 +222,7 @@ src/
   components/
     ui/                   Design system primitives
     gamification/         Streak flame, celebrations, confetti
+    grove/                The tree drawing, in inline SVG
     charts/               Heatmap, week columns, donut
     nav/, brand/, report/
   db/
@@ -231,7 +233,8 @@ src/
   lib/
     curriculum/           The 19-subject MBBS tree (generated) and its lookups
     domain/               Pure business logic — calendar, streak, consistency,
-                          points, risk, achievements. No I/O, fully unit-tested.
+                          points, risk, achievements, grove. No I/O, fully
+                          unit-tested.
     auth/                 Password hashing, sessions, route guards
     validation.ts         Zod schemas for every input
   server/
@@ -292,3 +295,16 @@ Levels are a presentation layer over the points ledger, not a second currency: X
 lifetime point total, so a level can never disagree with the ledger and there is nothing
 extra to store. Leaderboard leagues band by consistency rather than points, because points
 scale with time in the cohort and ranking by them would quietly reward seniority.
+
+### The grove
+
+A focus round is a promise: pick 25, 50 or 90 minutes, a sapling goes in the ground, and it
+only becomes a tree if you sit the whole round out. Leaving the tab for more than twenty
+seconds kills it, and the stump is kept — a grove that quietly deletes your failures cannot
+hold you to anything.
+
+Two rules keep it honest. Whether a round survived is decided from `planted_at` on the
+server, never from the browser's countdown, so a fiddled clock or an open console fails
+closed. And a tree pays no XP: points still come from the study block and the check-in, which
+means nobody can farm the leaderboard by starting timers. The minutes you sat before quitting
+still count towards the block — the tree is what you lose.

@@ -39,6 +39,15 @@ export const sessionStatusEnum = pgEnum('study_session_status', [
   'completed',
   'abandoned',
 ]);
+export const treeStatusEnum = pgEnum('focus_tree_status', ['growing', 'grown', 'withered']);
+export const treeSpeciesEnum = pgEnum('focus_tree_species', [
+  'sprout',
+  'fern',
+  'neem',
+  'banyan',
+  'deodar',
+]);
+export const witherReasonEnum = pgEnum('focus_wither_reason', ['left', 'gave_up', 'abandoned']);
 export const attendanceStatusEnum = pgEnum('attendance_status', ['present', 'late', 'absent']);
 export const checkInCompletionEnum = pgEnum('check_in_completion', [
   'completed',
@@ -422,6 +431,48 @@ export const studySessions = pgTable(
     endedAt: timestamp('ended_at', { withTimezone: true }),
   },
   (t) => [index('study_sessions_member_date_idx').on(t.memberId, t.date)],
+);
+
+/* ---------------------------------------------------------- the grove */
+
+/**
+ * One Pomodoro round, drawn as a tree.
+ *
+ * A row is written the moment the round starts, not when it finishes, because the whole
+ * mechanic depends on the commitment existing before the outcome does. `planted_at` and
+ * `due_at` are the only evidence the server trusts: whether a tree survived is a question
+ * about the wall clock, never about what the browser claims its countdown reached.
+ *
+ * Rows are never deleted. A withered tree is the point of the feature.
+ */
+export const focusTrees = pgTable(
+  'focus_trees',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => cohortMembers.id, { onDelete: 'cascade' }),
+    /** The cohort-local day the round belongs to, so a grove day matches a roadmap day. */
+    date: date('date').notNull(),
+    /** The study block this round was sat inside, when there was one. */
+    sessionId: uuid('session_id').references(() => studySessions.id, { onDelete: 'set null' }),
+    topicId: uuid('topic_id').references(() => roadmapTopics.id, { onDelete: 'set null' }),
+    /** Which Pomodoro preset was chosen: classic, deep or marathon. */
+    preset: varchar('preset', { length: 16 }).notNull().default('classic'),
+    /** The length promised, in minutes. Fixed at planting; never edited afterwards. */
+    focusMinutes: integer('focus_minutes').notNull(),
+    species: treeSpeciesEnum('species').notNull(),
+    status: treeStatusEnum('status').notNull().default('growing'),
+    witherReason: witherReasonEnum('wither_reason'),
+    plantedAt: timestamp('planted_at', { withTimezone: true }).notNull().defaultNow(),
+    /** When the round is owed. Stored so a sweep can settle trees nobody came back to. */
+    dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('focus_trees_member_date_idx').on(t.memberId, t.date),
+    index('focus_trees_status_idx').on(t.status),
+  ],
 );
 
 /* -------------------------------------------------- events and attendance */
@@ -819,6 +870,7 @@ export const cohortMembersRelations = relations(cohortMembers, ({ one, many }) =
   roadmaps: many(roadmaps),
   assignments: many(dailyAssignments),
   sessions: many(studySessions),
+  trees: many(focusTrees),
   checkIns: many(checkIns),
   points: many(pointsLedger),
   achievements: many(studentAchievements),
@@ -861,6 +913,7 @@ export type RoadmapWeek = typeof roadmapWeeks.$inferSelect;
 export type RoadmapTopic = typeof roadmapTopics.$inferSelect;
 export type DailyAssignment = typeof dailyAssignments.$inferSelect;
 export type StudySession = typeof studySessions.$inferSelect;
+export type FocusTree = typeof focusTrees.$inferSelect;
 export type Attendance = typeof attendance.$inferSelect;
 export type StudyRoomPresence = typeof studyRoomPresence.$inferSelect;
 export type CheckIn = typeof checkIns.$inferSelect;

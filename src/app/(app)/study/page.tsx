@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { requireOnboardedUser } from '@/lib/auth/guards';
 import { getMemberContext } from '@/server/context';
+import { getStudyGrove } from '@/server/queries/grove';
 import { getHomeData, getQuizForTopic } from '@/server/queries/student';
 
 import { StudySessionScreen } from './study-screen';
@@ -16,7 +17,10 @@ export default async function StudyPage() {
   if (!ctx) redirect('/admin');
 
   const home = await getHomeData(ctx);
-  const quiz = await getQuizForTopic(home.assignment?.topicRef ?? null);
+  const [quiz, grove] = await Promise.all([
+    getQuizForTopic(home.assignment?.topicRef ?? null),
+    getStudyGrove(ctx),
+  ]);
 
   return (
     <StudySessionScreen
@@ -28,6 +32,8 @@ export default async function StudyPage() {
       targetDone={home.tasks.find((t) => t.key === 'daily_target_completed')?.done ?? false}
       checkedIn={home.checkedIn}
       quizId={quiz?.id ?? null}
+      serverNow={new Date().toISOString()}
+      grove={grove}
     />
   );
 }

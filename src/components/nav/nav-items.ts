@@ -11,6 +11,7 @@ export type NavIconName =
   | 'settings'
   | 'sparkles'
   | 'timer'
+  | 'tree'
   | 'users';
 
 export type NavItem = {
@@ -66,6 +67,14 @@ export const STUDENT_NAV: NavItem[] = [
     short: 'Ranks',
     icon: 'trophy',
     primary: true,
+    group: 'Momentum',
+  },
+  {
+    href: '/grove',
+    label: 'Grove',
+    short: 'Grove',
+    icon: 'tree',
+    primary: false,
     group: 'Momentum',
   },
   {

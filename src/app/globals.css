@@ -470,6 +470,18 @@
   }
 }
 
+/* The grove tree, breathing while a focus round runs. Deliberately slow: a tree that
+   fidgets is a second thing on screen competing for the attention the round is asking for. */
+@keyframes dr-sway {
+  0%,
+  100% {
+    transform: rotate(-1.1deg);
+  }
+  50% {
+    transform: rotate(1.1deg);
+  }
+}
+
 @keyframes dr-sheen {
   0% {
     transform: translateX(-120%) skewX(-18deg);
@@ -514,6 +526,10 @@
 
 .animate-ring-live {
   animation: dr-ring-live 1.9s var(--ease-out-soft) infinite;
+}
+
+.animate-sway {
+  animation: dr-sway 7s ease-in-out infinite;
 }
 
 /* The slow-moving colour blobs behind hero surfaces. */
