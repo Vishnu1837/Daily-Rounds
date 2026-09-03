@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { asc } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 
 import type { SessionUser } from '@/lib/auth/session';
 
@@ -181,5 +181,33 @@ describe('the admin side of the waitlist', () => {
     // Nothing was read out and nothing was changed.
     const [after] = await entries();
     expect(after).toMatchObject({ id: row!.id, status: 'new' });
+  });
+});
+
+describe('getWaitlistCounts', () => {
+  it('counts nothing when nobody has signed up', async () => {
+    const { getWaitlistCounts } = await import('@/server/queries/waitlist');
+    expect(await getWaitlistCounts()).toEqual({ total: 0, new: 0 });
+  });
+
+  it('separates the untouched enquiries from the ones already triaged', async () => {
+    const { joinWaitlistAction } = await import('@/server/actions/waitlist');
+    const { getWaitlistCounts } = await import('@/server/queries/waitlist');
+
+    await joinWaitlistAction(null, form({ fullName: 'Anjali', whatsapp: '+91 90000 11111' }));
+    await joinWaitlistAction(null, form({ fullName: 'Imran', whatsapp: '+91 90000 22222' }));
+    await joinWaitlistAction(null, form({ fullName: 'Meera', whatsapp: '+91 90000 33333' }));
+
+    expect(await getWaitlistCounts()).toEqual({ total: 3, new: 3 });
+
+    const [first] = await entries();
+    await db
+      .update(schema.waitlistEntries)
+      .set({ status: 'contacted' })
+      .where(eq(schema.waitlistEntries.id, first!.id));
+
+    // The dashboard's "N new of M" reads off this: the total does not shrink when someone
+    // is contacted, only the count of people still waiting to hear from anyone.
+    expect(await getWaitlistCounts()).toEqual({ total: 3, new: 2 });
   });
 });

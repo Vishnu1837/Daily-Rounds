@@ -5,6 +5,7 @@ import {
   CalendarCheck,
   CheckCircle2,
   ClipboardList,
+  Inbox,
   Map as MapIcon,
   Settings,
   TrendingUp,
@@ -24,6 +25,7 @@ import { isActiveStudyDay, isHoliday } from '@/lib/domain/calendar';
 import { RISK_LABELS } from '@/lib/domain/risk';
 import { getCohortContext, getPrimaryCohort } from '@/server/context';
 import { getCohortOverview, getCohortStudents } from '@/server/queries/admin';
+import { getWaitlistCounts } from '@/server/queries/waitlist';
 
 import { RecalculateButton } from './recalculate-button';
 
@@ -45,7 +47,12 @@ export default async function AdminOverviewPage() {
    * in the same tick. `getCohortStudents` is request-memoised, so the roster is still read
    * exactly once even though both of these ask for it.
    */
-  const [students, overview] = await Promise.all([getCohortStudents(ctx), getCohortOverview(ctx)]);
+  const [students, overview, waitlist] = await Promise.all([
+    getCohortStudents(ctx),
+    getCohortOverview(ctx),
+    // Not cohort-scoped, and joined to nothing above — it just rides along on the same tick.
+    getWaitlistCounts(),
+  ]);
 
   const turnout =
     overview.size === 0 ? 0 : Math.round((overview.activeToday / overview.size) * 100);
@@ -280,7 +287,7 @@ export default async function AdminOverviewPage() {
       {/* -------------------------------------------------------- quick actions */}
       <section className="space-y-3">
         <SectionTitle>Quick actions</SectionTitle>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <QuickAction
             href="/admin/attendance"
             icon={<CalendarCheck className="size-5" aria-hidden />}
@@ -307,6 +314,19 @@ export default async function AdminOverviewPage() {
             tone="flame"
             title="Read check-ins"
             description={`${overview.checkInsToday} submitted so far today`}
+          />
+          <QuickAction
+            href="/admin/waitlist"
+            icon={<Inbox className="size-5" aria-hidden />}
+            tone="iris"
+            title="Next-cohort waitlist"
+            description={
+              waitlist.total === 0
+                ? 'Nobody has filled in the public form yet'
+                : waitlist.new > 0
+                  ? `${waitlist.new} new of ${waitlist.total} not yet contacted`
+                  : `${waitlist.total} enquiries, all followed up`
+            }
           />
           <QuickAction
             href="/admin/settings"
