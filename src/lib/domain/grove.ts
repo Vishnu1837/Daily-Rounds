@@ -128,9 +128,11 @@ export function growthStage(progress: number): number {
  * How long you may be away from the tab before the tree dies.
  *
  * Forest can be absolute about this because it owns the phone. A browser tab cannot: a
- * notification, a misfired alt-tab or a lock screen would all read as quitting. Twenty
- * seconds is long enough to dismiss an interruption and too short to go and read something
- * else.
+ * notification or a misfired alt-tab would otherwise read as quitting. Twenty seconds is long
+ * enough to dismiss an interruption and too short to go and read something else.
+ *
+ * A locked screen is not "away" and never starts this clock — the study screen decides which
+ * of the two a hidden page is before it arms anything.
  */
 export const AWAY_GRACE_SECONDS = 20;
 
@@ -143,8 +145,15 @@ export const AWAY_GRACE_SECONDS = 20;
  */
 export const GROWTH_TOLERANCE_SECONDS = 5;
 
-/** A tree still growing this long past its due time is treated as abandoned. */
-export const ABANDON_SWEEP_SECONDS = 120;
+/**
+ * A tree still growing this long past its due time is treated as abandoned.
+ *
+ * Wide on purpose. The common way to sit out a round is to put the phone face down, which
+ * means the browser is frozen when the countdown runs out and cannot claim the tree until
+ * the student picks the phone back up. Ten minutes covers "the round ended, I finished my
+ * paragraph, then I looked at my phone" without covering "I went to dinner".
+ */
+export const ABANDON_SWEEP_SECONDS = 600;
 
 export type WitherReason = 'left' | 'gave_up' | 'abandoned';
 

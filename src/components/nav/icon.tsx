@@ -2,6 +2,7 @@ import {
   BookOpen,
   CalendarDays,
   CheckCircle2,
+  ClipboardList,
   Home,
   Inbox,
   Library,
@@ -34,6 +35,7 @@ const ICONS = {
   timer: Timer,
   tree: TreeDeciduous,
   inbox: Inbox,
+  clipboard: ClipboardList,
 } as const satisfies Record<NavIconName, unknown>;
 
 export function NavIcon({

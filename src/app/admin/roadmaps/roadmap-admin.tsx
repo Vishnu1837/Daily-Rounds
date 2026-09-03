@@ -34,6 +34,8 @@ type RoadmapRow = {
   roadmapTitle: string;
   track: string | null;
   slot: 'primary' | 'secondary';
+  isCustomized: boolean;
+  completedAt: Date | null;
   subjectId: string;
   subjectName: string;
   subjectSlug: string;
@@ -52,6 +54,9 @@ type Assignment = {
   memberId: string;
   name: string;
   assignmentId: string | null;
+  /** Which subject this row is. Null for a student with nothing assigned that day. */
+  slot: 'primary' | 'secondary' | null;
+  subjectName: string | null;
   topicId: string | null;
   topicTitle: string | null;
   plannedMinutes: number | null;
@@ -101,6 +106,8 @@ export function RoadmapAdminScreen({
         title: string;
         track: string | null;
         slot: 'primary' | 'secondary';
+        isCustomized: boolean;
+        completedAt: Date | null;
         subjectId: string;
         subjectName: string;
         subjectSlug: string;
@@ -125,6 +132,8 @@ export function RoadmapAdminScreen({
           title: row.roadmapTitle,
           track: row.track,
           slot: row.slot,
+          isCustomized: row.isCustomized,
+          completedAt: row.completedAt,
           subjectId: row.subjectId,
           subjectName: row.subjectName,
           subjectSlug: row.subjectSlug,
@@ -159,7 +168,23 @@ export function RoadmapAdminScreen({
     );
   }, [roadmapRows]);
 
-  const unassigned = assignments.filter((a) => !a.topicId).length;
+  /*
+   * A student now has a topic per subject, so the sheet lists students once and their
+   * subjects underneath. Grouping here rather than in the query keeps the query a flat
+   * join and the row component a single subject.
+   */
+  const assignmentsByStudent = useMemo(() => {
+    const map = new Map<string, { memberId: string; name: string; rows: Assignment[] }>();
+    for (const a of assignments) {
+      const entry = map.get(a.memberId) ?? { memberId: a.memberId, name: a.name, rows: [] };
+      entry.rows.push(a);
+      map.set(a.memberId, entry);
+    }
+    return [...map.values()];
+  }, [assignments]);
+
+  // A student counts as unassigned when not one of their subjects has a topic today.
+  const unassigned = assignmentsByStudent.filter((s) => s.rows.every((a) => !a.topicId)).length;
   const individual = assignments.filter((a) => a.source === 'admin').length;
 
   /**
@@ -299,8 +324,33 @@ export function RoadmapAdminScreen({
           </SectionTitle>
 
           <Card className="divide-border divide-y p-0">
-            {assignments.map((a) => (
-              <AssignmentRow key={a.memberId} cohortId={cohortId} date={date} assignment={a} />
+            {assignmentsByStudent.map((student) => (
+              <div key={student.memberId} className="p-4">
+                <div className="flex items-center gap-3">
+                  <p className="text-fg min-w-0 flex-1 truncate text-sm font-bold">
+                    {student.name}
+                  </p>
+                  {student.rows.every((a) => !a.topicId) && (
+                    <Badge tone="warning">Unassigned</Badge>
+                  )}
+                  <Link
+                    href={`/admin/students/${student.memberId}`}
+                    className="text-pulse-700 hover:text-pulse-500 dark:text-pulse-300 shrink-0 text-sm font-semibold"
+                  >
+                    Manage topics
+                  </Link>
+                </div>
+                <div className="mt-2 space-y-1.5">
+                  {student.rows.map((a) => (
+                    <AssignmentRow
+                      key={`${a.memberId}:${a.slot ?? 'none'}`}
+                      cohortId={cohortId}
+                      date={date}
+                      assignment={a}
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
           </Card>
         </>
@@ -399,22 +449,18 @@ function AssignmentRow({
 
   return (
     <>
-      <div className="flex items-center gap-3 p-4">
+      <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-fg truncate text-sm font-bold">{assignment.name}</p>
           <p className="text-fg-muted truncate text-xs">
+            <span className="text-fg-subtle font-semibold">
+              {assignment.subjectName ?? 'No subject'}
+            </span>
+            {' · '}
             {assignment.topicTitle ?? 'No topic assigned'}
             {assignment.plannedMinutes ? ` · ${assignment.plannedMinutes} min` : ''}
           </p>
         </div>
-        {!assignment.topicId && <Badge tone="warning">Unassigned</Badge>}
         {assignment.source === 'admin' && <Badge tone="iris">Individual</Badge>}
-        <Link
-          href={`/admin/students/${assignment.memberId}`}
-          className="text-pulse-700 hover:text-pulse-500 dark:text-pulse-300 shrink-0 text-sm font-semibold"
-        >
-          Manage topics
-        </Link>
         <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
           <Pencil className="size-3.5" aria-hidden />
           Edit
@@ -424,7 +470,7 @@ function AssignmentRow({
       <Sheet
         open={open}
         onClose={() => setOpen(false)}
-        title={`${assignment.name} · ${date}`}
+        title={`${assignment.name} · ${assignment.subjectName ?? 'today'} · ${date}`}
         size="sm"
       >
         <form
@@ -444,6 +490,8 @@ function AssignmentRow({
         >
           <input type="hidden" name="memberId" value={assignment.memberId} />
           <input type="hidden" name="date" value={date} />
+          {/* Names the subject being edited, so the save cannot land on the other one. */}
+          <input type="hidden" name="slot" value={assignment.slot ?? 'primary'} />
           <TextInput
             label="Planned minutes"
             name="plannedMinutes"
@@ -489,6 +537,8 @@ function RoadmapEditor({
     title: string;
     track: string | null;
     slot: 'primary' | 'secondary';
+    isCustomized: boolean;
+    completedAt: Date | null;
     subjectName: string;
     subjectSlug: string;
     weeks: { id: string | null; number: number; title: string }[];
@@ -546,7 +596,19 @@ function RoadmapEditor({
   return (
     <Card>
       <CardHeader
-        title={roadmap.subjectName}
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {roadmap.subjectName}
+            {/*
+              Whether this student's order is still the syllabus's. The brief asks the admin
+              to be able to tell at a glance, and to be able to put it back.
+            */}
+            <Badge tone={roadmap.isCustomized ? 'iris' : 'neutral'}>
+              {roadmap.isCustomized ? 'Custom order' : 'Default order'}
+            </Badge>
+            {roadmap.completedAt && <Badge tone="success">Subject complete</Badge>}
+          </span>
+        }
         description={`${roadmap.slot === 'primary' ? 'Primary' : 'Secondary'} · ${completed}/${roadmap.topics.length} topics done`}
         action={
           <div className="flex gap-2">
@@ -573,10 +635,13 @@ function RoadmapEditor({
       >
         <div className="space-y-6 p-5">
           <div>
-            <SectionTitle>Replace this subject</SectionTitle>
+            <SectionTitle>
+              {roadmap.isCustomized ? 'Reset to the default roadmap' : 'Replace this subject'}
+            </SectionTitle>
             <p className="text-fg-muted mt-1 mb-3 text-xs">
-              Generates a new roadmap in the {roadmap.slot} slot. The student’s other subject is
-              untouched.
+              {roadmap.isCustomized
+                ? `Regenerating ${roadmap.subjectName} rebuilds it in syllabus order and drops the custom sequence. Pick the same subject to reset it, or a different one to switch. The student’s other subject is untouched.`
+                : `Generates a new roadmap in the ${roadmap.slot} slot. The student’s other subject is untouched.`}
             </p>
             <AssignSubjectForm
               cohortId={cohortId}

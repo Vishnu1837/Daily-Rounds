@@ -338,6 +338,15 @@ function TodayMission({
   const pct = home.tasks.length === 0 ? 0 : (doneCount / home.tasks.length) * 100;
   const running = home.session?.status === 'running';
 
+  /*
+   * A student carries up to two subjects, and both of today's topics belong on this screen.
+   * The first one with a topic leads the hero — it is what the timer opens on — and every
+   * other subject is listed under it, including one that has no topic today, because
+   * silently omitting a subject reads as "nothing to do in it".
+   */
+  const lead = home.assignment;
+  const alsoToday = home.focus.filter((f) => f !== lead);
+
   if (!home.isActiveDay) {
     return (
       <Card variant="wash" tone="iris" padding="lg" className="h-full overflow-hidden">
@@ -374,16 +383,16 @@ function TodayMission({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-2xs font-bold tracking-[0.16em] text-white/65 uppercase">
-              {home.assignment?.subjectName ?? "Today's focus"}
+              {lead?.subjectName ?? "Today's focus"}
             </p>
             <h2 className="mt-2 text-2xl leading-tight font-extrabold text-balance sm:text-3xl">
-              {home.assignment?.topicTitle ?? 'No topic assigned yet'}
+              {lead?.topicTitle ?? 'No topic assigned yet'}
             </h2>
-            {home.assignment?.topicTitle ? (
+            {lead?.topicTitle ? (
               <div className="mt-3.5 flex flex-wrap items-center gap-2">
                 <span className="rounded-pill inline-flex items-center gap-1.5 bg-white/14 px-3 py-1 text-xs font-bold ring-1 ring-white/20 ring-inset">
                   <Clock className="size-3.5" aria-hidden />
-                  {home.assignment.plannedMinutes} min planned
+                  {lead.plannedMinutes} min planned
                 </span>
                 {running && (
                   <span className="rounded-pill inline-flex items-center gap-1.5 bg-white/14 px-3 py-1 text-xs font-bold ring-1 ring-white/20 ring-inset">
@@ -401,8 +410,8 @@ function TodayMission({
                 roadmap and start anyway — showing up is what counts.
               </p>
             )}
-            {home.assignment?.note && (
-              <p className="mt-3 max-w-md text-sm text-white/70 italic">{home.assignment.note}</p>
+            {lead?.note && (
+              <p className="mt-3 max-w-md text-sm text-white/70 italic">{lead.note}</p>
             )}
           </div>
 
@@ -418,6 +427,40 @@ function TodayMission({
             <span className="stat-num text-base text-white">{Math.round(pct)}%</span>
           </ProgressRing>
         </div>
+
+        {/* ------------------------------------------- the student's other subject */}
+        {alsoToday.length > 0 && (
+          <div className="mt-5 space-y-2">
+            <p className="text-2xs font-bold tracking-[0.16em] text-white/55 uppercase">
+              Also today
+            </p>
+            {alsoToday.map((f) => (
+              <div
+                key={f.slot}
+                className="rounded-panel flex items-center gap-3 bg-white/10 px-4 py-3 ring-1 ring-white/15 ring-inset"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-2xs font-bold tracking-[0.14em] text-white/60 uppercase">
+                    {f.subjectName ?? 'Second subject'}
+                  </p>
+                  <p className="mt-0.5 truncate text-sm font-bold">
+                    {f.status === 'assigned'
+                      ? f.topicTitle
+                      : f.status === 'completed'
+                        ? 'Subject complete — every topic is done.'
+                        : 'No topic set for today.'}
+                  </p>
+                </div>
+                {f.status === 'assigned' && (
+                  <span className="rounded-pill inline-flex shrink-0 items-center gap-1.5 bg-white/14 px-2.5 py-1 text-xs font-bold ring-1 ring-white/20 ring-inset">
+                    <Clock className="size-3.5" aria-hidden />
+                    {f.plannedMinutes} min
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* ---------------------------------------------------------- actions */}
         <div className="mt-7 space-y-2.5">
@@ -460,7 +503,7 @@ function TodayMission({
               onClick={() =>
                 startTransition(async () => {
                   const { completeTargetAction } = await import('@/server/actions/study');
-                  const result = await completeTargetAction();
+                  const result = await completeTargetAction(lead?.slot);
                   if (!result.ok) {
                     toast.error('Could not save that', result.message);
                     return;

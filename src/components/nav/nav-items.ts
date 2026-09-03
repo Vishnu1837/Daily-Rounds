@@ -13,6 +13,7 @@ export type NavIconName =
   | 'timer'
   | 'tree'
   | 'inbox'
+  | 'clipboard'
   | 'users';
 
 export type NavItem = {
@@ -68,6 +69,14 @@ export const STUDENT_NAV: NavItem[] = [
     short: 'Ranks',
     icon: 'trophy',
     primary: true,
+    group: 'Momentum',
+  },
+  {
+    href: '/assessments',
+    label: 'Assessments',
+    short: 'Tests',
+    icon: 'clipboard',
+    primary: false,
     group: 'Momentum',
   },
   {
@@ -138,10 +147,26 @@ export const ADMIN_NAV: NavItem[] = [
     group: 'Cohort',
   },
   {
+    href: '/admin/leaderboard',
+    label: 'Leaderboard',
+    short: 'Ranking',
+    icon: 'trophy',
+    primary: false,
+    group: 'Cohort',
+  },
+  {
     href: '/admin/roadmaps',
     label: 'Roadmaps',
     short: 'Roadmaps',
     icon: 'map',
+    primary: true,
+    group: 'Content',
+  },
+  {
+    href: '/admin/assessments',
+    label: 'Assessments',
+    short: 'Tests',
+    icon: 'clipboard',
     primary: true,
     group: 'Content',
   },

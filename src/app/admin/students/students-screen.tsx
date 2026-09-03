@@ -22,6 +22,15 @@ import type { AdminStudentRow } from '@/server/queries/admin';
 
 type SortKey = 'risk' | 'consistency' | 'streak' | 'name' | 'points';
 
+/** Membership, not risk: whether this person is still in the cohort at all. */
+type StatusFilter = 'active' | 'paused' | 'left' | 'all';
+
+const MEMBERSHIP_LABELS: Record<'active' | 'paused' | 'left', string> = {
+  active: 'Active',
+  paused: 'Paused',
+  left: 'Removed',
+};
+
 /**
  * Risk is about *recent* behaviour, not a lifetime average — a student can sit at 28%
  * overall and still be on track because they have turned up every day this fortnight.
@@ -43,15 +52,28 @@ export function StudentsScreen({
 }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('risk');
+  /*
+   * Defaults to the active roster, because that is who the cohort *is* — but removed
+   * students are one dropdown away rather than gone, since removal keeps their history and
+   * an admin sometimes needs to find it or put someone back.
+   */
+  const [status, setStatus] = useState<StatusFilter>('active');
   const [addOpen, setAddOpen] = useState(false);
+
+  const counts = useMemo(() => {
+    const by = { active: 0, paused: 0, left: 0 };
+    for (const s of students) by[s.status] += 1;
+    return by;
+  }, [students]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const byStatus = status === 'all' ? students : students.filter((s) => s.status === status);
     const filtered = q
-      ? students.filter(
+      ? byStatus.filter(
           (s) => s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q),
         )
-      : students;
+      : byStatus;
 
     return [...filtered].sort((a, b) => {
       switch (sort) {
@@ -67,14 +89,14 @@ export function StudentsScreen({
           return a.name.localeCompare(b.name);
       }
     });
-  }, [students, query, sort]);
+  }, [students, query, sort, status]);
 
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="The cohort"
         title="Students"
-        description={`${students.length} in this cohort`}
+        description={`${counts.active} active · ${counts.paused} paused · ${counts.left} removed`}
         actions={
           <Button size="md" onClick={() => setAddOpen(true)}>
             <UserPlus className="size-4" aria-hidden />
@@ -92,6 +114,17 @@ export function StudentsScreen({
           aria-label="Search students"
           className="min-w-[12rem] flex-1"
         />
+        <Select
+          value={status}
+          onChange={(e) => setStatus(e.target.value as StatusFilter)}
+          aria-label="Filter by membership"
+          className="w-auto"
+        >
+          <option value="active">Active ({counts.active})</option>
+          <option value="paused">Paused ({counts.paused})</option>
+          <option value="left">Removed ({counts.left})</option>
+          <option value="all">Everyone ({students.length})</option>
+        </Select>
         <Select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
@@ -111,7 +144,7 @@ export function StudentsScreen({
           <EmptyState
             icon={<Search className="size-6" aria-hidden />}
             title="No students matched"
-            description="Try a different name or email."
+            description="Try a different name, email, or membership filter."
           />
         </Card>
       ) : (
@@ -154,6 +187,13 @@ export function StudentsScreen({
                       <Avatar name={s.name} src={s.avatarUrl} size="xs" />
                       <span>
                         {s.name}
+                        {s.status !== 'active' && (
+                          <StatusPill
+                            tone={s.status === 'left' ? 'neutral' : 'warning'}
+                            label={MEMBERSHIP_LABELS[s.status]}
+                            className="ml-2 align-middle"
+                          />
+                        )}
                         <span className="text-fg-subtle block text-xs font-normal">{s.email}</span>
                       </span>
                     </Link>
@@ -201,6 +241,7 @@ export function StudentsScreen({
                   <div className="min-w-0 flex-1">
                     <p className="text-fg truncate text-sm font-bold">{s.name}</p>
                     <p className="text-fg-subtle truncate text-xs">
+                      {s.status !== 'active' ? `${MEMBERSHIP_LABELS[s.status]} · ` : ''}
                       {s.subjectName ?? 'No subject'} · {s.consistencyPct}% · {s.roadmapPct}%
                       roadmap
                     </p>

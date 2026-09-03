@@ -25,6 +25,7 @@ import {
   deleteStudentAction,
   updateStudentAction,
 } from '@/server/actions/admin';
+import { setAchievementAction } from '@/server/actions/assessments';
 import type { StudentTopicPlan, getStudentDetail } from '@/server/queries/admin';
 
 import { ManageTopicsPanel, type SyllabusSubject } from './assign-topic';
@@ -272,6 +273,55 @@ export function StudentDetailScreen({
                 </dl>
               </li>
             ))}
+          </ul>
+        </Card>
+      )}
+
+      {/* ---------------------------------------------------------- badges */}
+      <BadgesPanel cohortId={cohortId} memberId={member.memberId} badges={detail.badges} />
+
+      {/* ----------------------------------------------------- assessments */}
+      {detail.assessments.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Assessments"
+            description="This student's results. Visible to them and to you — no other student can see them."
+          />
+          <ul className="divide-border divide-y">
+            {detail.assessments.map((attempt) => {
+              const outOf =
+                attempt.autoTotal + (attempt.reviewStatus === 'pending' ? 0 : attempt.manualTotal);
+              const earned =
+                attempt.autoScore + (attempt.reviewStatus === 'pending' ? 0 : attempt.manualScore);
+              const pct = outOf === 0 ? 0 : Math.round((earned / outOf) * 100);
+
+              return (
+                <li key={attempt.attemptId} className="flex items-center gap-3 px-5 py-3">
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/admin/assessments/${attempt.assessmentId}/attempts/${attempt.attemptId}`}
+                      className="text-fg truncate text-sm font-semibold hover:underline"
+                    >
+                      {attempt.title}
+                    </Link>
+                    <p className="text-fg-subtle text-xs">
+                      Attempt #{attempt.attemptNumber}
+                      {attempt.submittedAt
+                        ? ` · ${attempt.submittedAt.toLocaleDateString('en-GB')}`
+                        : ''}
+                      {attempt.restartCount > 0 ? ` · ${attempt.restartCount} restarts` : ''}
+                    </p>
+                  </div>
+                  {attempt.status === 'invalidated' ? (
+                    <Badge tone="neutral">Restarted</Badge>
+                  ) : attempt.reviewStatus === 'pending' ? (
+                    <Badge tone="warning">To mark</Badge>
+                  ) : (
+                    <Badge tone={pct >= attempt.passMarkPct ? 'success' : 'danger'}>{pct}%</Badge>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </Card>
       )}
@@ -585,5 +635,90 @@ function AdjustPointsForm({
         Record adjustment
       </Button>
     </form>
+  );
+}
+
+/**
+ * Badges, and the ability to correct them.
+ *
+ * The engine awards these automatically, so granting one by hand is a correction — the
+ * streak that broke because the app was down, the assessment sat on paper. Both directions
+ * are audited, and granting is idempotent, so the same badge can never end up on a student
+ * twice.
+ *
+ * These are the public half of the achievement rules: a granted badge is visible to the
+ * whole cohort. Nothing here exposes a score.
+ */
+function BadgesPanel({
+  cohortId,
+  memberId,
+  badges,
+}: {
+  cohortId: string;
+  memberId: string;
+  badges: Detail['badges'];
+}) {
+  const router = useRouter();
+  const toast = useToast();
+  const [pending, startTransition] = useTransition();
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const earned = badges.filter((b) => b.earnedOn !== null);
+
+  function toggle(code: string, name: string, granted: boolean) {
+    setBusy(code);
+    startTransition(async () => {
+      const result = await setAchievementAction(cohortId, memberId, code, granted);
+      setBusy(null);
+      if (!result.ok) {
+        toast.error('Could not change that badge', result.message);
+        return;
+      }
+      toast.success(granted ? `${name} granted` : `${name} revoked`);
+      router.refresh();
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="Badges"
+        description={`${earned.length} of ${badges.length} earned. Badges are public within the cohort; assessment scores never are.`}
+      />
+      <ul className="divide-border divide-y">
+        {badges.map((badge) => {
+          const has = badge.earnedOn !== null;
+          return (
+            <li key={badge.code} className="flex items-center gap-3 px-5 py-3">
+              <span
+                className={cn(
+                  'grid size-9 shrink-0 place-items-center rounded-full text-lg',
+                  has ? 'bg-citrus-500/15' : 'bg-bg-sunken opacity-50 grayscale',
+                )}
+                aria-hidden
+              >
+                {badge.emoji}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className={cn('truncate text-sm font-bold', has ? 'text-fg' : 'text-fg-muted')}>
+                  {badge.name}
+                </p>
+                <p className="text-fg-subtle truncate text-xs">
+                  {has ? `Earned ${badge.earnedOn}` : badge.description}
+                </p>
+              </div>
+              <Button
+                variant={has ? 'ghost' : 'outline'}
+                size="sm"
+                loading={pending && busy === badge.code}
+                onClick={() => toggle(badge.code, badge.name, !has)}
+              >
+                {has ? 'Revoke' : 'Grant'}
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }

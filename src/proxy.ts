@@ -39,6 +39,7 @@ export const config = {
     '/profile/:path*',
     '/study/:path*',
     '/quiz/:path*',
+    '/assessments/:path*',
     '/report/:path*',
     '/how-points-work/:path*',
     '/onboarding/:path*',

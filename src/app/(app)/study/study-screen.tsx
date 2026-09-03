@@ -32,6 +32,7 @@ import {
   speciesFor,
 } from '@/lib/domain/grove';
 import { STUDENT_HOME } from '@/lib/routes';
+import { useScreenWakeLock } from '@/lib/use-screen-wake-lock';
 import {
   type PlantedTree,
   growTreeAction,
@@ -45,6 +46,7 @@ import {
   pauseSessionAction,
   startSessionAction,
 } from '@/server/actions/study';
+import { SITE } from '@/lib/site';
 
 /**
  * Elapsed block seconds = what the server has stored, plus whatever has accrued since it
@@ -90,25 +92,32 @@ type Phase = 'idle' | 'focus' | 'break' | 'lost';
  * anything — so a paused laptop, a fiddled system clock or an open console all fail closed.
  */
 export function StudySessionScreen({
-  topicTitle,
-  subjectName,
-  plannedMinutes,
+  subjects,
+  initialSlot,
+  canSwitchSubject,
   initialSession,
   blockDone,
   targetDone,
   checkedIn,
-  quizId,
   serverNow,
   grove,
 }: {
-  topicTitle: string | null;
-  subjectName: string | null;
-  plannedMinutes: number;
+  /** Today's topic in each subject the student is studying, primary slot first. */
+  subjects: {
+    slot: 'primary' | 'secondary';
+    subjectName: string | null;
+    topicTitle: string | null;
+    plannedMinutes: number;
+    quizId: string | null;
+  }[];
+  /** The subject the screen opens on: the running session's, else the day's leading one. */
+  initialSlot: 'primary' | 'secondary' | null;
+  /** False once a block exists — the time is already filed against one topic. */
+  canSwitchSubject: boolean;
   initialSession: StudySessionState | null;
   blockDone: boolean;
   targetDone: boolean;
   checkedIn: boolean;
-  quizId: string | null;
   /**
    * The server's clock at render time. The countdowns are seeded from this rather than from
    * `Date.now()` so the first client render produces exactly the markup the server sent —
@@ -130,6 +139,20 @@ export function StudySessionScreen({
 }) {
   const router = useRouter();
   const toast = useToast();
+
+  /*
+   * Which subject this block is for.
+   *
+   * Local state rather than a URL parameter: both subjects' topics and knowledge checks
+   * already arrived with the page, so switching is instant and this route stays
+   * prerenderable — which matters on the screen students open most.
+   */
+  const [slot, setSlot] = useState<'primary' | 'secondary' | null>(initialSlot);
+  const active = subjects.find((s) => s.slot === slot) ?? subjects[0] ?? null;
+  const subjectName = active?.subjectName ?? null;
+  const topicTitle = active?.topicTitle ?? null;
+  const plannedMinutes = active?.plannedMinutes ?? 90;
+  const quizId = active?.quizId ?? null;
 
   const [session, setSession] = useState<StudySessionState | null>(initialSession);
   const [tree, setTree] = useState<PlantedTree | null>(
@@ -271,33 +294,58 @@ export function StudySessionScreen({
 
   /* ------------------------------------------------------------ leaving */
 
+  // Most rounds are sat out on a phone, so the round asks to keep the screen lit rather than
+  // relying on the student to keep tapping it awake. It is only a request — see the hook.
+  useScreenWakeLock(view === 'focus');
+
   /**
-   * Leave the tab for longer than the grace period and the tree dies.
+   * Going somewhere else kills the tree. Putting the phone down does not.
+   *
+   * Both of those arrive as the same `visibilitychange`, and the platform offers exactly one
+   * signal that separates them: who holds focus. Another tab, window or app coming to the
+   * front takes focus away first; a screen that simply switched off leaves focus where it
+   * was. So a hidden-but-still-focused page is read as a dark screen and the round carries
+   * on — the countdown is server time, not frames, so it keeps running regardless.
+   *
+   * The read is deliberately generous. On the phones where the two cases are hardest to tell
+   * apart the mistake this makes is letting a round survive that should have died, never
+   * killing one that was being sat through properly — a wrongly killed tree is the failure
+   * that makes students stop trusting the mechanic altogether.
    *
    * The timer is armed when the tab is hidden rather than checked when it comes back, so a
    * student who switches away and never returns still loses the tree — otherwise "walk away"
    * would be strictly better than "give up", which would make the whole mechanic optional.
    *
-   * `visibilitychange` only, never `blur`. On a desktop the reference PDF is usually a second
-   * window, and killing trees for reading the material would be absurd.
+   * `visibilitychange` only, never `blur` on its own. On a desktop the reference PDF is
+   * usually a second window, which never hides this page, and killing trees for reading the
+   * material would be absurd.
    */
   useEffect(() => {
     if (view !== 'focus') return;
     let timer: number | null = null;
 
+    const disarm = () => {
+      if (timer === null) return;
+      window.clearTimeout(timer);
+      timer = null;
+    };
+
     const onVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        timer = window.setTimeout(() => void killRound('left'), AWAY_GRACE_SECONDS * 1000);
-      } else if (timer !== null) {
-        window.clearTimeout(timer);
-        timer = null;
+      if (document.visibilityState !== 'hidden') {
+        // Back from a dark screen the countdown may already be past due; nudging the clock
+        // here settles the round now rather than on the ticker's next tick.
+        setNow(Date.now());
+        disarm();
+        return;
       }
+      if (document.hasFocus()) return;
+      timer = window.setTimeout(() => void killRound('left'), AWAY_GRACE_SECONDS * 1000);
     };
 
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
-      if (timer !== null) window.clearTimeout(timer);
+      disarm();
     };
   }, [view, killRound]);
 
@@ -316,7 +364,7 @@ export function StudySessionScreen({
     startTransition(async () => {
       // The block session is started first so the round can be filed against it, and so the
       // points side of the product behaves exactly as it did before the grove existed.
-      const block = await startSessionAction();
+      const block = await startSessionAction(slot ?? undefined);
       if (!block.ok) {
         toast.error('Could not start', block.message);
         return;
@@ -336,7 +384,7 @@ export function StudySessionScreen({
       setNow(Date.now());
       setPhase('focus');
     });
-  }, [presetKey, toast]);
+  }, [presetKey, slot, toast]);
 
   const skipBreak = useCallback(() => {
     setBreakEndsAt(null);
@@ -388,7 +436,7 @@ export function StudySessionScreen({
 
   const completeTarget = useCallback(() => {
     startTransition(async () => {
-      const result = await completeTargetAction();
+      const result = await completeTargetAction(slot ?? undefined);
       if (!result.ok) {
         toast.error('Could not save that', result.message);
         return;
@@ -404,7 +452,7 @@ export function StudySessionScreen({
       });
       router.refresh();
     });
-  }, [toast, router]);
+  }, [slot, toast, router]);
 
   /* -------------------------------------------------------------- render */
 
@@ -485,6 +533,37 @@ export function StudySessionScreen({
               ? `${SPECIES_NAMES[species]} · ${preset.focusMinutes}-minute round`
               : `Planned: ${plannedMinutes} minutes today`}
           </p>
+
+          {/*
+            Which subject this block is for.
+            Only shown before anything starts: once the timer is running the block is filed
+            against a topic, and the choice travels in the URL so the topic, the minutes and
+            the knowledge check below all come from one server render.
+          */}
+          {canSwitchSubject && subjects.length > 1 && (
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              {subjects.map((choice) => (
+                <button
+                  key={choice.slot}
+                  type="button"
+                  onClick={() => setSlot(choice.slot)}
+                  aria-pressed={choice.slot === active?.slot}
+                  className={cn(
+                    'rounded-pill px-3 py-1.5 text-xs font-bold ring-1 transition-colors ring-inset',
+                    choice.slot === active?.slot
+                      ? dark
+                        ? 'bg-white/20 text-white ring-white/25'
+                        : 'bg-iris-100 text-iris-800 ring-iris-200 dark:bg-iris-900/40 dark:text-iris-200 dark:ring-iris-800'
+                      : dark
+                        ? 'text-white/65 ring-white/15 hover:bg-white/10'
+                        : 'text-fg-muted ring-border hover:bg-bg-sunken',
+                  )}
+                >
+                  {choice.subjectName ?? 'Subject'}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* ----------------------------------------------- the ring and tree */}
           <div className="relative mt-8 grid place-items-center">
@@ -645,8 +724,8 @@ export function StudySessionScreen({
                   Give up — kill the tree
                 </Button>
                 <p className="text-xs leading-relaxed text-white/50">
-                  Leave this tab for more than {AWAY_GRACE_SECONDS} seconds and the tree dies.
-                  Nothing else on this screen can stop the round.
+                  Switch to another tab or app for more than {AWAY_GRACE_SECONDS} seconds and the
+                  tree dies. Locking your screen is fine — the tree keeps growing in the dark.
                 </p>
               </>
             ) : view === 'break' ? (
@@ -736,7 +815,7 @@ export function StudySessionScreen({
 
           {view !== 'focus' && (
             <p className="text-fg-subtle mt-6 max-w-xs text-xs leading-relaxed">
-              Daily Rounds doesn&apos;t try to prove you studied. It records what you committed to
+              {SITE.name} doesn&apos;t try to prove you studied. It records what you committed to
               and what you actually did — the honesty is the point.
             </p>
           )}

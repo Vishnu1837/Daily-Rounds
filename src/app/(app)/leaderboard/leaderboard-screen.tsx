@@ -380,6 +380,30 @@ function StandingRow({
             {row.showUpRatePct}% show-up
           </span>
         </div>
+
+        {/*
+          Badges, in public.
+          The cohort can see what someone has earned — a streak kept, an assessment
+          cleared — and nothing about how they did it. No score, no answers, no timings:
+          those belong to that student and their cohort lead alone.
+        */}
+        {row.badges.length > 0 && (
+          <ul className="mt-1.5 flex flex-wrap items-center gap-1">
+            {row.badges.slice(0, 6).map((badge) => (
+              <li
+                key={badge.code}
+                title={badge.name}
+                className="bg-bg-sunken ring-border grid size-5 place-items-center rounded-full text-[11px] ring-1 ring-inset"
+              >
+                <span aria-hidden>{badge.emoji}</span>
+                <span className="sr-only">{badge.name}</span>
+              </li>
+            ))}
+            {row.badges.length > 6 && (
+              <li className="text-2xs text-fg-subtle font-bold">+{row.badges.length - 6}</li>
+            )}
+          </ul>
+        )}
       </div>
 
       <span className="text-flame-700 dark:text-flame-300 flex shrink-0 items-center gap-1 text-sm font-bold tabular-nums">

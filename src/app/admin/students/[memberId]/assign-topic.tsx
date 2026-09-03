@@ -58,15 +58,9 @@ export function ManageTopicsPanel({
 }) {
   const [open, setOpen] = useState(false);
 
-  const today = plan.subjects
-    .flatMap((s) =>
-      s.modules.flatMap((m) => m.topics.map((t) => ({ ...t, subject: s.subjectName }))),
-    )
-    .find((t) => t.isToday);
-
-  /* Today's topic, whether it came from a roadmap or straight from the syllabus. */
-  const todayTitle = today?.title ?? plan.todayOffRoadmap?.title ?? null;
-  const todaySubject = today?.subject ?? plan.todayOffRoadmap?.subjectName ?? null;
+  /* Today's topic in each subject the student is studying, whether it came from a roadmap
+     or straight from the syllabus. */
+  const today = plan.today.filter((t) => t.title);
 
   return (
     <Card>
@@ -83,16 +77,20 @@ export function ManageTopicsPanel({
 
       <div className="space-y-3 p-5">
         <div className="rounded-panel bg-bg-sunken p-4">
-          <p className="eyebrow">Today&apos;s topic</p>
-          {todayTitle ? (
-            <>
-              <p className="text-fg mt-1 text-sm font-bold">{todayTitle}</p>
-              <p className="text-fg-subtle mt-0.5 text-xs">
-                {todaySubject}
-                {plan.todaySource === 'admin' ? ' · assigned by an admin' : ''}
-                {plan.todayOffRoadmap ? ' · not on their roadmap' : ''}
-              </p>
-            </>
+          <p className="eyebrow">{today.length > 1 ? "Today's topics" : "Today's topic"}</p>
+          {today.length > 0 ? (
+            <div className="space-y-2.5">
+              {today.map((t) => (
+                <div key={t.slot}>
+                  <p className="text-fg mt-1 text-sm font-bold">{t.title}</p>
+                  <p className="text-fg-subtle mt-0.5 text-xs">
+                    {t.subjectName}
+                    {t.source === 'admin' ? ' · assigned by an admin' : ''}
+                    {t.offRoadmap ? ' · not on their roadmap' : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
           ) : (
             <p className="text-fg-muted mt-1 text-sm">
               Nothing assigned for {plan.date}. Assign a topic below, or use the bulk action on the
@@ -686,7 +684,9 @@ function TopicRow({
       <span
         className={cn(
           'grid size-5 shrink-0 place-items-center rounded-full border-2',
-          selected ? 'border-pulse-500 bg-pulse-500 text-white' : 'border-border-strong text-transparent',
+          selected
+            ? 'border-pulse-500 bg-pulse-500 text-white'
+            : 'border-border-strong text-transparent',
         )}
         aria-hidden
       >
