@@ -14,7 +14,9 @@ import {
   subjects,
   users,
 } from '@/db/schema';
+import { paperSize } from '@/lib/assessments/draw';
 import { isAutoGradable, questionDeadline, scorePercent } from '@/lib/assessments/grade';
+import { attemptQuestionIds, bankCoverage, inPaperOrder } from '@/server/assessment-paper';
 import type { MemberContext } from '@/server/context';
 
 /**
@@ -38,7 +40,10 @@ export type AdminAssessmentRow = {
   status: 'draft' | 'published' | 'archived';
   subjectName: string | null;
   curriculumRef: string | null;
+  /** Everything in the bank. */
   questionCount: number;
+  /** How many of them one sitting draws; null when every sitting serves the whole bank. */
+  questionsPerAttempt: number | null;
   attemptCount: number;
   /** Attempts with written answers still waiting for the admin to mark them. */
   pendingReview: number;
@@ -56,6 +61,7 @@ export async function getAssessments(ctx: CohortCtx): Promise<AdminAssessmentRow
       subjectName: subjects.name,
       curriculumRef: assessments.curriculumRef,
       totalTimeSeconds: assessments.totalTimeSeconds,
+      questionsPerAttempt: assessments.questionsPerAttempt,
       passMarkPct: assessments.passMarkPct,
       updatedAt: assessments.updatedAt,
       questionCount: sql<number>`(
@@ -104,6 +110,8 @@ export type AdminAssessmentDetail = {
   totalTimeSeconds: number | null;
   defaultQuestionSeconds: number;
   focusGraceSeconds: number;
+  /** Null means every sitting serves the whole bank, in order. */
+  questionsPerAttempt: number | null;
   passMarkPct: number;
   allowAnswerReview: boolean;
   questions: AdminQuestion[];
@@ -135,6 +143,7 @@ export async function getAssessmentDetail(
     totalTimeSeconds: row.totalTimeSeconds,
     defaultQuestionSeconds: row.defaultQuestionSeconds,
     focusGraceSeconds: row.focusGraceSeconds,
+    questionsPerAttempt: row.questionsPerAttempt,
     passMarkPct: row.passMarkPct,
     allowAnswerReview: row.allowAnswerReview,
     questions: questions.map((q) => ({
@@ -327,7 +336,17 @@ export async function getAttemptDetail(args: {
   const reviewComplete = attempt.reviewStatus !== 'pending';
   const score = scorePercent(attempt, reviewComplete);
 
-  const rows = await db
+  /*
+   * The paper this attempt was actually given. Reading the assessment's questions instead
+   * would show a twenty-question sitting as five hundred rows, of which four hundred and
+   * eighty were never asked and every one of them counted as unanswered.
+   */
+  const paperIds = await attemptQuestionIds(db, {
+    attemptId,
+    assessmentId: attempt.assessmentId,
+  });
+
+  const unordered = await db
     .select({
       answerId: assessmentAnswers.id,
       questionId: assessmentQuestions.id,
@@ -357,8 +376,13 @@ export async function getAttemptDetail(args: {
         eq(assessmentAnswers.attemptId, attemptId),
       ),
     )
-    .where(eq(assessmentQuestions.assessmentId, attempt.assessmentId))
-    .orderBy(asc(assessmentQuestions.position));
+    .where(paperIds.length === 0 ? sql`false` : inArray(assessmentQuestions.id, paperIds));
+
+  // Back into the order the student saw, which is the paper's order and not the bank's.
+  const rows = inPaperOrder(
+    unordered.map((r) => ({ ...r, id: r.questionId })),
+    paperIds,
+  );
 
   // Whether the student is allowed the breakdown at all. The admin always is.
   const showAnswers = isAdmin || attempt.allowAnswerReview;
@@ -367,7 +391,7 @@ export async function getAttemptDetail(args: {
   let incorrect = 0;
   let unanswered = 0;
 
-  const answers: AttemptAnswerView[] = rows.map((r) => {
+  const answers: AttemptAnswerView[] = rows.map((r, index) => {
     const answered =
       r.selectedIndex !== null || (r.textAnswer !== null && r.textAnswer.trim().length > 0);
     if (!answered) unanswered += 1;
@@ -377,7 +401,8 @@ export async function getAttemptDetail(args: {
     return {
       answerId: r.answerId ?? '',
       questionId: r.questionId,
-      position: r.position,
+      // Where it sat on this paper — "question 3 of 20" — not where it sits in the bank.
+      position: index,
       type: r.type,
       prompt: r.prompt,
       imageUrl: r.imageUrl,
@@ -443,7 +468,10 @@ export type StudentAssessmentRow = {
   id: string;
   title: string;
   subjectName: string | null;
+  /** Questions on one sitting — the number the student will actually answer. */
   questionCount: number;
+  /** The bank behind it, when a sitting draws from one. Null when the paper is the bank. */
+  bankSize: number | null;
   totalTimeSeconds: number | null;
   passMarkPct: number;
   /** The student's own latest finished attempt, if any. Never another student's. */
@@ -467,7 +495,8 @@ export async function getStudentAssessments(ctx: MemberContext): Promise<Student
       subjectName: subjects.name,
       totalTimeSeconds: assessments.totalTimeSeconds,
       passMarkPct: assessments.passMarkPct,
-      questionCount: sql<number>`(
+      questionsPerAttempt: assessments.questionsPerAttempt,
+      bankCount: sql<number>`(
         SELECT count(*)::int FROM ${assessmentQuestions}
         WHERE ${assessmentQuestions.assessmentId} = ${assessments.id}
       )`,
@@ -506,13 +535,16 @@ export async function getStudentAssessments(ctx: MemberContext): Promise<Student
     .orderBy(desc(assessmentAttempts.attemptNumber));
 
   return rows.map((row) => {
+    const { questionsPerAttempt, bankCount, ...rest } = row;
     const mine = attempts.filter((a) => a.assessmentId === row.id);
     const live = mine.find((a) => a.status === 'in_progress') ?? null;
     const finished = mine.find((a) => a.status === 'submitted' || a.status === 'expired') ?? null;
     const score = finished ? scorePercent(finished, finished.reviewStatus !== 'pending') : null;
 
     return {
-      ...row,
+      ...rest,
+      questionCount: paperSize({ bankSize: bankCount, questionsPerAttempt }),
+      bankSize: questionsPerAttempt && questionsPerAttempt < bankCount ? bankCount : null,
       inProgressAttemptId: live?.id ?? null,
       lastAttempt:
         finished && score
@@ -596,7 +628,14 @@ export async function getAttemptRuntime(args: {
 
   if (!attempt || attempt.status !== 'in_progress') return null;
 
-  const rows = await db
+  // This attempt's own paper. Also the reason a reload cannot reshuffle: the draw happened
+  // once, when the attempt opened, and this reads it back.
+  const paperIds = await attemptQuestionIds(db, {
+    attemptId: attempt.attemptId,
+    assessmentId: attempt.assessmentId,
+  });
+
+  const unordered = await db
     .select({
       id: assessmentQuestions.id,
       position: assessmentQuestions.position,
@@ -619,8 +658,9 @@ export async function getAttemptRuntime(args: {
         eq(assessmentAnswers.attemptId, args.attemptId),
       ),
     )
-    .where(eq(assessmentQuestions.assessmentId, attempt.assessmentId))
-    .orderBy(asc(assessmentQuestions.position));
+    .where(paperIds.length === 0 ? sql`false` : inArray(assessmentQuestions.id, paperIds));
+
+  const rows = inPaperOrder(unordered, paperIds);
 
   return {
     attemptId: attempt.attemptId,
@@ -633,9 +673,11 @@ export async function getAttemptRuntime(args: {
     defaultQuestionSeconds: attempt.defaultQuestionSeconds,
     expiresAt: attempt.expiresAt?.toISOString() ?? null,
     serverNow: new Date().toISOString(),
-    questions: rows.map((r) => ({
+    questions: rows.map((r, index) => ({
       id: r.id,
-      position: r.position,
+      // Numbered by where it sits on this paper. The bank position is meaningless to a
+      // student who was handed twenty of five hundred.
+      position: index,
       type: r.type,
       prompt: r.prompt,
       imageUrl: r.imageUrl,
@@ -656,8 +698,22 @@ export async function getAttemptRuntime(args: {
   };
 }
 
-/** The rules screen: what a student is told before the clock starts. */
-export async function getAssessmentBrief(args: { assessmentId: string; cohortId: string }) {
+/**
+ * The rules screen: what a student is told before the clock starts.
+ *
+ * Every number here describes the sitting they are about to have, not the assessment behind
+ * it. A bank of five hundred with a window of twenty is a twenty-question paper, and a
+ * screen that said "500 questions · 8 hours" because that is what the table holds would be
+ * a lie about the next twenty minutes of their life.
+ *
+ * `memberId` is what makes the coverage line possible — how much of the bank this student
+ * has already met — and it is their own count and nobody else's.
+ */
+export async function getAssessmentBrief(args: {
+  assessmentId: string;
+  cohortId: string;
+  memberId?: string;
+}) {
   const [row] = await db
     .select({
       id: assessments.id,
@@ -669,13 +725,14 @@ export async function getAssessmentBrief(args: { assessmentId: string; cohortId:
       defaultQuestionSeconds: assessments.defaultQuestionSeconds,
       focusGraceSeconds: assessments.focusGraceSeconds,
       passMarkPct: assessments.passMarkPct,
-      questionCount: sql<number>`(
+      questionsPerAttempt: assessments.questionsPerAttempt,
+      bankSize: sql<number>`(
         SELECT count(*)::int FROM ${assessmentQuestions}
         WHERE ${assessmentQuestions.assessmentId} = ${assessments.id}
       )`,
-      /** Sum of every per-question timer, so the screen can be honest about the length. */
-      questionSeconds: sql<number>`(
-        SELECT coalesce(sum(coalesce(${assessmentQuestions.timeLimitSeconds}, ${assessments.defaultQuestionSeconds})), 0)::int
+      /** Mean per-question allowance across the bank, for the estimate below. */
+      meanQuestionSeconds: sql<number>`(
+        SELECT coalesce(avg(coalesce(${assessmentQuestions.timeLimitSeconds}, ${assessments.defaultQuestionSeconds})), 0)::float
         FROM ${assessmentQuestions}
         WHERE ${assessmentQuestions.assessmentId} = ${assessments.id}
       )`,
@@ -685,7 +742,33 @@ export async function getAssessmentBrief(args: { assessmentId: string; cohortId:
     .where(and(eq(assessments.id, args.assessmentId), eq(assessments.cohortId, args.cohortId)))
     .limit(1);
 
-  return row ?? null;
+  if (!row) return null;
+
+  const { bankSize, meanQuestionSeconds, questionsPerAttempt, ...rest } = row;
+  const questionCount = paperSize({ bankSize, questionsPerAttempt });
+
+  /*
+   * An estimate rather than a sum, and deliberately so: which questions this sitting will
+   * hold is not decided until the student presses the button, so the honest thing to show
+   * beforehand is the bank's average allowance across however many they will be asked.
+   * When the window is the whole bank this is the exact total again.
+   */
+  const questionSeconds = Math.round(meanQuestionSeconds * questionCount);
+
+  const coverage =
+    args.memberId && questionsPerAttempt
+      ? await bankCoverage({ assessmentId: args.assessmentId, memberId: args.memberId })
+      : null;
+
+  return {
+    ...rest,
+    questionCount,
+    questionSeconds,
+    /** The bank behind the paper, or null when the paper *is* the bank. */
+    bankSize: questionsPerAttempt && questionsPerAttempt < bankSize ? bankSize : null,
+    /** How many of the bank's questions this student has already been served. */
+    seenCount: coverage?.seenCount ?? null,
+  };
 }
 
 /** A student's own attempt history for one assessment. Never anyone else's. */

@@ -853,6 +853,16 @@ export const assessments = pgTable(
      * everyone who gets a phone call. Five seconds is the brief's default.
      */
     focusGraceSeconds: integer('focus_grace_seconds').notNull().default(5),
+    /**
+     * How many questions one sitting draws from this assessment's bank.
+     *
+     * Null means the old, obvious thing: the paper is its question list and every attempt
+     * serves all of it. A number turns the list into a pool — a bank of five hundred
+     * questions, twenty of them on any one sitting, drawn unseen-first so a student meets
+     * new material until there is none left. The paper drawn for an attempt is recorded on
+     * `assessmentAttemptQuestions`; nothing re-derives it later.
+     */
+    questionsPerAttempt: integer('questions_per_attempt'),
     /** Percentage at or above which an attempt counts as passed. */
     passMarkPct: smallint('pass_mark_pct').notNull().default(60),
     /** Whether a student may see the question-by-question breakdown after submitting. */
@@ -954,6 +964,44 @@ export const assessmentAttempts = pgTable(
     uniqueIndex('assessment_attempt_unique').on(t.assessmentId, t.memberId, t.attemptNumber),
     index('assessment_attempts_member_idx').on(t.memberId),
     index('assessment_attempts_assessment_idx').on(t.assessmentId, t.status),
+  ],
+);
+
+/**
+ * The questions one attempt actually drew, in the order that attempt saw them.
+ *
+ * The paper is fixed here at the moment the attempt opens and is never re-drawn: a reload
+ * that reshuffled the questions would hand a student a fresh set of clocks, and a grader
+ * that re-drew would mark answers against questions nobody was asked. It doubles as the
+ * per-student history the next draw reads — every question in here is one this student has
+ * met — which is why rows survive the sittings a restart invalidated.
+ *
+ * Attempts made before question banks existed have no rows, and every read below treats an
+ * empty paper as "the whole assessment, in position order" so those results still open.
+ */
+export const assessmentAttemptQuestions = pgTable(
+  'assessment_attempt_questions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    attemptId: uuid('attempt_id')
+      .notNull()
+      .references(() => assessmentAttempts.id, { onDelete: 'cascade' }),
+    questionId: uuid('question_id')
+      .notNull()
+      .references(() => assessmentQuestions.id, { onDelete: 'cascade' }),
+    /** Order on this student's paper — unrelated to the question's place in the bank. */
+    position: integer('position').notNull().default(0),
+    /**
+     * False when the draw had to reach back into questions this student had already met,
+     * because the unseen pool could not fill the window. Kept for the admin; never sent to
+     * the student, who should not be able to tell a repeat from a new question.
+     */
+    fresh: boolean('fresh').notNull().default(true),
+  },
+  (t) => [
+    uniqueIndex('assessment_attempt_question_unique').on(t.attemptId, t.questionId),
+    index('assessment_attempt_questions_paper_idx').on(t.attemptId, t.position),
+    index('assessment_attempt_questions_question_idx').on(t.questionId),
   ],
 );
 
@@ -1229,7 +1277,22 @@ export const assessmentAttemptsRelations = relations(assessmentAttempts, ({ one,
   }),
   answers: many(assessmentAnswers),
   integrityEvents: many(assessmentIntegrityEvents),
+  paper: many(assessmentAttemptQuestions),
 }));
+
+export const assessmentAttemptQuestionsRelations = relations(
+  assessmentAttemptQuestions,
+  ({ one }) => ({
+    attempt: one(assessmentAttempts, {
+      fields: [assessmentAttemptQuestions.attemptId],
+      references: [assessmentAttempts.id],
+    }),
+    question: one(assessmentQuestions, {
+      fields: [assessmentAttemptQuestions.questionId],
+      references: [assessmentQuestions.id],
+    }),
+  }),
+);
 
 export const assessmentAnswersRelations = relations(assessmentAnswers, ({ one }) => ({
   attempt: one(assessmentAttempts, {
@@ -1283,6 +1346,7 @@ export type Assessment = typeof assessments.$inferSelect;
 export type AssessmentQuestion = typeof assessmentQuestions.$inferSelect;
 export type AssessmentAttempt = typeof assessmentAttempts.$inferSelect;
 export type AssessmentAnswer = typeof assessmentAnswers.$inferSelect;
+export type AssessmentAttemptQuestion = typeof assessmentAttemptQuestions.$inferSelect;
 export type AssessmentIntegrityEvent = typeof assessmentIntegrityEvents.$inferSelect;
 export type AssessmentStatus = (typeof assessmentStatusEnum.enumValues)[number];
 export type QuestionType = (typeof questionTypeEnum.enumValues)[number];

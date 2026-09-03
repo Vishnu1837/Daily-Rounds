@@ -20,7 +20,11 @@ export default async function AssessmentBriefPage({
   if (!ctx) redirect(ADMIN_HOME);
 
   const { assessmentId } = await params;
-  const brief = await getAssessmentBrief({ assessmentId, cohortId: ctx.cohort.id });
+  const brief = await getAssessmentBrief({
+    assessmentId,
+    cohortId: ctx.cohort.id,
+    memberId: ctx.memberId,
+  });
   if (!brief || brief.status !== 'published') notFound();
 
   const history = await getStudentAttemptHistory({ assessmentId, memberId: ctx.memberId });

@@ -23,6 +23,12 @@ import {
   answerSubmissionSchema,
   fieldErrors,
 } from '@/lib/validation';
+import {
+  attemptQuestionIds,
+  copyAttemptPaper,
+  drawAttemptPaper,
+  inPaperOrder,
+} from '@/server/assessment-paper';
 import { getCohortContext, getMemberContext } from '@/server/context';
 
 import { type Result, fail, guarded, ok, recordAudit } from './shared';
@@ -73,6 +79,8 @@ export async function saveAssessmentAction(
       totalTimeSeconds: input.totalTimeMinutes > 0 ? input.totalTimeMinutes * 60 : null,
       defaultQuestionSeconds: input.defaultQuestionSeconds,
       focusGraceSeconds: input.focusGraceSeconds,
+      // Zero means "serve the whole bank", the same convention the total-time field uses.
+      questionsPerAttempt: input.questionsPerAttempt > 0 ? input.questionsPerAttempt : null,
       passMarkPct: input.passMarkPct,
       allowAnswerReview: input.allowAnswerReview,
       updatedAt: new Date(),
@@ -181,6 +189,82 @@ export async function saveQuestionsAction(
     revalidateAssessments(assessmentId);
     return ok({ count: rows.length });
   }, 'We could not save those questions. Please try again.');
+}
+
+/**
+ * Adds questions to the end of an assessment's bank, leaving the existing ones alone.
+ *
+ * The other half of what a five-hundred-question bank needs. `saveQuestionsAction` replaces
+ * the paper wholesale, which is right for a fifteen-question topic check an admin is still
+ * drafting and wrong for a bank you build up over a term in pastes of a hundred: a replace
+ * would need the whole bank round-tripped through the browser every time, and one stale tab
+ * would erase four hundred questions.
+ *
+ * Allowed while published, which the wholesale save is not, and safely so. Every attempt
+ * already running holds its own drawn paper on `assessment_attempt_questions`, so questions
+ * appearing in the bank cannot change a paper underneath the student sitting it — they are
+ * simply there to be drawn by the next sitting.
+ */
+export async function appendQuestionsAction(
+  cohortId: string,
+  assessmentId: string,
+  questions: unknown,
+): Promise<Result<{ added: number; bankSize: number }>> {
+  return guarded(async () => {
+    const { user } = await adminContext(cohortId);
+    await assertAssessmentInCohort(assessmentId, cohortId);
+
+    const parsed = assessmentQuestionsSchema.safeParse(questions);
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      const where = typeof first?.path[0] === 'number' ? ` (question ${first.path[0] + 1})` : '';
+      return fail(`${first?.message ?? 'Those questions are not valid.'}${where}`);
+    }
+
+    const [existing] = await db
+      .select({ next: sql<number>`coalesce(max(${assessmentQuestions.position}), -1)::int + 1` })
+      .from(assessmentQuestions)
+      .where(eq(assessmentQuestions.assessmentId, assessmentId));
+    const start = existing?.next ?? 0;
+
+    const rows = parsed.data.map((q, index) => {
+      const choice = isAutoGradable(q.type as QuestionType);
+      return {
+        assessmentId,
+        position: start + index,
+        type: q.type as QuestionType,
+        prompt: q.prompt,
+        imageUrl: q.imageUrl ?? null,
+        options: choice ? q.options.filter((o) => o.trim().length > 0) : [],
+        correctIndex: choice ? (q.correctIndex ?? null) : null,
+        referenceAnswer: choice ? null : (q.referenceAnswer ?? null),
+        explanation: q.explanation ?? null,
+        timeLimitSeconds: q.timeLimitSeconds ?? null,
+        points: q.points,
+      };
+    });
+
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < rows.length; i += 100) {
+        await tx.insert(assessmentQuestions).values(rows.slice(i, i + 100));
+      }
+      await tx
+        .update(assessments)
+        .set({ updatedAt: new Date() })
+        .where(eq(assessments.id, assessmentId));
+    });
+
+    await recordAudit({
+      actorUserId: user.id,
+      action: 'assessment.questions.append',
+      entity: 'assessment',
+      entityId: assessmentId,
+      payload: { count: rows.length },
+    });
+
+    revalidateAssessments(assessmentId);
+    return ok({ added: rows.length, bankSize: start + rows.length });
+  }, 'We could not add those questions. Please try again.');
 }
 
 /**
@@ -413,6 +497,7 @@ export async function startAttemptAction(assessmentId: string): Promise<Result<S
         id: assessments.id,
         status: assessments.status,
         totalTimeSeconds: assessments.totalTimeSeconds,
+        questionsPerAttempt: assessments.questionsPerAttempt,
       })
       .from(assessments)
       .where(and(eq(assessments.id, assessmentId), eq(assessments.cohortId, ctx.cohort.id)))
@@ -461,30 +546,48 @@ export async function startAttemptAction(assessmentId: string): Promise<Result<S
       .limit(1);
 
     const startedAt = new Date();
-    const [created] = await db
-      .insert(assessmentAttempts)
-      .values({
+
+    /*
+     * The attempt and the paper it serves are written together. A sitting that existed
+     * without its questions could not be repaired — the draw is random, so nothing could
+     * work out afterwards which twenty of the five hundred this student was supposed to
+     * have been asked.
+     */
+    const created = await db.transaction(async (tx) => {
+      const [attempt] = await tx
+        .insert(assessmentAttempts)
+        .values({
+          assessmentId,
+          memberId: ctx.memberId,
+          attemptNumber: (previous?.attemptNumber ?? 0) + 1,
+          restartCount: previous?.restartCount ?? 0,
+          status: 'in_progress',
+          startedAt,
+          expiresAt: assessment.totalTimeSeconds
+            ? new Date(startedAt.getTime() + assessment.totalTimeSeconds * 1000)
+            : null,
+        })
+        .returning({
+          id: assessmentAttempts.id,
+          attemptNumber: assessmentAttempts.attemptNumber,
+          restartCount: assessmentAttempts.restartCount,
+        });
+
+      await drawAttemptPaper(tx, {
+        attemptId: attempt!.id,
         assessmentId,
         memberId: ctx.memberId,
-        attemptNumber: (previous?.attemptNumber ?? 0) + 1,
-        restartCount: previous?.restartCount ?? 0,
-        status: 'in_progress',
-        startedAt,
-        expiresAt: assessment.totalTimeSeconds
-          ? new Date(startedAt.getTime() + assessment.totalTimeSeconds * 1000)
-          : null,
-      })
-      .returning({
-        id: assessmentAttempts.id,
-        attemptNumber: assessmentAttempts.attemptNumber,
-        restartCount: assessmentAttempts.restartCount,
+        questionsPerAttempt: assessment.questionsPerAttempt,
       });
+
+      return attempt!;
+    });
 
     revalidatePath('/assessments');
     return ok({
-      attemptId: created!.id,
-      attemptNumber: created!.attemptNumber,
-      restartCount: created!.restartCount,
+      attemptId: created.id,
+      attemptNumber: created.attemptNumber,
+      restartCount: created.restartCount,
     });
   }, 'We could not start that assessment. Please try again.');
 }
@@ -506,20 +609,26 @@ export async function openQuestionAction(
     if (!attempt) return fail('That attempt could not be found.');
     if (attempt.status !== 'in_progress') return fail('That attempt is already finished.');
 
+    /*
+     * Membership of the *paper*, not of the assessment. With a bank behind it, most of the
+     * assessment's questions were never drawn for this attempt, and a request naming one of
+     * them is either a bug or someone fishing the bank a question at a time.
+     */
+    const paper = await attemptQuestionIds(db, {
+      attemptId,
+      assessmentId: attempt.assessmentId,
+    });
+    if (!paper.includes(questionId)) return fail('That question is not part of this attempt.');
+
     const [question] = await db
       .select({
         id: assessmentQuestions.id,
         timeLimitSeconds: assessmentQuestions.timeLimitSeconds,
       })
       .from(assessmentQuestions)
-      .where(
-        and(
-          eq(assessmentQuestions.id, questionId),
-          eq(assessmentQuestions.assessmentId, attempt.assessmentId),
-        ),
-      )
+      .where(eq(assessmentQuestions.id, questionId))
       .limit(1);
-    if (!question) return fail('That question is not part of this assessment.');
+    if (!question) return fail('That question is not part of this attempt.');
 
     const now = new Date();
     const [row] = await db
@@ -560,6 +669,12 @@ export async function submitAnswerAction(input: unknown): Promise<Result<{ expir
     if (!attempt) return fail('That attempt could not be found.');
     if (attempt.status !== 'in_progress') return fail('That attempt is already finished.');
 
+    const paper = await attemptQuestionIds(db, {
+      attemptId,
+      assessmentId: attempt.assessmentId,
+    });
+    if (!paper.includes(questionId)) return fail('That question is not part of this attempt.');
+
     const [question] = await db
       .select({
         id: assessmentQuestions.id,
@@ -567,14 +682,9 @@ export async function submitAnswerAction(input: unknown): Promise<Result<{ expir
         timeLimitSeconds: assessmentQuestions.timeLimitSeconds,
       })
       .from(assessmentQuestions)
-      .where(
-        and(
-          eq(assessmentQuestions.id, questionId),
-          eq(assessmentQuestions.assessmentId, attempt.assessmentId),
-        ),
-      )
+      .where(eq(assessmentQuestions.id, questionId))
       .limit(1);
-    if (!question) return fail('That question is not part of this assessment.');
+    if (!question) return fail('That question is not part of this attempt.');
 
     const [existing] = await db
       .select({ startedAt: assessmentAnswers.startedAt })
@@ -688,6 +798,10 @@ export async function recordFocusEventAction(
         })
         .returning({ id: assessmentAttempts.id });
 
+      // The replacement sits the same questions. See `copyAttemptPaper`: a restart that
+      // re-drew would turn a focus breach into a way of rerolling a paper you disliked.
+      await copyAttemptPaper(tx, { fromAttemptId: attemptId, toAttemptId: next!.id });
+
       await tx.insert(assessmentIntegrityEvents).values({
         attemptId: next!.id,
         kind: 'restarted',
@@ -720,16 +834,29 @@ export async function submitAttemptAction(
     if (!attempt) return fail('That attempt could not be found.');
     if (attempt.status !== 'in_progress') return ok({ attemptId });
 
-    const questions = await db
-      .select({
-        id: assessmentQuestions.id,
-        type: assessmentQuestions.type,
-        correctIndex: assessmentQuestions.correctIndex,
-        points: assessmentQuestions.points,
-      })
-      .from(assessmentQuestions)
-      .where(eq(assessmentQuestions.assessmentId, attempt.assessmentId))
-      .orderBy(asc(assessmentQuestions.position));
+    /*
+     * The drawn paper, not the bank. Marking a twenty-question sitting against all five
+     * hundred questions in the assessment would score every student at four per cent.
+     */
+    const paperIds = await attemptQuestionIds(db, {
+      attemptId,
+      assessmentId: attempt.assessmentId,
+    });
+
+    const questionRows =
+      paperIds.length === 0
+        ? []
+        : await db
+            .select({
+              id: assessmentQuestions.id,
+              type: assessmentQuestions.type,
+              correctIndex: assessmentQuestions.correctIndex,
+              points: assessmentQuestions.points,
+            })
+            .from(assessmentQuestions)
+            .where(inArray(assessmentQuestions.id, paperIds));
+
+    const questions = inPaperOrder(questionRows, paperIds);
 
     const answers = await db
       .select({

@@ -85,7 +85,14 @@ TYPE: SHORT_ANSWER
 ANSWER: Laterally brachioradialis, medially pronator teres, superiorly a line between the epicondyles.
 TIME: 3 minutes`;
 
-const MAX_QUESTIONS = 200;
+/**
+ * The most one paste may carry.
+ *
+ * Raised from two hundred when assessments became banks: an admin building a five-hundred
+ * question bank pastes a model's output in chunks, and a limit that forced those chunks to
+ * be smaller than what the model actually returns would just move the tedium around.
+ */
+const MAX_QUESTIONS = 1000;
 
 /** Strips markdown emphasis and list bullets a model tends to add around its own format. */
 function clean(line: string): string {

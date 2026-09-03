@@ -8,6 +8,8 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   ClipboardPaste,
   Copy,
   Plus,
@@ -26,6 +28,7 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/cn';
 import { IMPORT_FORMAT_EXAMPLE, IMPORT_PROMPT, type ParsedQuestion } from '@/lib/assessments/parse';
 import {
+  appendQuestionsAction,
   deleteAssessmentAction,
   previewImportAction,
   saveAssessmentAction,
@@ -52,6 +55,19 @@ type Draft = {
 
 let keySeed = 0;
 const nextKey = () => `q${++keySeed}`;
+
+/**
+ * How many question cards the editor shows at once.
+ *
+ * A bank runs to hundreds of questions and every card carries several inputs, so rendering
+ * the lot would cost an admin a second of stutter on every keystroke. Pages are cheap and
+ * the alternative — a virtualised list — buys nothing here, because nobody scrolls a
+ * five-hundred-question bank looking for something. They search the paste they made it from.
+ */
+const PAGE_SIZE = 25;
+
+/** How many parsed questions the import preview lists before it stops repeating itself. */
+const PREVIEW_LIMIT = 50;
 
 function emptyDraft(): Draft {
   return {
@@ -103,6 +119,27 @@ function fromParsed(q: ParsedQuestion): Draft {
 
 const isChoice = (t: Draft['type']) => t === 'mcq' || t === 'image_mcq';
 
+/**
+ * A draft as the server takes it.
+ *
+ * Shared by the wholesale save and the straight-to-bank append so the two cannot drift into
+ * sending subtly different questions — an append that quietly dropped explanations would be
+ * a hard thing to notice across a thousand of them.
+ */
+function toPayload(d: Draft) {
+  return {
+    type: d.type,
+    prompt: d.prompt,
+    imageUrl: d.imageUrl || undefined,
+    options: isChoice(d.type) ? d.options.filter((o) => o.trim().length > 0) : [],
+    correctIndex: isChoice(d.type) ? d.correctIndex : null,
+    referenceAnswer: isChoice(d.type) ? undefined : d.referenceAnswer || undefined,
+    explanation: d.explanation || undefined,
+    timeLimitSeconds: d.timeLimitSeconds,
+    points: d.points,
+  };
+}
+
 /** The same rules the server enforces, so the card can flag a problem before the save. */
 function draftErrors(d: Draft): string[] {
   const errors: string[] = [];
@@ -133,10 +170,40 @@ export function AssessmentBuilder({
   const [drafts, setDrafts] = useState<Draft[]>(() => assessment.questions.map(fromSaved));
   const [importOpen, setImportOpen] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [page, setPage] = useState(0);
 
   const published = assessment.status === 'published';
   const problems = useMemo(() => drafts.map(draftErrors), [drafts]);
   const blocked = problems.some((p) => p.length > 0);
+
+  /*
+   * Re-seed the editor when the saved list changes underneath it — which is what a bulk
+   * append into the bank does. Without this the editor would still be holding the list as
+   * it was before the append, and the next "Save questions" would replace the bank with
+   * that stale copy, quietly deleting everything just added.
+   *
+   * Skipped while there are unsaved edits: those are the admin's work and not ours to throw
+   * away, which is also why the append button refuses to run until they are saved.
+   */
+  const savedStamp = `${assessment.questions.length}:${assessment.questions.at(-1)?.id ?? ''}`;
+  const [seenStamp, setSeenStamp] = useState(savedStamp);
+  if (seenStamp !== savedStamp && !dirty) {
+    // Adjusted during render rather than in an effect, which is the supported way to react
+    // to a changed prop: no extra paint, and no window in which the editor is showing the
+    // old list while the new one is already on the server.
+    setSeenStamp(savedStamp);
+    setDrafts(assessment.questions.map(fromSaved));
+  }
+
+  const pageCount = Math.max(1, Math.ceil(drafts.length / PAGE_SIZE));
+  const current = Math.min(page, pageCount - 1);
+  const pageStart = current * PAGE_SIZE;
+  const visible = drafts.slice(pageStart, pageStart + PAGE_SIZE);
+  /** The page holding the first question that still needs fixing, for the jump below. */
+  const firstProblemPage = (() => {
+    const index = problems.findIndex((p) => p.length > 0);
+    return index < 0 ? null : Math.floor(index / PAGE_SIZE);
+  })();
 
   function update(index: number, patch: Partial<Draft>) {
     setDrafts((current) => current.map((d, i) => (i === index ? { ...d, ...patch } : d)));
@@ -157,19 +224,7 @@ export function AssessmentBuilder({
 
   function saveQuestions() {
     startTransition(async () => {
-      const payload = drafts.map((d) => ({
-        type: d.type,
-        prompt: d.prompt,
-        imageUrl: d.imageUrl || undefined,
-        options: isChoice(d.type) ? d.options.filter((o) => o.trim().length > 0) : [],
-        correctIndex: isChoice(d.type) ? d.correctIndex : null,
-        referenceAnswer: isChoice(d.type) ? undefined : d.referenceAnswer || undefined,
-        explanation: d.explanation || undefined,
-        timeLimitSeconds: d.timeLimitSeconds,
-        points: d.points,
-      }));
-
-      const result = await saveQuestionsAction(cohortId, assessment.id, payload);
+      const result = await saveQuestionsAction(cohortId, assessment.id, drafts.map(toPayload));
       if (!result.ok) {
         toast.error('Could not save', result.message);
         return;
@@ -266,12 +321,7 @@ export function AssessmentBuilder({
       {tab === 'questions' && (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="md"
-              onClick={() => setImportOpen(true)}
-              disabled={published}
-            >
+            <Button variant="outline" size="md" onClick={() => setImportOpen(true)}>
               <ClipboardPaste className="size-4" aria-hidden />
               Bulk import
             </Button>
@@ -303,10 +353,17 @@ export function AssessmentBuilder({
           {blocked && (
             <Card className="border-danger/40 bg-danger/8 flex items-start gap-3 p-4">
               <AlertTriangle className="text-danger mt-0.5 size-4 shrink-0" aria-hidden />
-              <p className="text-fg text-sm">
-                Some questions still need attention. Nothing is saved until every one of them is
-                fixed — that is the point of the preview.
+              <p className="text-fg min-w-0 flex-1 text-sm">
+                {problems.filter((p) => p.length > 0).length} question
+                {problems.filter((p) => p.length > 0).length === 1 ? '' : 's'} still need attention.
+                Nothing is saved until every one of them is fixed — that is the point of the
+                preview.
               </p>
+              {firstProblemPage !== null && firstProblemPage !== current && (
+                <Button variant="outline" size="sm" onClick={() => setPage(firstProblemPage)}>
+                  Go to the first
+                </Button>
+              )}
             </Card>
           )}
 
@@ -319,23 +376,53 @@ export function AssessmentBuilder({
               />
             </Card>
           ) : (
-            drafts.map((draft, index) => (
-              <QuestionCard
-                key={draft.key}
-                index={index}
-                total={drafts.length}
-                draft={draft}
-                errors={problems[index] ?? []}
-                readOnly={published}
-                defaultSeconds={assessment.defaultQuestionSeconds}
-                onChange={(patch) => update(index, patch)}
-                onMove={(dir) => move(index, dir)}
-                onRemove={() => {
-                  setDrafts((c) => c.filter((_, i) => i !== index));
-                  setDirty(true);
-                }}
-              />
-            ))
+            visible.map((draft, offset) => {
+              const index = pageStart + offset;
+              return (
+                <QuestionCard
+                  key={draft.key}
+                  index={index}
+                  total={drafts.length}
+                  draft={draft}
+                  errors={problems[index] ?? []}
+                  readOnly={published}
+                  defaultSeconds={assessment.defaultQuestionSeconds}
+                  onChange={(patch) => update(index, patch)}
+                  onMove={(dir) => move(index, dir)}
+                  onRemove={() => {
+                    setDrafts((c) => c.filter((_, i) => i !== index));
+                    setDirty(true);
+                  }}
+                />
+              );
+            })
+          )}
+
+          {pageCount > 1 && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={current === 0}
+                onClick={() => setPage(current - 1)}
+              >
+                <ChevronLeft className="size-4" aria-hidden />
+                Previous
+              </Button>
+              <p className="text-fg-muted text-sm tabular-nums">
+                Questions {pageStart + 1}–{Math.min(drafts.length, pageStart + PAGE_SIZE)} of{' '}
+                {drafts.length}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={current >= pageCount - 1}
+                onClick={() => setPage(current + 1)}
+              >
+                Next
+                <ChevronRight className="size-4" aria-hidden />
+              </Button>
+            </div>
           )}
         </div>
       )}
@@ -353,15 +440,41 @@ export function AssessmentBuilder({
       >
         <ImportPanel
           cohortId={cohortId}
+          canEdit={!published}
+          editorDirty={dirty}
           onAccept={(parsed) => {
             setDrafts((current) => [...current, ...parsed.map(fromParsed)]);
             setDirty(true);
+            setPage(Math.floor((drafts.length + parsed.length - 1) / PAGE_SIZE));
             setImportOpen(false);
             toast.success(
               `${parsed.length} ${parsed.length === 1 ? 'question' : 'questions'} added`,
               'Check anything flagged, then save.',
             );
           }}
+          onAppend={(parsed) =>
+            new Promise<boolean>((resolve) => {
+              startTransition(async () => {
+                const result = await appendQuestionsAction(
+                  cohortId,
+                  assessment.id,
+                  parsed.map(fromParsed).map(toPayload),
+                );
+                if (!result.ok) {
+                  toast.error('Could not add those', result.message);
+                  resolve(false);
+                  return;
+                }
+                setImportOpen(false);
+                toast.success(
+                  `${result.data.added} added to the bank`,
+                  `${result.data.bankSize} questions in it now.`,
+                );
+                router.refresh();
+                resolve(true);
+              });
+            })
+          }
         />
       </Sheet>
 
@@ -612,15 +725,32 @@ function QuestionCard({
 
 /* --------------------------------------------------------------- import */
 
+/**
+ * Paste, look, then choose where it lands.
+ *
+ * Two destinations, because a fifteen-question topic check and a five-hundred-question bank
+ * want different things. A draft paper still being written goes to the editor, where the
+ * admin fixes what the parser flagged and saves the whole thing at once. A bank being built
+ * up over a term goes straight in, appended: round-tripping four hundred existing questions
+ * through the browser to add a hundred more is how you lose four hundred questions.
+ */
 function ImportPanel({
   cohortId,
+  canEdit,
+  editorDirty,
   onAccept,
+  onAppend,
 }: {
   cohortId: string;
+  /** False once published — the editor's wholesale save is refused, the append is not. */
+  canEdit: boolean;
+  editorDirty: boolean;
   onAccept: (questions: ParsedQuestion[]) => void;
+  onAppend: (questions: ParsedQuestion[]) => Promise<boolean>;
 }) {
   const toast = useToast();
   const [pending, startTransition] = useTransition();
+  const [appending, setAppending] = useState(false);
   const [raw, setRaw] = useState('');
   const [parsed, setParsed] = useState<ParsedQuestion[] | null>(null);
   const [issues, setIssues] = useState<{ level: 'error' | 'warning'; message: string }[]>([]);
@@ -711,13 +841,13 @@ function ImportPanel({
               {errorCount > 0 ? ` · ${errorCount} need attention` : ''}
             </p>
             <p className="text-fg-muted mt-1 text-xs">
-              They are added to the builder below, where you can fix anything flagged before saving.
-              Nothing is published by this step.
+              Nothing is published by this step. Send them straight to the bank, or into the editor
+              first if anything needs fixing.
             </p>
           </div>
 
           <ol className="space-y-2">
-            {parsed.map((q) => {
+            {parsed.slice(0, PREVIEW_LIMIT).map((q) => {
               const bad = q.issues.some((i) => i.level === 'error');
               return (
                 <li
@@ -761,9 +891,43 @@ function ImportPanel({
             })}
           </ol>
 
-          <Button size="lg" fullWidth disabled={blockedOverall} onClick={() => onAccept(parsed)}>
-            Add {parsed.length} to the builder
-          </Button>
+          {parsed.length > PREVIEW_LIMIT && (
+            <p className="text-fg-muted text-sm">
+              Showing the first {PREVIEW_LIMIT} of {parsed.length}. Anything flagged is counted in
+              the total above, whether or not it is listed here.
+            </p>
+          )}
+
+          <div className="space-y-2">
+            <Button
+              size="lg"
+              fullWidth
+              loading={appending}
+              disabled={blockedOverall || errorCount > 0}
+              onClick={() => {
+                setAppending(true);
+                void onAppend(parsed).finally(() => setAppending(false));
+              }}
+            >
+              Add {parsed.length} to the bank now
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              fullWidth
+              disabled={blockedOverall || !canEdit || editorDirty}
+              onClick={() => onAccept(parsed)}
+            >
+              Add to the editor instead
+            </Button>
+            <p className="text-fg-subtle text-xs">
+              {errorCount > 0
+                ? 'Questions with errors cannot go straight into the bank — send them to the editor, fix them there, and save.'
+                : 'Straight into the bank saves them now and leaves every attempt already running untouched.'}
+              {!canEdit && ' The editor is read-only while this assessment is published.'}
+              {canEdit && editorDirty && ' Save your unsaved edits first to use the editor route.'}
+            </p>
+          </div>
         </>
       )}
     </div>
@@ -855,6 +1019,16 @@ function SettingsForm({
             max={100}
             defaultValue={assessment.passMarkPct}
             error={errors.passMarkPct}
+          />
+          <TextInput
+            label="Questions per sitting"
+            name="questionsPerAttempt"
+            type="number"
+            min={0}
+            max={500}
+            defaultValue={assessment.questionsPerAttempt ?? 0}
+            error={errors.questionsPerAttempt}
+            hint={`0 serves the whole bank. Set 20 against a bank of ${assessment.questions.length} and each sitting draws 20, unseen ones first.`}
           />
           <TextInput
             label="Focus grace (seconds)"

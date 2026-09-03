@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Clock, Eye, Hourglass, ShieldAlert, Timer } from 'lucide-react';
+import { ArrowLeft, Clock, Eye, Hourglass, ShieldAlert, Shuffle, Timer } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, SectionTitle } from '@/components/ui/card';
@@ -22,6 +22,10 @@ type Brief = {
   passMarkPct: number;
   questionCount: number;
   questionSeconds: number;
+  /** The bank this sitting draws from, or null when the paper is the whole of it. */
+  bankSize: number | null;
+  /** How many of that bank this student has already been served. Null when there is no bank. */
+  seenCount: number | null;
 };
 
 function minutes(seconds: number): string {
@@ -53,6 +57,17 @@ export function RulesScreen({
   const totalLabel = brief.totalTimeSeconds
     ? minutes(brief.totalTimeSeconds)
     : minutes(brief.questionSeconds);
+
+  /*
+   * What to say about a bank. A student who is told "20 questions" and then meets a
+   * question they answered last week will assume the thing is broken, so the fact that the
+   * paper is drawn is said up front — and once they have nearly exhausted the bank, so is
+   * the fact that repeats are now unavoidable.
+   */
+  const remaining =
+    brief.bankSize !== null && brief.seenCount !== null ? brief.bankSize - brief.seenCount : null;
+  const shortfall =
+    remaining !== null && remaining < brief.questionCount ? brief.questionCount - remaining : 0;
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
@@ -91,6 +106,19 @@ export function RulesScreen({
               : `Each question has its own timer — ${brief.defaultQuestionSeconds} seconds unless it says otherwise.`
           }
         />
+        {brief.bankSize !== null && (
+          <Rule
+            icon={<Shuffle className="size-4" aria-hidden />}
+            title={`Drawn fresh from ${brief.bankSize} questions`}
+            body={
+              shortfall > 0
+                ? remaining === 0
+                  ? `You have now seen all ${brief.bankSize} questions in this bank, so this paper is drawn from all of them again. Every sitting is still a different ${brief.questionCount}.`
+                  : `You have ${remaining} question${remaining === 1 ? '' : 's'} left that you have not seen. This paper takes ${remaining} of those and makes the other ${shortfall} up at random from ones you have met before.`
+                : `Your paper is picked when you press start, from the ones you have not been asked yet — so no two sittings are the same. ${brief.seenCount === 0 ? 'All of them are new to you.' : `${remaining} still new to you.`}`
+            }
+          />
+        )}
         <Rule
           icon={<Timer className="size-4" aria-hidden />}
           title="Questions expire on their own"
@@ -99,7 +127,7 @@ export function RulesScreen({
         <Rule
           icon={<ShieldAlert className="size-4" aria-hidden />}
           title="Leaving the page restarts the assessment"
-          body={`Switching tabs or apps for more than ${brief.focusGraceSeconds} seconds restarts you from question 1. Coming straight back is fine. Every restart is recorded for your cohort lead.`}
+          body={`Switching tabs or apps for more than ${brief.focusGraceSeconds} seconds restarts you from question 1${brief.bankSize !== null ? ' — the same questions, with the clocks back at the start' : ''}. Coming straight back is fine. Every restart is recorded for your cohort lead.`}
         />
         <Rule
           icon={<Clock className="size-4" aria-hidden />}

@@ -54,6 +54,7 @@ export function AssessmentsListScreen({ rows }: { rows: StudentAssessmentRow[] }
                     <span aria-hidden>·</span>
                     <span>
                       {row.questionCount} {row.questionCount === 1 ? 'question' : 'questions'}
+                      {row.bankSize !== null && ` drawn from ${row.bankSize}`}
                     </span>
                     <span aria-hidden>·</span>
                     <span>pass {row.passMarkPct}%</span>

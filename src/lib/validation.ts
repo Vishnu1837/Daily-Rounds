@@ -747,6 +747,12 @@ export const assessmentSchema = z.object({
   totalTimeMinutes: z.coerce.number().int().min(0).max(600).default(0),
   defaultQuestionSeconds: z.coerce.number().int().min(5).max(3600).default(60),
   focusGraceSeconds: z.coerce.number().int().min(1).max(120).default(5),
+  /*
+   * How many of the bank's questions one sitting draws. Zero means all of them, matching
+   * the total-time field's convention — an empty input and a nought both read as "the admin
+   * did not set a window", which for a fifteen-question paper is the right default.
+   */
+  questionsPerAttempt: z.coerce.number().int().min(0).max(500).default(0),
   passMarkPct: z.coerce.number().int().min(1).max(100).default(60),
   allowAnswerReview: z.coerce.boolean().optional().default(true),
 });
@@ -802,10 +808,17 @@ export const assessmentQuestionSchema = z
     }
   });
 
+/**
+ * A batch of questions, as one save or one append carries them.
+ *
+ * The ceiling is a batch limit, not a bank limit: an assessment can hold thousands of
+ * questions, built up a thousand at a time, and the cap only keeps a single request from
+ * carrying more than a server action reasonably should.
+ */
 export const assessmentQuestionsSchema = z
   .array(assessmentQuestionSchema)
   .min(1, 'An assessment needs at least one question.')
-  .max(200);
+  .max(1000, 'Add at most 1000 questions in one go.');
 
 export const assessmentReviewSchema = z.object({
   attemptId: z.string().uuid(),

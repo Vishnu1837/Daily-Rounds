@@ -24,6 +24,19 @@ const STATUS_TONE = {
   archived: 'neutral',
 } as const;
 
+/**
+ * "20 of 500 per sitting" when there is a bank behind the paper, plain "500 questions" when
+ * the paper is the whole list — because those are genuinely different things for an admin
+ * scanning this list, and the count alone cannot tell them apart.
+ */
+function describeBank(row: AdminAssessmentRow): string {
+  const drawn = row.questionsPerAttempt;
+  if (drawn && drawn < row.questionCount) {
+    return `${drawn} of ${row.questionCount} per sitting`;
+  }
+  return `${row.questionCount} ${row.questionCount === 1 ? 'question' : 'questions'}`;
+}
+
 function describeLength(row: AdminAssessmentRow): string {
   if (row.totalTimeSeconds) return `${Math.round(row.totalTimeSeconds / 60)} min total`;
   return 'Per-question timers';
@@ -106,9 +119,8 @@ export function AssessmentsScreen({
               <div className="min-w-0 flex-1">
                 <p className="text-fg truncate text-sm font-bold">{row.title}</p>
                 <p className="text-fg-subtle truncate text-xs">
-                  {row.subjectName ?? row.curriculumRef ?? 'No topic set'} · {row.questionCount}{' '}
-                  {row.questionCount === 1 ? 'question' : 'questions'} · {describeLength(row)} ·
-                  pass {row.passMarkPct}%
+                  {row.subjectName ?? row.curriculumRef ?? 'No topic set'} · {describeBank(row)} ·{' '}
+                  {describeLength(row)} · pass {row.passMarkPct}%
                 </p>
               </div>
               {row.pendingReview > 0 && <Badge tone="warning">{row.pendingReview} to mark</Badge>}
