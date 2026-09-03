@@ -12,6 +12,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { requireAdmin } from '@/lib/auth/guards';
 import { getPrimaryCohort } from '@/server/context';
+import { SITE } from '@/lib/site';
 
 /**
  * The admin console.
@@ -33,7 +34,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-dvh lg:flex">
       <aside className="border-border bg-bg-elevated sticky top-0 hidden h-dvh w-[17rem] shrink-0 flex-col border-r px-4 py-6 lg:flex">
-        <Link href="/admin" className="mb-3 px-2" aria-label="Daily Rounds admin">
+        <Link href="/admin" className="mb-3 px-2" aria-label={`${SITE.name} admin`}>
           <Logo />
         </Link>
         <div className="mb-7 px-2">

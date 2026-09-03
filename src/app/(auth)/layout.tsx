@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { Logo } from '@/components/brand/logo';
+import { SITE } from '@/lib/site';
 
 /**
  * A two-panel sign-in on desktop, a single column on mobile.
@@ -19,7 +20,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           <span className="animate-drift bg-pulse-300/25 absolute -right-20 bottom-0 size-80 rounded-full blur-3xl [animation-delay:-7s]" />
         </div>
 
-        <Link href="/login" className="relative" aria-label="Daily Rounds home">
+        <Link href="/login" className="relative" aria-label={`${SITE.name} home`}>
           <span className="inline-flex items-center gap-2.5">
             <span className="grid size-9 place-items-center rounded-xl bg-white/15 ring-1 ring-white/25 ring-inset">
               <svg viewBox="0 0 40 40" className="size-6" aria-hidden>
@@ -34,7 +35,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               </svg>
             </span>
             <span className="font-display text-lg font-extrabold tracking-[-0.03em]">
-              DailyRounds
+              {SITE.name}
             </span>
           </span>
         </Link>
@@ -44,8 +45,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             Nobody remembers the day you studied hardest.
           </h2>
           <p className="mt-5 text-lg text-white/75">
-            They remember whether you showed up. Daily Rounds measures one thing: did you do what
-            you said you would, and did you do it again tomorrow?
+            They remember whether you showed up. {SITE.name} measures one thing: did you do what you
+            said you would, and did you do it again tomorrow?
           </p>
 
           <dl className="mt-10 grid grid-cols-3 gap-4 border-t border-white/15 pt-8">
@@ -79,7 +80,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         />
 
         <header className="relative px-6 pt-8 lg:hidden">
-          <Link href="/login" className="inline-flex" aria-label="Daily Rounds home">
+          <Link href="/login" className="inline-flex" aria-label={`${SITE.name} home`}>
             <Logo />
           </Link>
         </header>

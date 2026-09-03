@@ -20,15 +20,40 @@ const handle = process.env.NEXT_PUBLIC_INSTAGRAM_HANDLE ?? 'mohd.imrxn';
 const whatsapp = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? '';
 
 export const ENQUIRY_MESSAGE =
-  'Hi Imran, I’m interested in Daily Rounds / Medico Consistency Cohort. ' +
+  'Hi Imran, I’m interested in Daily Rounds 360 / Medico Consistency Cohort. ' +
   'Could you share the details for the next available cohort?';
 
+/**
+ * Whether anyone can create their own account from the public site.
+ *
+ * Closed. The cohort is a curated group: new people join the waitlist and an admin adds the
+ * ones who are accepted, so a self-serve signup form would let anyone into the leaderboard,
+ * the grove and the study room without ever being invited.
+ *
+ * This is a switch rather than deleted code because a future cohort may open registration
+ * again, and because it has to be readable from both the client (to hide the route) and the
+ * server (to refuse the request) — hiding the button alone is not closing signup. Set
+ * `NEXT_PUBLIC_PUBLIC_SIGNUP=open` to reopen it.
+ */
+export const PUBLIC_SIGNUP_OPEN = process.env.NEXT_PUBLIC_PUBLIC_SIGNUP === 'open';
+
+/** Where a new visitor is sent instead: the waitlist section of the landing page. */
+export const WAITLIST_ANCHOR = '/#waitlist';
+
 export const SITE = {
-  name: 'Daily Rounds',
+  /**
+   * The product name, in full, wherever a person reads it.
+   *
+   * Every user-facing surface reads this rather than spelling the name out, so the next
+   * time it changes it changes in one place. Routes, database keys, the package name and
+   * the `dr-` id prefixes are deliberately *not* derived from it — they are addresses, not
+   * copy, and renaming them would break links and migrations for no reader's benefit.
+   */
+  name: 'Daily Rounds 360',
   tagline: 'Medico Consistency Cohort',
   founder: 'Mohammed Imran',
   /** The recurring product identity, used across the public site and the portal header. */
-  lockup: 'Daily Rounds by Mohammed Imran',
+  lockup: 'Daily Rounds 360 by Mohammed Imran',
   instagramHandle: `@${handle}`,
   instagramUrl: `https://instagram.com/${handle}`,
 

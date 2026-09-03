@@ -9,6 +9,7 @@ import { requireOnboardedUser } from '@/lib/auth/guards';
 import { BEHAVIOUR_EVENTS, POINT_EVENT_LABELS, maxDailyBehaviourPoints } from '@/lib/domain/points';
 import { getMemberContext } from '@/server/context';
 import { STUDENT_HOME } from '@/lib/routes';
+import { SITE } from '@/lib/site';
 
 export const metadata: Metadata = { title: 'How points work' };
 export default async function HowPointsWorkPage() {
@@ -32,7 +33,7 @@ export default async function HowPointsWorkPage() {
       <PageHeader
         eyebrow="The rules, in full"
         title="How points work"
-        description="Daily Rounds rewards the process, not the result. Every point below is earned by doing something — not by being right."
+        description={`${SITE.name} rewards the process, not the result. Every point below is earned by doing something — not by being right.`}
       />
 
       <Card>

@@ -19,6 +19,7 @@ import { cn } from '@/lib/cn';
 import { CHALLENGE_LABELS, type Challenge, challengeValues } from '@/lib/validation';
 import { completeOnboardingAction } from '@/server/actions/onboarding';
 import { DEFAULT_TIMEZONE, TIMEZONE_GROUPS } from '@/lib/timezones';
+import { SITE } from '@/lib/site';
 
 type Subject = { id: string; name: string; phaseLabel: string };
 
@@ -34,7 +35,7 @@ function byPhase(subjects: Subject[]): { phase: string; subjects: Subject[] }[] 
 }
 
 const STEPS = [
-  { key: 'welcome', title: 'Welcome to Daily Rounds' },
+  { key: 'welcome', title: `Welcome to ${SITE.name}` },
   { key: 'about', title: 'About you' },
   { key: 'subject', title: 'What are you studying?' },
   { key: 'commitment', title: 'Your daily commitment' },
@@ -228,7 +229,7 @@ export function OnboardingWizard({
                   down and doing the work you said you would, day after day.
                 </p>
                 <p className="text-fg-muted text-sm leading-relaxed">
-                  Daily Rounds measures one thing:{' '}
+                  {SITE.name} measures one thing:{' '}
                   <strong className="text-fg">did you show up?</strong> Not how clever you are. Not
                   your marks. Whether you turned up and did what you committed to.
                 </p>

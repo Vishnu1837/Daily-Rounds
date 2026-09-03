@@ -4,6 +4,7 @@ import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 import { ToastProvider } from '@/components/ui/toast';
 
 import './globals.css';
+import { SITE } from '@/lib/site';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -25,13 +26,13 @@ const display = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Daily Rounds',
-    template: '%s · Daily Rounds',
+    default: SITE.name,
+    template: `%s · ${SITE.name}`,
   },
   description:
     'A consistency and accountability platform for medical students. Show up, do the work, build the streak.',
-  applicationName: 'Daily Rounds',
-  appleWebApp: { capable: true, title: 'Daily Rounds', statusBarStyle: 'default' },
+  applicationName: SITE.name,
+  appleWebApp: { capable: true, title: SITE.name, statusBarStyle: 'default' },
   formatDetection: { telephone: false },
 };
 

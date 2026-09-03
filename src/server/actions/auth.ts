@@ -17,6 +17,7 @@ import {
 } from '@/lib/validation';
 import { createHash } from 'node:crypto';
 import { homeForRole } from '@/lib/routes';
+import { PUBLIC_SIGNUP_OPEN } from '@/lib/site';
 
 export type ActionState = {
   ok?: boolean;
@@ -31,6 +32,21 @@ function hashToken(token: string) {
 }
 
 export async function signUpAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  /*
+   * Public registration is closed, and this is where that is enforced.
+   *
+   * The route redirects and the link is gone, but neither of those stops a POST to this
+   * action — it is a server action with a stable id, reachable by anyone who has ever
+   * loaded the page. Refusing here is what actually closes signup; the UI changes only
+   * spare honest visitors a dead end. Admin-created accounts do not come through here.
+   */
+  if (!PUBLIC_SIGNUP_OPEN) {
+    return {
+      message:
+        'Registration is closed. Join the waitlist and the cohort lead will be in touch when a place opens up.',
+    };
+  }
+
   const parsed = signUpSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { errors: fieldErrors(parsed.error) };
 

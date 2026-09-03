@@ -25,6 +25,7 @@ import {
   RailStandingSkeleton,
   ShellSlot,
 } from './shell';
+import { SITE } from '@/lib/site';
 
 /**
  * The student shell.
@@ -43,7 +44,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-dvh lg:flex">
       {/* ------------------------------------------------------ desktop rail */}
       <aside className="border-border bg-bg-elevated sticky top-0 hidden h-dvh w-[17rem] shrink-0 flex-col border-r px-4 py-6 lg:flex">
-        <Link href={STUDENT_HOME} className="mb-8 px-2" aria-label="Daily Rounds home">
+        <Link href={STUDENT_HOME} className="mb-8 px-2" aria-label={`${SITE.name} home`}>
           <Logo />
         </Link>
 

@@ -5,8 +5,8 @@ import { SITE } from '@/lib/site';
 import { LandingPage } from './landing';
 
 export const metadata: Metadata = {
-  // Absolute: the root layout appends "· Daily Rounds" to every title, which on the
-  // landing page itself would read "Daily Rounds by Mohammed Imran … · Daily Rounds".
+  // Absolute: the root layout appends the product name to every title, which on the
+  // landing page itself would read "… by Mohammed Imran … · Daily Rounds 360".
   title: { absolute: `${SITE.name} by ${SITE.founder} — ${SITE.tagline}` },
   description:
     'A 30-day accountability system for medical students: monitored weekday study rooms, ' +

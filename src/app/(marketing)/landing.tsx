@@ -168,7 +168,7 @@ const PORTAL = [
 const FAQS = [
   {
     q: 'Is this another lecture platform?',
-    a: 'No. Daily Rounds does not sell you content. It is a one-month guided accountability experience built around the notes, lectures and resources you already have.',
+    a: `No. ${SITE.name} does not sell you content. It is a one-month guided accountability experience built around the notes, lectures and resources you already have.`,
   },
   {
     q: 'How much time does it need?',
@@ -778,7 +778,7 @@ function DarkPassage() {
               className="mt-6 text-[12px] leading-relaxed"
               style={{ color: 'var(--ed-dark-faint)' }}
             >
-              Daily Rounds is a study-habit system, not a coaching guarantee. It does not promise
+              {SITE.name} is a study-habit system, not a coaching guarantee. It does not promise
               exam results, and the pathways session is orientation rather than eligibility advice.
             </p>
           </article>

@@ -7,6 +7,7 @@ import { ProgressRing } from '@/components/ui/progress';
 import type { DayBand } from '@/db/schema';
 import { cn } from '@/lib/cn';
 import { OBSTACLE_LABELS } from '@/lib/validation';
+import { SITE } from '@/lib/site';
 
 export type ReportData = {
   name: string;
@@ -65,7 +66,7 @@ export function CohortReport({ data }: { data: ReportData }) {
         <CardAurora tone="pulse" />
         <div className="relative py-3">
           <p className="text-2xs font-bold tracking-[0.2em] text-white/60 uppercase">
-            Daily Rounds — {data.cohortName}
+            {SITE.name} — {data.cohortName}
           </p>
           <h1 className="mt-3 text-3xl font-extrabold tracking-tight">{data.name}</h1>
           <p className="mt-1.5 text-sm text-white/65">

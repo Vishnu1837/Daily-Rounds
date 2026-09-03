@@ -1,4 +1,5 @@
 import { cn } from '@/lib/cn';
+import { SITE } from '@/lib/site';
 
 /**
  * The Daily Rounds mark: a rounded tile carrying an ECG trace — one continuous line that
@@ -15,7 +16,7 @@ export function LogoMark({ size = 32, className }: { size?: number; className?: 
       height={size}
       className={cn('shrink-0', className)}
       role="img"
-      aria-label="Daily Rounds"
+      aria-label={SITE.name}
     >
       <defs>
         <linearGradient id="dr-mark" x1="0" y1="0" x2="1" y2="1">
@@ -60,6 +61,7 @@ export function Logo({
           <span className="from-pulse-600 to-iris-500 dark:from-pulse-300 dark:to-iris-300 bg-linear-to-r bg-clip-text text-transparent">
             Rounds
           </span>
+          <span className="text-fg-subtle ml-1 align-baseline text-[0.7em] font-bold">360</span>
         </span>
       )}
     </span>
