@@ -14,7 +14,7 @@ import { generateToken } from './password';
 export const SESSION_COOKIE = 'dr_session';
 const SESSION_TTL_DAYS = 30;
 
-function hashToken(token: string): string {
+export function hashSessionToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
@@ -33,32 +33,68 @@ export type SessionUser = {
   onboardingCompletedAt: Date | null;
 };
 
-export async function createSession(userId: string): Promise<void> {
+/** A session cookie, ready to be written to whichever response is about to be sent. */
+export type SessionCookie = {
+  name: string;
+  value: string;
+  options: {
+    httpOnly: true;
+    sameSite: 'lax';
+    secure: boolean;
+    path: '/';
+    expires: Date;
+  };
+};
+
+/**
+ * Mints a session and hands back the cookie that carries it, without writing anything.
+ *
+ * Sessions are deliberately not exclusive. Nothing here touches the user's other rows, so a
+ * student signed in on a laptop stays signed in on it when they sign in on a phone, and
+ * signing out of one leaves the other alone — see `destroySession`, which deletes exactly
+ * the token it was given. That is what makes the QR device-link flow possible at all, and
+ * it is the reason this function only ever inserts.
+ *
+ * Separate from `createSession` because a route handler returning a `NextResponse` wants to
+ * put the cookie on that response itself rather than rely on the request-scoped cookie store
+ * being merged into a redirect it constructed by hand.
+ */
+export async function issueSession(userId: string): Promise<SessionCookie> {
   const token = generateToken();
   const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 86_400_000);
 
-  await db.insert(authSessions).values({ userId, tokenHash: hashToken(token), expiresAt });
+  await db.insert(authSessions).values({ userId, tokenHash: hashSessionToken(token), expiresAt });
 
-  // Opportunistic cleanup of this user's expired sessions.
+  // Opportunistic cleanup of this user's expired sessions. Expired ones only: a live session
+  // on another device is not this sign-in's business.
   await db
     .delete(authSessions)
     .where(and(eq(authSessions.userId, userId), lt(authSessions.expiresAt, new Date())));
 
+  return {
+    name: SESSION_COOKIE,
+    value: token,
+    options: {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      expires: expiresAt,
+    },
+  };
+}
+
+export async function createSession(userId: string): Promise<void> {
+  const cookie = await issueSession(userId);
   const store = await cookies();
-  store.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    expires: expiresAt,
-  });
+  store.set(cookie.name, cookie.value, cookie.options);
 }
 
 export async function destroySession(): Promise<void> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (token) {
-    await db.delete(authSessions).where(eq(authSessions.tokenHash, hashToken(token)));
+    await db.delete(authSessions).where(eq(authSessions.tokenHash, hashSessionToken(token)));
   }
   store.delete(SESSION_COOKIE);
 }
@@ -89,7 +125,10 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
     .from(authSessions)
     .innerJoin(users, eq(users.id, authSessions.userId))
     .where(
-      and(eq(authSessions.tokenHash, hashToken(token)), gt(authSessions.expiresAt, new Date())),
+      and(
+        eq(authSessions.tokenHash, hashSessionToken(token)),
+        gt(authSessions.expiresAt, new Date()),
+      ),
     )
     .limit(1);
 

@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 
+import { LinkDeviceLauncher } from '@/components/auth/link-device';
 import { Logo } from '@/components/brand/logo';
 import {
   BottomNav,
@@ -119,6 +120,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <Suspense fallback={<BottomNavFallback items={STUDENT_NAV} />}>
         <BottomNav items={STUDENT_NAV} />
       </Suspense>
+
+      {/*
+        The "open on your phone" prompt. A client component with no props, so it costs the
+        static shell nothing — the rule at the top of this file still holds, and the code it
+        offers is only minted once a student actually asks for one.
+      */}
+      <LinkDeviceLauncher />
     </div>
   );
 }

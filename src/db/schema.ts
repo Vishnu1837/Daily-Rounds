@@ -207,6 +207,36 @@ export const passwordResetTokens = pgTable(
   (t) => [uniqueIndex('password_reset_token_idx').on(t.tokenHash)],
 );
 
+/**
+ * One-time codes that carry a sign-in from a signed-in device to a second one.
+ *
+ * A student on their laptop asks for a code, the app shows it as a QR, and the phone that
+ * scans it lands signed in to the same account — no password on a phone keyboard. The code
+ * is a bearer credential while it lives, so it lives for about two minutes, works once, and
+ * is stored only as a hash. Redeeming it mints an ordinary `authSessions` row; the two
+ * devices are then two equal sessions, neither displacing the other.
+ */
+export const deviceLinkCodes = pgTable(
+  'device_link_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    /** Null while the code is still live. Set by the same UPDATE that spends it. */
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    /** What redeemed it, so the desktop can name the device rather than show a bare tick. */
+    consumedUserAgent: text('consumed_user_agent'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('device_link_codes_token_idx').on(t.tokenHash),
+    index('device_link_codes_user_idx').on(t.userId),
+  ],
+);
+
 /* ---------------------------------------------------------------- cohorts */
 
 export type CohortSettings = {

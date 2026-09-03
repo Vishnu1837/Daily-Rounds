@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 
+import { LinkDeviceLauncher } from '@/components/auth/link-device';
 import { Logo } from '@/components/brand/logo';
 import { BottomNav, SideNav } from '@/components/nav/bottom-nav';
 import { MobileMenu } from '@/components/nav/mobile-menu';
@@ -93,6 +94,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </div>
 
       <BottomNav items={ADMIN_NAV} />
+
+      {/*
+        The same "open on your phone" offer the student shell makes. A cohort lead marking
+        attendance from the ward has the same problem a student does, and the code they get
+        signs them in as themselves — so the phone lands in the console, not in the app.
+      */}
+      <LinkDeviceLauncher />
     </div>
   );
 }
