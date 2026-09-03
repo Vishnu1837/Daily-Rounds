@@ -220,6 +220,9 @@ export async function resetRoadmapProgress(roadmapId: string): Promise<{ topicsR
       .where(eq(roadmapTopics.id, first.id));
   }
 
+  // A roadmap with its progress cleared is by definition no longer finished.
+  await db.update(roadmaps).set({ completedAt: null }).where(eq(roadmaps.id, roadmapId));
+
   return { topicsReset: reset.length };
 }
 
@@ -305,44 +308,127 @@ export async function ensureRoadmaps(args: {
 }
 
 /**
- * Makes sure the student has something to study today.
+ * The day's assignment in one subject, or the leading one when no subject is named.
  *
- * Picks the first incomplete topic across their active roadmaps, primary slot first. Does
- * nothing if today is already assigned, so it never overrides a deliberate choice.
+ * A day now holds a topic per subject, so every write that acts on "today's topic" — start
+ * the timer, plant a tree, mark the target done — has to say *which*. Callers that carry a
+ * slot pass it; callers that do not get the first slot with a topic set, which is the same
+ * topic the dashboard leads with.
+ */
+export async function todaysAssignment(
+  memberId: string,
+  date: string,
+  slot?: RoadmapSlot,
+): Promise<{ slot: RoadmapSlot; topicId: string | null; plannedMinutes: number } | null> {
+  const rows = await db
+    .select({
+      slot: dailyAssignments.slot,
+      topicId: dailyAssignments.topicId,
+      plannedMinutes: dailyAssignments.plannedMinutes,
+    })
+    .from(dailyAssignments)
+    .where(and(eq(dailyAssignments.memberId, memberId), eq(dailyAssignments.date, date)))
+    .orderBy(asc(dailyAssignments.slot));
+
+  if (slot) return rows.find((r) => r.slot === slot) ?? null;
+  return rows.find((r) => r.topicId) ?? rows[0] ?? null;
+}
+
+/**
+ * The next topic a roadmap owes the student, and what it means when there isn't one.
+ *
+ * "First topic that is not completed, in this roadmap's own order" is the single definition
+ * of *next* in the product — the onboarding fallback, the bulk advance and the admin's next
+ * button all have to agree on it, and a roadmap the admin has resequenced by hand has to be
+ * walked in its own order rather than the syllabus's. Position is that order; customising a
+ * roadmap rewrites positions and nothing here changes.
+ *
+ * A roadmap with nothing left is *finished*, which is a different answer from "nothing to
+ * do": it is the point at which the subject stops receiving daily topics, and the caller
+ * marks it so rather than wrapping back round to topic 1.
+ */
+export async function nextTopicForRoadmap(
+  roadmapId: string,
+): Promise<{ id: string; title: string } | null> {
+  const [next] = await db
+    .select({ id: roadmapTopics.id, title: roadmapTopics.title })
+    .from(roadmapTopics)
+    .where(and(eq(roadmapTopics.roadmapId, roadmapId), ne(roadmapTopics.status, 'completed')))
+    // `in_progress` sorts before `upcoming` in the enum, so a topic the student is already
+    // on wins over a lower-positioned one they have not started.
+    .orderBy(asc(roadmapTopics.status), asc(roadmapTopics.position))
+    .limit(1);
+
+  return next ?? null;
+}
+
+/**
+ * Records that a roadmap has no topics left, or that it has some again.
+ *
+ * Idempotent in both directions: re-running the advance does not keep rewriting the
+ * timestamp, and adding a topic to a finished subject reopens it.
+ */
+export async function syncRoadmapCompletion(roadmapId: string, hasNext: boolean): Promise<void> {
+  const [row] = await db
+    .select({ completedAt: roadmaps.completedAt })
+    .from(roadmaps)
+    .where(eq(roadmaps.id, roadmapId))
+    .limit(1);
+  if (!row) return;
+
+  if (!hasNext && !row.completedAt) {
+    await db.update(roadmaps).set({ completedAt: new Date() }).where(eq(roadmaps.id, roadmapId));
+  } else if (hasNext && row.completedAt) {
+    await db.update(roadmaps).set({ completedAt: null }).where(eq(roadmaps.id, roadmapId));
+  }
+}
+
+/**
+ * Makes sure the student has something to study today — in *both* of their subjects.
+ *
+ * One call per slot, because a day now holds one topic per subject and the two are
+ * independent: a student whose primary is finished still gets their secondary topic. A slot
+ * that already has a topic for today is left exactly as it is, so this never overrides a
+ * deliberate choice, and a roadmap with nothing left is marked complete instead of being
+ * wrapped back to its first topic.
  */
 export async function assignTodaysTopic(args: {
   memberId: string;
   today: string;
   plannedMinutes?: number;
 }): Promise<void> {
-  const [existing] = await db
-    .select({ id: dailyAssignments.id, topicId: dailyAssignments.topicId })
+  const existing = await db
+    .select({ slot: dailyAssignments.slot, topicId: dailyAssignments.topicId })
     .from(dailyAssignments)
-    .where(and(eq(dailyAssignments.memberId, args.memberId), eq(dailyAssignments.date, args.today)))
-    .limit(1);
+    .where(
+      and(eq(dailyAssignments.memberId, args.memberId), eq(dailyAssignments.date, args.today)),
+    );
 
-  if (existing?.topicId) return;
+  const filled = new Set(existing.filter((r) => r.topicId).map((r) => r.slot));
 
-  const [next] = await db
-    .select({ id: roadmapTopics.id })
-    .from(roadmapTopics)
-    .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
-    .where(and(eq(roadmaps.memberId, args.memberId), ne(roadmapTopics.status, 'completed')))
-    .orderBy(asc(roadmaps.slot), asc(roadmapTopics.position))
-    .limit(1);
+  const memberRoadmaps = await db
+    .select({ id: roadmaps.id, slot: roadmaps.slot })
+    .from(roadmaps)
+    .where(eq(roadmaps.memberId, args.memberId))
+    .orderBy(asc(roadmaps.slot));
 
-  if (!next) return;
+  for (const roadmap of memberRoadmaps) {
+    const next = await nextTopicForRoadmap(roadmap.id);
+    await syncRoadmapCompletion(roadmap.id, Boolean(next));
+    if (!next || filled.has(roadmap.slot)) continue;
 
-  await db
-    .insert(dailyAssignments)
-    .values({
-      memberId: args.memberId,
-      date: args.today,
-      topicId: next.id,
-      plannedMinutes: args.plannedMinutes ?? 90,
-    })
-    .onConflictDoUpdate({
-      target: [dailyAssignments.memberId, dailyAssignments.date],
-      set: { topicId: next.id },
-    });
+    await db
+      .insert(dailyAssignments)
+      .values({
+        memberId: args.memberId,
+        date: args.today,
+        slot: roadmap.slot,
+        topicId: next.id,
+        plannedMinutes: args.plannedMinutes ?? 90,
+      })
+      .onConflictDoUpdate({
+        target: [dailyAssignments.memberId, dailyAssignments.date, dailyAssignments.slot],
+        set: { topicId: next.id },
+      });
+  }
 }

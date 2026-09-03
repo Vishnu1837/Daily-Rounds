@@ -400,6 +400,11 @@ export const topicReorderSchema = z.object({
 export const assignmentSchema = z.object({
   memberId: z.string().uuid(),
   date: isoDateSchema,
+  /**
+   * Which of the student's two subjects is being edited. A day holds one assignment per
+   * subject, so without it a save to the Physiology row would land on the Anatomy one.
+   */
+  slot: z.enum(['primary', 'secondary']).optional(),
   topicId: z
     .string()
     .uuid()
@@ -711,4 +716,115 @@ export const individualAssignmentSchema = z.object({
   date: isoDateSchema,
   plannedMinutes: z.coerce.number().int().min(5).max(720).default(90),
   allowCompleted: z.coerce.boolean().optional().default(false),
+});
+
+/* ----------------------------------------------------------- assessments */
+
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined);
+
+export const assessmentSchema = z.object({
+  title: z.string().trim().min(3, 'Give it a title').max(200),
+  /** A section or topic path from the syllabus tree, or nothing. */
+  curriculumRef: z
+    .string()
+    .trim()
+    .max(200)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  instructions: optionalText(4000),
+  /*
+   * Zero means "no total limit", which is the honest way to express it in a number input —
+   * an empty field and a zero both arrive as "the admin did not set one".
+   */
+  totalTimeMinutes: z.coerce.number().int().min(0).max(600).default(0),
+  defaultQuestionSeconds: z.coerce.number().int().min(5).max(3600).default(60),
+  focusGraceSeconds: z.coerce.number().int().min(1).max(120).default(5),
+  passMarkPct: z.coerce.number().int().min(1).max(100).default(60),
+  allowAnswerReview: z.coerce.boolean().optional().default(true),
+});
+
+export const questionTypeSchema = z.enum(['mcq', 'image_mcq', 'short_answer', 'long_answer']);
+
+/**
+ * One question, as the builder and the import preview both submit it.
+ *
+ * The cross-field rules live in `superRefine` rather than in the action, because they are
+ * the same rules the bulk importer flags in its preview and duplicating them is how the two
+ * would drift: a multiple-choice question needs at least two options and a correct answer
+ * that points at one of them, and a written question needs neither.
+ */
+export const assessmentQuestionSchema = z
+  .object({
+    type: questionTypeSchema,
+    prompt: z.string().trim().min(3, 'The question needs some text').max(4000),
+    imageUrl: optionalText(2000),
+    options: z.array(z.string().trim().max(600)).max(8).default([]),
+    correctIndex: z.coerce.number().int().min(0).max(7).nullable().optional(),
+    referenceAnswer: optionalText(8000),
+    explanation: optionalText(4000),
+    timeLimitSeconds: z.coerce.number().int().min(5).max(3600).nullable().optional(),
+    points: z.coerce.number().int().min(1).max(20).default(1),
+  })
+  .superRefine((value, ctx) => {
+    const isChoice = value.type === 'mcq' || value.type === 'image_mcq';
+    if (!isChoice) return;
+
+    const filled = value.options.filter((o) => o.trim().length > 0);
+    if (filled.length < 2) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['options'],
+        message: 'A multiple-choice question needs at least two options.',
+      });
+    }
+    if (value.correctIndex === null || value.correctIndex === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['correctIndex'],
+        message: 'Mark which option is correct.',
+      });
+      return;
+    }
+    if (value.correctIndex >= value.options.length) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['correctIndex'],
+        message: 'The correct answer points past the end of the options.',
+      });
+    }
+  });
+
+export const assessmentQuestionsSchema = z
+  .array(assessmentQuestionSchema)
+  .min(1, 'An assessment needs at least one question.')
+  .max(200);
+
+export const assessmentReviewSchema = z.object({
+  attemptId: z.string().uuid(),
+  feedback: optionalText(4000),
+  marks: z
+    .array(
+      z.object({
+        answerId: z.string().uuid(),
+        awardedPoints: z.coerce.number().int().min(0).max(20),
+        reviewerNote: optionalText(2000),
+      }),
+    )
+    .max(200),
+});
+
+/** What the runtime sends when a student answers or a question expires. */
+export const answerSubmissionSchema = z.object({
+  attemptId: z.string().uuid(),
+  questionId: z.string().uuid(),
+  selectedIndex: z.coerce.number().int().min(0).max(7).nullable().optional(),
+  textAnswer: optionalText(20000),
 });

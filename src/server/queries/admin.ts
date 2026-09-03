@@ -4,7 +4,7 @@ import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import { cache } from 'react';
 
 import { db } from '@/db/client';
-import type { AttendanceStatus, RiskLevel } from '@/db/schema';
+import type { AttendanceStatus, RiskLevel, RoadmapSlot } from '@/db/schema';
 import {
   announcements,
   attendance,
@@ -17,9 +17,12 @@ import {
   events,
   materials,
   pointsLedger,
+  assessmentAttempts,
+  assessments,
   roadmapTopics,
   roadmapWeeks,
   roadmaps,
+  studentAchievements,
   studentGoals,
   subjects,
   users,
@@ -38,6 +41,7 @@ import {
   calculateOverallConsistency,
   calculateWeeklyProgress,
 } from '@/lib/domain/consistency';
+import { ACHIEVEMENTS } from '@/lib/domain/achievements';
 import { RISK_ORDER, calculateRiskStatus } from '@/lib/domain/risk';
 import {
   calculateBestStreak,
@@ -45,6 +49,11 @@ import {
   calculateCurrentStreak,
 } from '@/lib/domain/streak';
 import type { getCohortContext } from '@/server/context';
+import {
+  type LeaderboardRow,
+  type Recognitions,
+  loadCohortStandings,
+} from '@/server/queries/student';
 
 type CohortCtx = NonNullable<Awaited<ReturnType<typeof getCohortContext>>>;
 
@@ -358,6 +367,8 @@ export async function getStudentDetail(ctx: CohortCtx, memberId: string) {
     topicRows,
     reviewRows,
     attendanceRows,
+    badgeRows,
+    assessmentRows,
   ] = await Promise.all([
     db
       .select({
@@ -444,6 +455,31 @@ export async function getStudentDetail(ctx: CohortCtx, memberId: string) {
       })
       .from(attendance)
       .where(and(eq(attendance.memberId, memberId), lte(attendance.date, upTo))),
+    db
+      .select({ code: studentAchievements.code, earnedOn: studentAchievements.earnedOn })
+      .from(studentAchievements)
+      .where(eq(studentAchievements.memberId, memberId)),
+    db
+      .select({
+        attemptId: assessmentAttempts.id,
+        assessmentId: assessmentAttempts.assessmentId,
+        title: assessments.title,
+        attemptNumber: assessmentAttempts.attemptNumber,
+        status: assessmentAttempts.status,
+        reviewStatus: assessmentAttempts.reviewStatus,
+        submittedAt: assessmentAttempts.submittedAt,
+        restartCount: assessmentAttempts.restartCount,
+        autoScore: assessmentAttempts.autoScore,
+        autoTotal: assessmentAttempts.autoTotal,
+        manualScore: assessmentAttempts.manualScore,
+        manualTotal: assessmentAttempts.manualTotal,
+        passMarkPct: assessments.passMarkPct,
+      })
+      .from(assessmentAttempts)
+      .innerJoin(assessments, eq(assessments.id, assessmentAttempts.assessmentId))
+      .where(eq(assessmentAttempts.memberId, memberId))
+      .orderBy(desc(assessmentAttempts.submittedAt))
+      .limit(20),
   ]);
 
   const member = memberRows[0];
@@ -494,6 +530,26 @@ export async function getStudentDetail(ctx: CohortCtx, memberId: string) {
     topics: topicRows[0] ?? { total: 0, completed: 0 },
     reviews: reviewRows,
     attendance: attendanceRows[0] ?? { present: 0, late: 0, absent: 0 },
+    /**
+     * Every badge in the catalog, with whether this student holds it.
+     *
+     * The whole catalog rather than only what they have earned, because the admin screen is
+     * as much about granting a badge as about reading one — and a list you can only remove
+     * from is not a grant control.
+     */
+    badges: ACHIEVEMENTS.map((definition) => {
+      const earned = badgeRows.find((b) => b.code === definition.code) ?? null;
+      return {
+        code: definition.code,
+        name: definition.name,
+        description: definition.description,
+        emoji: definition.emoji,
+        tier: definition.tier,
+        earnedOn: earned?.earnedOn ?? null,
+      };
+    }),
+    /** This student's assessment attempts, newest first. Private to them and to the admin. */
+    assessments: assessmentRows,
   };
 }
 
@@ -584,6 +640,10 @@ export async function getStudentRoadmaps(cohortId: string, memberId: string) {
       roadmapTitle: roadmaps.title,
       track: roadmaps.track,
       slot: roadmaps.slot,
+      /** True once an admin has hand-edited this student's sequence. */
+      isCustomized: roadmaps.isCustomized,
+      /** Set when the last topic of the subject is done. */
+      completedAt: roadmaps.completedAt,
       subjectId: roadmaps.subjectId,
       subjectName: subjects.name,
       subjectSlug: subjects.slug,
@@ -609,12 +669,23 @@ export async function getStudentRoadmaps(cohortId: string, memberId: string) {
   return rows;
 }
 
+/**
+ * Every active student's topics for one date — one row per subject they are studying.
+ *
+ * A student with two subjects contributes two rows, and one with nothing assigned still
+ * contributes a row (with a null slot) so the sheet can show them as unassigned rather than
+ * dropping them off the list.
+ */
 export async function getAssignmentsForDate(cohortId: string, date: ISODate) {
   return db
     .select({
       memberId: cohortMembers.id,
       name: users.fullName,
       assignmentId: dailyAssignments.id,
+      slot: dailyAssignments.slot,
+      subjectName: sql<
+        string | null
+      >`coalesce(${subjects.name}, ${dailyAssignments.customSubjectName})`,
       topicId: dailyAssignments.topicId,
       // A syllabus topic assigned outside the student's two roadmaps lives on the
       // assignment row itself and has no `roadmap_topics` row to join to.
@@ -633,8 +704,10 @@ export async function getAssignmentsForDate(cohortId: string, date: ISODate) {
       and(eq(dailyAssignments.memberId, cohortMembers.id), eq(dailyAssignments.date, date)),
     )
     .leftJoin(roadmapTopics, eq(roadmapTopics.id, dailyAssignments.topicId))
+    .leftJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
+    .leftJoin(subjects, eq(subjects.id, roadmaps.subjectId))
     .where(and(eq(cohortMembers.cohortId, cohortId), eq(cohortMembers.status, 'active')))
-    .orderBy(asc(users.fullName));
+    .orderBy(asc(users.fullName), asc(dailyAssignments.slot));
 }
 
 /* -------------------------------------------------- end-of-cohort report */
@@ -690,16 +763,26 @@ export type TopicPlanSubject = {
   }[];
 };
 
+/** One subject's topic for the day, as the admin screen reports it. */
+export type TopicPlanToday = {
+  slot: RoadmapSlot;
+  topicId: string | null;
+  title: string | null;
+  subjectName: string | null;
+  /** 'admin' when this topic was chosen for this student by hand. */
+  source: 'auto' | 'admin' | null;
+  /**
+   * True when the topic came from a subject this student has no roadmap for — the one case
+   * where the day's topic is not a row on any of the roadmaps below.
+   */
+  offRoadmap: boolean;
+  ref: string | null;
+};
+
 export type StudentTopicPlan = {
   date: ISODate;
-  todayTopicId: string | null;
-  /** 'admin' when today's topic was chosen for this student by hand. */
-  todaySource: 'auto' | 'admin' | null;
-  /**
-   * Today's topic when it came from a subject this student has no roadmap for — the one
-   * case where the day's topic is not a row on any of the roadmaps below.
-   */
-  todayOffRoadmap: { title: string; subjectName: string | null; ref: string | null } | null;
+  /** Today's topic in each of the student's subjects, primary slot first. */
+  today: TopicPlanToday[];
   subjects: TopicPlanSubject[];
 };
 
@@ -722,18 +805,23 @@ export async function getStudentTopicPlan(
     getStudentRoadmaps(cohortId, memberId),
     db
       .select({
+        slot: dailyAssignments.slot,
         topicId: dailyAssignments.topicId,
         source: dailyAssignments.source,
+        topicTitle: roadmapTopics.title,
         customTopicTitle: dailyAssignments.customTopicTitle,
         customTopicRef: dailyAssignments.customTopicRef,
         customSubjectName: dailyAssignments.customSubjectName,
       })
       .from(dailyAssignments)
+      .leftJoin(roadmapTopics, eq(roadmapTopics.id, dailyAssignments.topicId))
       .where(and(eq(dailyAssignments.memberId, memberId), eq(dailyAssignments.date, date)))
-      .limit(1),
+      .orderBy(asc(dailyAssignments.slot)),
   ]);
 
-  const todayTopicId = assignment[0]?.topicId ?? null;
+  const todayTopicIds = new Set(
+    assignment.map((a) => a.topicId).filter((id): id is string => Boolean(id)),
+  );
   const subjects = new Map<string, TopicPlanSubject>();
 
   for (const row of rows) {
@@ -770,7 +858,7 @@ export async function getStudentTopicPlan(
       title: row.topicTitle!,
       status: row.topicStatus!,
       position: row.position ?? 0,
-      isToday: row.topicId === todayTopicId,
+      isToday: todayTopicIds.has(row.topicId),
     });
 
     subject.total += 1;
@@ -789,21 +877,63 @@ export async function getStudentTopicPlan(
       : null;
   }
 
-  const off = assignment[0]?.customTopicTitle
-    ? {
-        title: assignment[0].customTopicTitle,
-        subjectName: assignment[0].customSubjectName,
-        ref: assignment[0].customTopicRef,
-      }
-    : null;
+  const bySlot = new Map([...subjects.values()].map((s) => [s.slot, s]));
 
   return {
     date,
-    todayTopicId,
-    todaySource: assignment[0]?.source ?? null,
-    todayOffRoadmap: off,
+    today: assignment.map((row) => ({
+      slot: row.slot,
+      topicId: row.topicId,
+      title: row.topicTitle ?? row.customTopicTitle,
+      subjectName: row.customSubjectName ?? bySlot.get(row.slot)?.subjectName ?? null,
+      source: row.source,
+      offRoadmap: Boolean(row.customTopicTitle),
+      ref: row.customTopicRef,
+    })),
     subjects: [...subjects.values()].sort((a, b) =>
       a.slot === b.slot ? 0 : a.slot === 'primary' ? -1 : 1,
     ),
+  };
+}
+
+/* --------------------------------------------------------- admin leaderboard */
+
+export type AdminLeaderboardRow = Omit<LeaderboardRow, 'isSelf'> & { rank: number };
+
+export type AdminLeaderboardRecognitions = Record<
+  keyof Recognitions,
+  { name: string; memberId: string } | null
+>;
+
+/**
+ * The cohort ranking, for the console.
+ *
+ * Reads exactly the same standings the student leaderboard does — the brief's requirement
+ * is that the lead can see the data the ranking is calculated from, not a second ranking
+ * calculated differently. Rank is materialised here because the admin table sorts by other
+ * columns and a position that moved when you sorted by streak would be meaningless.
+ */
+export async function getAdminLeaderboard(ctx: CohortCtx): Promise<{
+  rows: AdminLeaderboardRow[];
+  recognitions: AdminLeaderboardRecognitions;
+}> {
+  const standings = await loadCohortStandings(ctx.cohort.id, ctx.today);
+
+  const rows = standings.rows.map((row, index) => ({ ...row, rank: index + 1 }));
+  const byId = new Map(rows.map((row) => [row.memberId, row]));
+  const resolve = (id: string | null) => {
+    const row = id === null ? null : (byId.get(id) ?? null);
+    return row ? { name: row.name, memberId: row.memberId } : null;
+  };
+
+  return {
+    rows,
+    recognitions: {
+      mostConsistent: resolve(standings.recognitions.mostConsistent),
+      longestStreak: resolve(standings.recognitions.longestStreak),
+      mostImproved: resolve(standings.recognitions.mostImproved),
+      bestComeback: resolve(standings.recognitions.bestComeback),
+      perfectWeek: resolve(standings.recognitions.perfectWeek),
+    },
   };
 }

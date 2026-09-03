@@ -69,9 +69,11 @@ import { awardPoints, recomputeRange, revokeAward, settleDay } from '@/server/sc
 import {
   deleteRoadmap,
   ensureRoadmaps,
+  nextTopicForRoadmap,
   replaceActiveSubject,
   resetRoadmapProgress,
   syncGoalSubjects,
+  syncRoadmapCompletion,
 } from '../roadmap';
 
 import { type Result, fail, guarded, ok, recordAudit } from './shared';
@@ -992,6 +994,8 @@ export async function addTopicAction(
       position: (max[0]?.n ?? 0) + 1,
     });
 
+    await markRoadmapCustomized(parsed.data.roadmapId);
+
     revalidatePath('/admin/roadmaps');
     revalidatePath('/roadmap');
     return ok();
@@ -1042,6 +1046,7 @@ export async function deleteTopicAction(
     await db
       .delete(roadmapTopics)
       .where(and(eq(roadmapTopics.id, topicId), eq(roadmapTopics.roadmapId, roadmapId)));
+    await markRoadmapCustomized(roadmapId);
     revalidatePath('/admin/roadmaps');
     revalidatePath('/roadmap');
     return ok();
@@ -1066,11 +1071,46 @@ export async function reorderTopicsAction(
         .where(and(eq(roadmapTopics.id, id), eq(roadmapTopics.roadmapId, roadmapId)));
     }
 
+    await markRoadmapCustomized(roadmapId);
+
     revalidatePath('/admin/roadmaps');
     revalidatePath('/roadmap');
     return ok();
   }, 'We could not reorder those topics. Please try again.');
 }
+
+/**
+ * Records that this student's sequence is no longer the generated one.
+ *
+ * Called by every write that changes *what is on* a roadmap or *what order it is in* —
+ * reorder, add, delete, and an off-plan topic appended from the syllabus. Editing a topic's
+ * title or estimate is not customisation of the sequence and deliberately does not set it.
+ * `Reset to default` regenerates the roadmap from the syllabus, which produces a fresh row
+ * and therefore clears this by construction.
+ */
+async function markRoadmapCustomized(roadmapId: string): Promise<void> {
+  await db.update(roadmaps).set({ isCustomized: true }).where(eq(roadmaps.id, roadmapId));
+}
+
+/**
+ * Which of the student's two subject slots a roadmap topic belongs to.
+ *
+ * A day holds one assignment per slot, so every write that sets today's topic has to know
+ * which one it is filling. Returns null when the topic id does not belong to this member —
+ * callers treat that as "not this student's topic".
+ */
+async function slotForTopic(memberId: string, topicId: string): Promise<RoadmapSlot | null> {
+  const [row] = await db
+    .select({ slot: roadmaps.slot })
+    .from(roadmapTopics)
+    .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
+    .where(and(eq(roadmapTopics.id, topicId), eq(roadmaps.memberId, memberId)))
+    .limit(1);
+  return row?.slot ?? null;
+}
+
+/** The conflict target for one student's topic in one subject on one day. */
+const ASSIGNMENT_KEY = [dailyAssignments.memberId, dailyAssignments.date, dailyAssignments.slot];
 
 async function assertRoadmapInCohort(roadmapId: string, cohortId: string): Promise<void> {
   const rows = await db
@@ -1097,22 +1137,41 @@ export async function setAssignmentAction(
     const input = parsed.data;
     await assertMemberInCohort(input.memberId, cohortId);
 
+    /*
+     * The slot follows the topic's own roadmap, so saving an Anatomy topic can never
+     * overwrite the Physiology topic sitting alongside it on the same day. A save that
+     * carries no topic — the minutes-and-note edit, which is all this sheet sends — names
+     * the slot it is editing instead.
+     */
+    let slot: RoadmapSlot = input.slot ?? 'primary';
+    if (input.topicId) {
+      const resolved = await slotForTopic(input.memberId, input.topicId);
+      if (!resolved) return fail('That topic is not on this student’s roadmap.');
+      slot = resolved;
+    }
+
+    /*
+     * Editing the minutes or the note leaves the topic alone. It used to null it: the sheet
+     * has no topic field, so every save silently unassigned the student's topic for the day.
+     */
+    const topicFields = input.topicId ? { topicId: input.topicId, ...NO_CUSTOM_TOPIC } : {};
+
     await db
       .insert(dailyAssignments)
       .values({
         memberId: input.memberId,
         date: input.date,
+        slot,
         topicId: input.topicId ?? null,
         plannedMinutes: input.plannedMinutes,
         note: input.note ?? null,
       })
       .onConflictDoUpdate({
-        target: [dailyAssignments.memberId, dailyAssignments.date],
+        target: ASSIGNMENT_KEY,
         set: {
-          topicId: input.topicId ?? null,
           plannedMinutes: input.plannedMinutes,
           note: input.note ?? null,
-          ...NO_CUSTOM_TOPIC,
+          ...topicFields,
         },
       });
 
@@ -1149,8 +1208,13 @@ export async function bulkAssignAction(
       .where(and(eq(cohortMembers.cohortId, cohortId), eq(cohortMembers.status, 'active')))
       .orderBy(asc(users.fullName));
 
+    /*
+     * Hand-picked topics are pinned per *subject*, not per student: an admin who chose
+     * today's Anatomy topic for someone has said nothing about their Physiology, and the
+     * bulk run should still fill the slot they left alone.
+     */
     const individual = await db
-      .select({ memberId: dailyAssignments.memberId })
+      .select({ memberId: dailyAssignments.memberId, slot: dailyAssignments.slot })
       .from(dailyAssignments)
       .innerJoin(cohortMembers, eq(cohortMembers.id, dailyAssignments.memberId))
       .where(
@@ -1160,45 +1224,62 @@ export async function bulkAssignAction(
           eq(dailyAssignments.source, 'admin'),
         ),
       );
-    const pinned = new Set(individual.map((row) => row.memberId));
+    const pinned = new Set(individual.map((row) => `${row.memberId}:${row.slot}`));
+
+    const memberIds = members.map((m) => m.id);
+    const plans =
+      memberIds.length > 0
+        ? await db
+            .select({ id: roadmaps.id, memberId: roadmaps.memberId, slot: roadmaps.slot })
+            .from(roadmaps)
+            .where(inArray(roadmaps.memberId, memberIds))
+            .orderBy(asc(roadmaps.slot))
+        : [];
+
+    const nameById = new Map(members.map((m) => [m.id, m.name]));
 
     let assigned = 0;
-    const skippedNames: string[] = [];
-    for (const member of members) {
-      if (!overwriteIndividual && pinned.has(member.id)) {
-        skippedNames.push(member.name);
+    let completed = 0;
+    const skippedNames = new Set<string>();
+
+    for (const plan of plans) {
+      /*
+       * Each roadmap is advanced along its *own* sequence. A student whose order an admin
+       * has redesigned follows that order; everyone else follows the syllabus order. The
+       * bulk run never reads or writes the master syllabus, so one student's custom
+       * sequence cannot reach another's.
+       */
+      const next = await nextTopicForRoadmap(plan.id);
+      await syncRoadmapCompletion(plan.id, Boolean(next));
+
+      if (!next) {
+        // The subject is finished. It is marked complete above and deliberately does not
+        // wrap back round to topic 1.
+        completed += 1;
         continue;
       }
-      const next = await db
-        .select({ id: roadmapTopics.id })
-        .from(roadmapTopics)
-        .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
-        .where(
-          and(
-            eq(roadmaps.memberId, member.id),
-            inArray(roadmapTopics.status, ['in_progress', 'upcoming']),
-          ),
-        )
-        .orderBy(asc(roadmapTopics.status), asc(roadmapTopics.position))
-        .limit(1);
 
-      if (!next[0]) continue;
+      if (!overwriteIndividual && pinned.has(`${plan.memberId}:${plan.slot}`)) {
+        skippedNames.add(nameById.get(plan.memberId) ?? '');
+        continue;
+      }
 
       await db
         .insert(dailyAssignments)
         .values({
-          memberId: member.id,
+          memberId: plan.memberId,
           date,
-          topicId: next[0].id,
+          slot: plan.slot,
+          topicId: next.id,
           plannedMinutes,
           source: 'auto',
         })
         .onConflictDoUpdate({
-          target: [dailyAssignments.memberId, dailyAssignments.date],
+          target: ASSIGNMENT_KEY,
           // The row reverts to `auto` on an overwrite, because that is now what it is: a
           // later bulk run has no reason to treat it as hand-picked a second time.
           set: {
-            topicId: next[0].id,
+            topicId: next.id,
             plannedMinutes,
             source: 'auto',
             assignedByUserId: null,
@@ -1214,14 +1295,15 @@ export async function bulkAssignAction(
       action: 'assignment.bulk',
       entity: 'cohort',
       entityId: cohortId,
-      payload: { date, assigned, skipped: skippedNames.length, overwriteIndividual },
+      payload: { date, assigned, completed, skipped: skippedNames.size, overwriteIndividual },
     });
 
     revalidatePath('/admin/roadmaps');
     revalidatePath('/admin/students');
     revalidatePath('/today');
     revalidatePath('/roadmap');
-    return ok({ assigned, skipped: skippedNames.length, skippedNames });
+    const names = [...skippedNames].filter(Boolean).sort();
+    return ok({ assigned, skipped: names.length, skippedNames: names });
   }, 'We could not assign topics. Please try again.');
 }
 
@@ -1283,6 +1365,7 @@ export async function assignIndividualTopicAction(
         title: roadmapTopics.title,
         status: roadmapTopics.status,
         roadmapId: roadmapTopics.roadmapId,
+        slot: roadmaps.slot,
         subjectName: subjects.name,
       })
       .from(roadmapTopics)
@@ -1320,6 +1403,9 @@ export async function assignIndividualTopicAction(
       .set({ status: 'in_progress' })
       .where(eq(roadmapTopics.id, topic.id));
 
+    // The subject has work in it again, so it is no longer a finished roadmap.
+    await syncRoadmapCompletion(topic.roadmapId, true);
+
     const stamp = {
       topicId: topic.id,
       plannedMinutes,
@@ -1329,13 +1415,11 @@ export async function assignIndividualTopicAction(
       ...NO_CUSTOM_TOPIC,
     };
 
+    // Filling this subject's slot leaves the student's other subject for the day alone.
     await db
       .insert(dailyAssignments)
-      .values({ memberId, date, ...stamp })
-      .onConflictDoUpdate({
-        target: [dailyAssignments.memberId, dailyAssignments.date],
-        set: stamp,
-      });
+      .values({ memberId, date, slot: topic.slot, ...stamp })
+      .onConflictDoUpdate({ target: ASSIGNMENT_KEY, set: stamp });
 
     await recordAudit({
       actorUserId: user.id,
@@ -1424,7 +1508,7 @@ export async function assignSyllabusTopicAction(
 
     /* The roadmap for this subject, if the student has one. */
     const [roadmap] = await db
-      .select({ id: roadmaps.id })
+      .select({ id: roadmaps.id, slot: roadmaps.slot })
       .from(roadmaps)
       .innerJoin(subjects, eq(subjects.id, roadmaps.subjectId))
       .where(and(eq(roadmaps.memberId, memberId), eq(subjects.slug, resolved.subjectSlug)))
@@ -1447,13 +1531,15 @@ export async function assignSyllabusTopicAction(
         assignedAt: new Date(),
       };
 
+      /*
+       * There is no roadmap to read a slot from, so the detour takes the primary one: it is
+       * standing in for the day's main focus. The student's secondary subject keeps its own
+       * topic for the day.
+       */
       await db
         .insert(dailyAssignments)
-        .values({ memberId, date, ...stamp })
-        .onConflictDoUpdate({
-          target: [dailyAssignments.memberId, dailyAssignments.date],
-          set: stamp,
-        });
+        .values({ memberId, date, slot: 'primary', ...stamp })
+        .onConflictDoUpdate({ target: ASSIGNMENT_KEY, set: stamp });
 
       await recordAudit({
         actorUserId: user.id,
@@ -1540,6 +1626,8 @@ export async function assignSyllabusTopicAction(
 
       topicId = created!.id;
       placement = 'added';
+      // A topic the syllabus never put here is an edit to this student's sequence.
+      await markRoadmapCustomized(roadmap.id);
     }
 
     // Same rule as the individual assignment: exactly one topic is in progress per roadmap,
@@ -1560,6 +1648,8 @@ export async function assignSyllabusTopicAction(
       .set({ status: 'in_progress' })
       .where(eq(roadmapTopics.id, topicId));
 
+    await syncRoadmapCompletion(roadmap.id, true);
+
     const stamp = {
       topicId,
       plannedMinutes,
@@ -1571,11 +1661,8 @@ export async function assignSyllabusTopicAction(
 
     await db
       .insert(dailyAssignments)
-      .values({ memberId, date, ...stamp })
-      .onConflictDoUpdate({
-        target: [dailyAssignments.memberId, dailyAssignments.date],
-        set: stamp,
-      });
+      .values({ memberId, date, slot: roadmap.slot, ...stamp })
+      .onConflictDoUpdate({ target: ASSIGNMENT_KEY, set: stamp });
 
     await recordAudit({
       actorUserId: user.id,

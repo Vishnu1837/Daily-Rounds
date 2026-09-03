@@ -26,6 +26,10 @@ export type AchievementContext = {
   totalStudyMinutes: number;
   quizAttempts: number;
   comebackDays: number;
+  /** Assessments this student has submitted, at any score. */
+  assessmentsCompleted: number;
+  /** Assessments submitted at or above the pass mark the admin set. */
+  assessmentsPassed: number;
 };
 
 export type AchievementDefinition = {
@@ -37,6 +41,17 @@ export type AchievementDefinition = {
   /** Evaluated server-side after each scoring event. */
   earned: (ctx: AchievementContext) => boolean;
 };
+
+/**
+ * Badges are public within the cohort; assessment *results* never are.
+ *
+ * The distinction the brief draws, encoded once here so no surface has to remember it: a
+ * classmate may see that someone earned "Assessment Cleared", and may not see what they
+ * scored, which questions they missed, how long they took, or any integrity event. Every
+ * definition below therefore describes a milestone, and none of them carries a number that
+ * could be read back as a mark.
+ */
+export const BADGES_ARE_PUBLIC = true;
 
 const currentStreak = (ctx: AchievementContext) =>
   calculateCurrentStreak(ctx.calendar, ctx.showedUp, ctx.today).length;
@@ -65,6 +80,30 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     emoji: '✨',
     tier: 'bronze',
     earned: (ctx) => bestStreak(ctx) >= 3,
+  },
+  {
+    code: 'streak_7',
+    name: 'Full Week',
+    description: 'Maintain a 7-day active streak.',
+    emoji: '📅',
+    tier: 'silver',
+    earned: (ctx) => bestStreak(ctx) >= 7,
+  },
+  {
+    code: 'streak_14',
+    name: 'Two Weeks Straight',
+    description: 'Maintain a 14-day active streak.',
+    emoji: '🗓️',
+    tier: 'gold',
+    earned: (ctx) => bestStreak(ctx) >= 14,
+  },
+  {
+    code: 'streak_30',
+    name: 'A Month of Rounds',
+    description: 'Maintain a 30-day active streak.',
+    emoji: '👑',
+    tier: 'gold',
+    earned: (ctx) => bestStreak(ctx) >= 30,
   },
   {
     code: 'streak_5',
@@ -161,6 +200,24 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
       const b = calculateConsistency(ctx.calendar, ctx.lookup, thisWeek, ctx.today);
       return a.activeDays > 0 && a.missedDays === 0 && b.activeDays > 0 && b.missedDays === 0;
     },
+  },
+  {
+    code: 'first_assessment',
+    name: 'First Assessment',
+    description: 'Complete your first assessment.',
+    emoji: '📄',
+    tier: 'bronze',
+    earned: (ctx) => ctx.assessmentsCompleted >= 1,
+  },
+  {
+    code: 'assessment_cleared',
+    name: 'Assessment Cleared',
+    description: 'Complete an assessment at or above the pass mark.',
+    emoji: '✅',
+    tier: 'silver',
+    // Deliberately a yes/no. The score that earned it is private to the student and their
+    // cohort lead; the badge says only that it happened.
+    earned: (ctx) => ctx.assessmentsPassed >= 1,
   },
 ];
 

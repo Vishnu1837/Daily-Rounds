@@ -20,7 +20,7 @@ import { cacheLife, cacheTag } from 'next/cache';
 import { cache } from 'react';
 
 import { db } from '@/db/client';
-import type { AttendanceStatus, DayBand, PointEvent } from '@/db/schema';
+import type { AttendanceStatus, DayBand, PointEvent, RoadmapSlot } from '@/db/schema';
 import {
   announcementReads,
   announcements,
@@ -84,6 +84,109 @@ import { readActivity, readTotalPoints } from '@/server/scoring';
 
 /* ------------------------------------------------------------------ home */
 
+/**
+ * One of the student's subjects, as today sees it.
+ *
+ * A student carries two roadmaps, so "today's topic" is two answers, not one. Each entry is
+ * a subject the student is actually studying, and its `status` is the honest state of that
+ * subject today — a finished roadmap says so rather than borrowing the other subject's
+ * topic, and a subject with no topic set says that rather than rendering blank.
+ */
+export type DailyFocus = {
+  slot: RoadmapSlot;
+  subjectName: string | null;
+  status: 'assigned' | 'completed' | 'unassigned';
+  topicTitle: string | null;
+  topicId: string | null;
+  /** Where the topic sits in the curriculum; drives the matching knowledge check. */
+  topicRef: string | null;
+  plannedMinutes: number;
+  note: string | null;
+};
+
+/**
+ * Today's topic in every subject the student is studying, primary slot first.
+ *
+ * Built from the roadmaps rather than from the assignments, because a subject with nothing
+ * assigned still has to appear — as "completed" or "no topic set" — and only the roadmap
+ * knows it exists. An off-roadmap topic (an admin's one-day detour into a subject the
+ * student has no roadmap for) has no roadmap to hang on and is folded into the slot it was
+ * recorded against.
+ */
+async function readDailyFocus(memberId: string, today: ISODate): Promise<DailyFocus[]> {
+  const [plans, assigned] = await Promise.all([
+    db
+      .select({
+        slot: roadmaps.slot,
+        subjectName: subjects.name,
+        completedAt: roadmaps.completedAt,
+      })
+      .from(roadmaps)
+      .leftJoin(subjects, eq(subjects.id, roadmaps.subjectId))
+      .where(eq(roadmaps.memberId, memberId))
+      .orderBy(asc(roadmaps.slot)),
+    db
+      .select({
+        slot: dailyAssignments.slot,
+        plannedMinutes: dailyAssignments.plannedMinutes,
+        note: dailyAssignments.note,
+        topicId: roadmapTopics.id,
+        /*
+         * An admin may set the day's topic from anywhere in the syllabus, including a
+         * subject this student has no roadmap for — that one has no `roadmap_topics` row to
+         * join to and is recorded on the assignment itself. The roadmap topic wins whenever
+         * there is one.
+         */
+        topicTitle: sql<
+          string | null
+        >`coalesce(${roadmapTopics.title}, ${dailyAssignments.customTopicTitle})`,
+        topicRef: sql<
+          string | null
+        >`coalesce(${roadmapTopics.curriculumRef}, ${dailyAssignments.customTopicRef})`,
+        subjectName: sql<
+          string | null
+        >`coalesce(${subjects.name}, ${dailyAssignments.customSubjectName})`,
+      })
+      .from(dailyAssignments)
+      .leftJoin(roadmapTopics, eq(roadmapTopics.id, dailyAssignments.topicId))
+      .leftJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
+      .leftJoin(subjects, eq(subjects.id, roadmaps.subjectId))
+      .where(and(eq(dailyAssignments.memberId, memberId), eq(dailyAssignments.date, today))),
+  ]);
+
+  const bySlot = new Map(assigned.map((row) => [row.slot, row]));
+  const slots: RoadmapSlot[] = ['primary', 'secondary'];
+  const focus: DailyFocus[] = [];
+
+  for (const slot of slots) {
+    const plan = plans.find((p) => p.slot === slot);
+    const row = bySlot.get(slot);
+    // A slot with neither a roadmap nor an assignment is a subject the student does not
+    // have. It is left out entirely rather than rendered as an empty card.
+    if (!plan && !row) continue;
+
+    focus.push({
+      slot,
+      // The assignment's subject name wins: on an off-roadmap day it is the only one that
+      // describes what the student was actually asked to study.
+      subjectName: row?.subjectName ?? plan?.subjectName ?? null,
+      status: row?.topicTitle ? 'assigned' : plan?.completedAt ? 'completed' : 'unassigned',
+      topicTitle: row?.topicTitle ?? null,
+      topicId: row?.topicId ?? null,
+      topicRef: row?.topicRef ?? null,
+      plannedMinutes: row?.plannedMinutes ?? 90,
+      note: row?.note ?? null,
+    });
+  }
+
+  return focus;
+}
+
+/** The subject the day's session and knowledge check default to: the first with a topic. */
+function leadFocus(focus: DailyFocus[]): DailyFocus | null {
+  return focus.find((f) => f.status === 'assigned') ?? focus[0] ?? null;
+}
+
 export type TodayTask = {
   key: PointEvent | 'study_session';
   label: string;
@@ -101,15 +204,19 @@ export type HomeData = {
   comeback: { isComeback: boolean; missedDays: ISODate[] };
   isActiveDay: boolean;
   isHolidayToday: boolean;
-  assignment: {
-    topicTitle: string | null;
-    topicId: string | null;
-    /** Where the topic sits in the curriculum; drives the matching knowledge check. */
-    topicRef: string | null;
-    subjectName: string | null;
-    plannedMinutes: number;
-    note: string | null;
-  } | null;
+  /**
+   * Today's topic in each of the student's subjects, primary first.
+   *
+   * The dashboard renders one section per entry, so a student studying Anatomy and
+   * Physiology sees both of today's topics on the same screen.
+   */
+  focus: DailyFocus[];
+  /**
+   * The subject the day's study session and knowledge check default to — the first one with
+   * a topic set. Kept alongside `focus` because the timer, the quiz and the points ledger
+   * are still one-per-day and need a single answer.
+   */
+  assignment: DailyFocus | null;
   session: {
     id: string;
     status: 'running' | 'paused' | 'completed' | 'abandoned';
@@ -182,7 +289,7 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
 
   const [
     activity,
-    assignmentRows,
+    focus,
     sessionRows,
     attendanceRows,
     ledgerRows,
@@ -196,33 +303,7 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
     standing,
   ] = await Promise.all([
     readActivity(memberId, calendar.startDate, upTo),
-    db
-      .select({
-        plannedMinutes: dailyAssignments.plannedMinutes,
-        note: dailyAssignments.note,
-        topicId: roadmapTopics.id,
-        /*
-         * An admin may set the day's topic from anywhere in the syllabus, including a
-         * subject this student has no roadmap for — that one has no `roadmap_topics` row to
-         * join to and is recorded on the assignment itself. The roadmap topic wins whenever
-         * there is one.
-         */
-        topicTitle: sql<
-          string | null
-        >`coalesce(${roadmapTopics.title}, ${dailyAssignments.customTopicTitle})`,
-        topicRef: sql<
-          string | null
-        >`coalesce(${roadmapTopics.curriculumRef}, ${dailyAssignments.customTopicRef})`,
-        subjectName: sql<
-          string | null
-        >`coalesce(${subjects.name}, ${dailyAssignments.customSubjectName})`,
-      })
-      .from(dailyAssignments)
-      .leftJoin(roadmapTopics, eq(roadmapTopics.id, dailyAssignments.topicId))
-      .leftJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
-      .leftJoin(subjects, eq(subjects.id, roadmaps.subjectId))
-      .where(and(eq(dailyAssignments.memberId, memberId), eq(dailyAssignments.date, today)))
-      .limit(1),
+    readDailyFocus(memberId, today),
     db
       .select()
       .from(studySessions)
@@ -314,7 +395,7 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
   }
   const has = (e: PointEvent) => earned.has(e);
 
-  const assignment = assignmentRows[0] ?? null;
+  const assignment = leadFocus(focus);
   const session = sessionRows[0] ?? null;
   const attendedStatus = attendanceRows[0]?.status ?? null;
 
@@ -371,16 +452,8 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
     comeback: { isComeback: comeback.isComeback, missedDays: comeback.missedDays },
     isActiveDay: isActiveStudyDay(calendar, today),
     isHolidayToday: isHoliday(calendar, today),
-    assignment: assignment
-      ? {
-          topicTitle: assignment.topicTitle,
-          topicId: assignment.topicId,
-          topicRef: assignment.topicRef,
-          subjectName: assignment.subjectName,
-          plannedMinutes: assignment.plannedMinutes,
-          note: assignment.note,
-        }
-      : null,
+    focus,
+    assignment,
     session: session
       ? {
           id: session.id,
@@ -432,7 +505,17 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
 /* --------------------------------------------------------------- study */
 
 export type StudySnapshot = {
-  assignment: HomeData['assignment'];
+  /** Today's topic in each subject — the study screen lets the student pick which to work on. */
+  focus: DailyFocus[];
+  /** The one the timer opens on by default. */
+  assignment: DailyFocus | null;
+  /**
+   * The subject today's session was started against, if there is one.
+   *
+   * Once the timer is running the choice is made, and the screen has to keep showing that
+   * subject across reloads rather than falling back to whichever one leads the dashboard.
+   */
+  sessionSlot: RoadmapSlot | null;
   session: HomeData['session'];
   blockDone: boolean;
   targetDone: boolean;
@@ -449,34 +532,8 @@ export type StudySnapshot = {
 export async function getStudySnapshot(ctx: MemberContext): Promise<StudySnapshot> {
   const { memberId, today } = ctx;
 
-  const [assignmentRows, sessionRows, ledgerRows, checkInRows] = await Promise.all([
-    db
-      .select({
-        plannedMinutes: dailyAssignments.plannedMinutes,
-        note: dailyAssignments.note,
-        topicId: roadmapTopics.id,
-        /*
-         * An admin may set the day's topic from anywhere in the syllabus, including a
-         * subject this student has no roadmap for — that one has no `roadmap_topics` row to
-         * join to and is recorded on the assignment itself. The roadmap topic wins whenever
-         * there is one.
-         */
-        topicTitle: sql<
-          string | null
-        >`coalesce(${roadmapTopics.title}, ${dailyAssignments.customTopicTitle})`,
-        topicRef: sql<
-          string | null
-        >`coalesce(${roadmapTopics.curriculumRef}, ${dailyAssignments.customTopicRef})`,
-        subjectName: sql<
-          string | null
-        >`coalesce(${subjects.name}, ${dailyAssignments.customSubjectName})`,
-      })
-      .from(dailyAssignments)
-      .leftJoin(roadmapTopics, eq(roadmapTopics.id, dailyAssignments.topicId))
-      .leftJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
-      .leftJoin(subjects, eq(subjects.id, roadmaps.subjectId))
-      .where(and(eq(dailyAssignments.memberId, memberId), eq(dailyAssignments.date, today)))
-      .limit(1),
+  const [focus, sessionRows, ledgerRows, checkInRows] = await Promise.all([
+    readDailyFocus(memberId, today),
     db
       .select()
       .from(studySessions)
@@ -494,21 +551,17 @@ export async function getStudySnapshot(ctx: MemberContext): Promise<StudySnapsho
       .limit(1),
   ]);
 
-  const assignment = assignmentRows[0] ?? null;
   const session = sessionRows[0] ?? null;
   const events = new Set(ledgerRows.map((r) => r.event));
 
+  const sessionSlot = session?.topicId
+    ? (focus.find((f) => f.topicId === session.topicId)?.slot ?? null)
+    : null;
+
   return {
-    assignment: assignment
-      ? {
-          topicTitle: assignment.topicTitle,
-          topicId: assignment.topicId,
-          topicRef: assignment.topicRef,
-          subjectName: assignment.subjectName,
-          plannedMinutes: assignment.plannedMinutes,
-          note: assignment.note,
-        }
-      : null,
+    focus,
+    assignment: leadFocus(focus),
+    sessionSlot,
     session: session
       ? {
           id: session.id,
@@ -539,6 +592,15 @@ export type LeaderboardRow = {
   points: number;
   improvementPct: number;
   perfectWeeks: number;
+  /**
+   * Badges this student has earned, visible to the whole cohort.
+   *
+   * The public half of the privacy rule: a classmate may see that someone holds
+   * "Assessment Cleared" or a 7-day streak. What they may never see is the score, the answer
+   * sheet or the timings behind it — which is why this carries a code, a name and an emoji,
+   * and nothing numeric.
+   */
+  badges: { code: string; name: string; emoji: string; tier: string }[];
   isSelf: boolean;
 };
 
@@ -571,7 +633,18 @@ type CohortStandings = {
  * viewer, and leaving it in would have given every student their own copy of the cache entry
  * — the same thirty renders, just harder to see.
  */
-const loadCohortStandings = async (cohortId: string, today: ISODate): Promise<CohortStandings> => {
+/**
+ * The cohort ranking, keyed by nothing but the cohort and the day.
+ *
+ * Exported because the admin console shows the same standings the students see — the brief
+ * asks the lead to be able to read the ranking their students are reading, and computing it
+ * a second way is how the two would drift apart. Cached and tagged, so both sides share one
+ * computation.
+ */
+export const loadCohortStandings = async (
+  cohortId: string,
+  today: ISODate,
+): Promise<CohortStandings> => {
   'use cache';
   cacheTag(cohortTag.activity(cohortId), cohortTag.config(cohortId));
   /*
@@ -602,7 +675,7 @@ const loadCohortStandings = async (cohortId: string, today: ISODate): Promise<Co
     .from(cohortMembers)
     .where(and(eq(cohortMembers.cohortId, cohort.id), eq(cohortMembers.status, 'active')));
 
-  const [members, activityRows, pointRows, comebackRows] = await Promise.all([
+  const [members, activityRows, pointRows, comebackRows, badgeRows] = await Promise.all([
     db
       .select({
         memberId: cohortMembers.id,
@@ -641,6 +714,12 @@ const loadCohortStandings = async (cohortId: string, today: ISODate): Promise<Co
       .from(checkIns)
       .where(and(inArray(checkIns.memberId, activeMembers), eq(checkIns.isComeback, true)))
       .groupBy(checkIns.memberId),
+    // Public within the cohort. Only the code travels — never anything it was earned for.
+    db
+      .select({ memberId: studentAchievements.memberId, code: studentAchievements.code })
+      .from(studentAchievements)
+      .where(inArray(studentAchievements.memberId, activeMembers))
+      .orderBy(asc(studentAchievements.earnedOn)),
   ]);
 
   if (members.length === 0) return { rows: [], recognitions: EMPTY_RECOGNITIONS };
@@ -656,6 +735,22 @@ const loadCohortStandings = async (cohortId: string, today: ISODate): Promise<Co
   }
   const pointsBy = new Map(pointRows.map((r) => [r.memberId, r.total]));
   const comebacksBy = new Map(comebackRows.map((r) => [r.memberId, r]));
+
+  const badgesBy = new Map<string, { code: string; name: string; emoji: string; tier: string }[]>();
+  for (const row of badgeRows) {
+    const definition = ACHIEVEMENTS_BY_CODE.get(row.code);
+    // A code with no definition is one that has been retired from the catalog. The earned
+    // row stays in the database; it simply stops being rendered.
+    if (!definition) continue;
+    const list = badgesBy.get(row.memberId) ?? [];
+    list.push({
+      code: definition.code,
+      name: definition.name,
+      emoji: definition.emoji,
+      tier: definition.tier,
+    });
+    badgesBy.set(row.memberId, list);
+  }
 
   const rows: Omit<LeaderboardRow, 'isSelf'>[] = members.map((m) => {
     const days = byMember.get(m.memberId) ?? new Map();
@@ -688,6 +783,7 @@ const loadCohortStandings = async (cohortId: string, today: ISODate): Promise<Co
       bestStreak: calculateBestStreak(calendar, showedUp, upTo).length,
       points: pointsBy.get(m.memberId) ?? 0,
       improvementPct: calculateImprovement(weeks).deltaPct,
+      badges: badgesBy.get(m.memberId) ?? [],
       perfectWeeks: weeks.filter((w) => w.activeDays > 0 && w.completedDays === w.activeDays)
         .length,
     };
@@ -860,14 +956,17 @@ export async function getRoadmaps(ctx: MemberContext): Promise<RoadmapView[]> {
       .where(eq(roadmaps.memberId, memberId))
       // Slot order, so the primary subject is always the first tab.
       .orderBy(asc(roadmaps.slot), asc(roadmapTopics.position)),
+    // One row per subject slot, so the "today" badge lands on both subjects' roadmaps
+    // rather than only whichever one happened to sort first.
     db
       .select({ topicId: dailyAssignments.topicId })
       .from(dailyAssignments)
-      .where(and(eq(dailyAssignments.memberId, memberId), eq(dailyAssignments.date, today)))
-      .limit(1),
+      .where(and(eq(dailyAssignments.memberId, memberId), eq(dailyAssignments.date, today))),
   ]);
 
-  const todayTopicId = todayAssignment[0]?.topicId ?? null;
+  const todayTopicIds = new Set(
+    todayAssignment.map((row) => row.topicId).filter((id): id is string => Boolean(id)),
+  );
   const views = new Map<string, RoadmapView>();
 
   for (const row of roadmapRows) {
@@ -906,7 +1005,7 @@ export async function getRoadmaps(ctx: MemberContext): Promise<RoadmapView[]> {
       description: row.topicDescription,
       status: row.topicStatus!,
       estimatedMinutes: row.estimatedMinutes!,
-      isToday: row.topicId === todayTopicId,
+      isToday: todayTopicIds.has(row.topicId),
     });
 
     view.total += 1;
@@ -977,7 +1076,9 @@ export async function getCalendarMonth(ctx: MemberContext, month: ISODate): Prom
           gte(dailyAssignments.date, first),
           lte(dailyAssignments.date, last),
         ),
-      ),
+      )
+      // A day now carries a topic per subject; slot order keeps the primary one first.
+      .orderBy(asc(dailyAssignments.date), asc(dailyAssignments.slot)),
     db
       .select({ date: attendance.date, status: attendance.status })
       .from(attendance)
@@ -1001,7 +1102,21 @@ export async function getCalendarMonth(ctx: MemberContext, month: ISODate): Prom
   ]);
 
   const activityBy = new Map(activityRows.map((r) => [r.date, r]));
-  const assignmentBy = new Map(assignmentRows.map((r) => [r.date, r]));
+  /*
+   * A calendar cell has room for one line, and a day has up to two topics — one per
+   * subject. Both are shown, joined, rather than picking a winner: the cell is a reminder
+   * of what the day held, and dropping a subject from it would make the month lie about
+   * half the student's work.
+   */
+  const assignmentBy = new Map<ISODate, { topicTitle: string | null; plannedMinutes: number }>();
+  for (const row of assignmentRows) {
+    const existing = assignmentBy.get(row.date);
+    const titles = [existing?.topicTitle, row.topicTitle].filter(Boolean) as string[];
+    assignmentBy.set(row.date, {
+      topicTitle: titles.length > 0 ? titles.join(' · ') : null,
+      plannedMinutes: (existing?.plannedMinutes ?? 0) + row.plannedMinutes,
+    });
+  }
   const attendanceBy = new Map(attendanceRows.map((r) => [r.date, r.status]));
   const eventsBy = new Map<ISODate, typeof eventRows>();
   for (const e of eventRows) {
@@ -1247,6 +1362,8 @@ export async function getCheckInContext(ctx: MemberContext): Promise<CheckInCont
         .from(checkIns)
         .where(and(eq(checkIns.memberId, memberId), eq(checkIns.date, today)))
         .limit(1),
+      // Both of today's subjects: the check-in asks what the student studied, and it has
+      // to name everything that was on the plan.
       db
         .select({
           plannedMinutes: dailyAssignments.plannedMinutes,
@@ -1255,7 +1372,7 @@ export async function getCheckInContext(ctx: MemberContext): Promise<CheckInCont
         .from(dailyAssignments)
         .leftJoin(roadmapTopics, eq(roadmapTopics.id, dailyAssignments.topicId))
         .where(and(eq(dailyAssignments.memberId, memberId), eq(dailyAssignments.date, today)))
-        .limit(1),
+        .orderBy(asc(dailyAssignments.slot)),
       db
         .select({ topicTitle: roadmapTopics.title })
         .from(dailyAssignments)
@@ -1266,7 +1383,7 @@ export async function getCheckInContext(ctx: MemberContext): Promise<CheckInCont
             gte(dailyAssignments.date, addDays(today, 1)),
           ),
         )
-        .orderBy(asc(dailyAssignments.date))
+        .orderBy(asc(dailyAssignments.date), asc(dailyAssignments.slot))
         .limit(1),
       db
         .select({ elapsedSeconds: studySessions.elapsedSeconds })
@@ -1287,8 +1404,13 @@ export async function getCheckInContext(ctx: MemberContext): Promise<CheckInCont
           satisfaction: existing.satisfaction,
         }
       : null,
-    topicTitle: assignmentRows[0]?.topicTitle ?? null,
-    plannedMinutes: assignmentRows[0]?.plannedMinutes ?? 90,
+    topicTitle:
+      assignmentRows
+        .map((r) => r.topicTitle)
+        .filter(Boolean)
+        .join(' · ') || null,
+    plannedMinutes:
+      assignmentRows.length > 0 ? assignmentRows.reduce((sum, r) => sum + r.plannedMinutes, 0) : 90,
     nextTopicTitle: nextAssignmentRows[0]?.topicTitle ?? null,
     comeback: { isComeback: comeback.isComeback, missedDays: comeback.missedDays },
     sessionMinutes: Math.round(sessionRows.reduce((s, r) => s + r.elapsedSeconds, 0) / 60),

@@ -5,6 +5,8 @@ import { db } from '@/db/client';
 import { invalidateCohortActivity } from '@/server/cache';
 import type { PointEvent } from '@/db/schema';
 import {
+  assessmentAttempts,
+  assessments,
   checkIns,
   dailyActivity,
   pointsLedger,
@@ -316,32 +318,62 @@ export async function settleDay(args: {
    * written, so both wait on it — but not on each other. Fetching them together halves the
    * serial round trips on the path every scoring interaction takes.
    */
-  const [activity, [existing, checkInCount, minutesRow, quizCount, comebackCount]] =
-    await Promise.all([
-      loadActivity(memberId, calendar.startDate, to),
-      Promise.all([
-        db
-          .select({ code: studentAchievements.code })
-          .from(studentAchievements)
-          .where(eq(studentAchievements.memberId, memberId)),
-        db
-          .select({ n: sql<number>`count(*)::int` })
-          .from(checkIns)
-          .where(eq(checkIns.memberId, memberId)),
-        db
-          .select({ n: sql<number>`coalesce(sum(${dailyActivity.studyMinutes}), 0)::int` })
-          .from(dailyActivity)
-          .where(eq(dailyActivity.memberId, memberId)),
-        db
-          .select({ n: sql<number>`count(*)::int` })
-          .from(quizAttempts)
-          .where(eq(quizAttempts.memberId, memberId)),
-        db
-          .select({ n: sql<number>`count(*)::int` })
-          .from(checkIns)
-          .where(and(eq(checkIns.memberId, memberId), eq(checkIns.isComeback, true))),
-      ]),
-    ]);
+  const [
+    activity,
+    [existing, checkInCount, minutesRow, quizCount, comebackCount, assessmentCounts],
+  ] = await Promise.all([
+    loadActivity(memberId, calendar.startDate, to),
+    Promise.all([
+      db
+        .select({ code: studentAchievements.code })
+        .from(studentAchievements)
+        .where(eq(studentAchievements.memberId, memberId)),
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(checkIns)
+        .where(eq(checkIns.memberId, memberId)),
+      db
+        .select({ n: sql<number>`coalesce(sum(${dailyActivity.studyMinutes}), 0)::int` })
+        .from(dailyActivity)
+        .where(eq(dailyActivity.memberId, memberId)),
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(quizAttempts)
+        .where(eq(quizAttempts.memberId, memberId)),
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(checkIns)
+        .where(and(eq(checkIns.memberId, memberId), eq(checkIns.isComeback, true))),
+      /*
+       * Assessments completed, and how many cleared their own pass mark.
+       *
+       * Counted in SQL against each assessment's own threshold rather than a fixed
+       * number, because the pass mark is a per-assessment setting. Attempts a restart
+       * invalidated are excluded — a sitting that was thrown away is not one the student
+       * completed. Only the *count* reaches the badge engine; the score never does, which
+       * is what keeps a public badge from carrying a private mark.
+       */
+      db
+        .select({
+          completed: sql<number>`count(*)::int`,
+          passed: sql<number>`count(*) FILTER (
+              WHERE (${assessmentAttempts.autoTotal} + ${assessmentAttempts.manualTotal}) > 0
+                AND round(
+                  100.0 * (${assessmentAttempts.autoScore} + ${assessmentAttempts.manualScore})
+                  / (${assessmentAttempts.autoTotal} + ${assessmentAttempts.manualTotal})
+                ) >= ${assessments.passMarkPct}
+            )::int`,
+        })
+        .from(assessmentAttempts)
+        .innerJoin(assessments, eq(assessments.id, assessmentAttempts.assessmentId))
+        .where(
+          and(
+            eq(assessmentAttempts.memberId, memberId),
+            inArray(assessmentAttempts.status, ['submitted', 'expired']),
+          ),
+        ),
+    ]),
+  ]);
 
   const streak = calculateCurrentStreak(calendar, activity.showedUp, date);
   let pointsAwarded = 0;
@@ -372,6 +404,8 @@ export async function settleDay(args: {
       totalStudyMinutes: minutesRow[0]?.n ?? 0,
       quizAttempts: quizCount[0]?.n ?? 0,
       comebackDays: comebackCount[0]?.n ?? 0,
+      assessmentsCompleted: assessmentCounts[0]?.completed ?? 0,
+      assessmentsPassed: assessmentCounts[0]?.passed ?? 0,
     },
     earned,
   );

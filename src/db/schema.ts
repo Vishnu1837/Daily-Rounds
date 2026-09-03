@@ -89,6 +89,33 @@ export const riskLevelEnum = pgEnum('risk_level', ['on_track', 'at_risk', 'needs
  * enforced by the database rather than by hoping every call site remembers to check.
  */
 export const roadmapSlotEnum = pgEnum('roadmap_slot', ['primary', 'secondary']);
+export const assessmentStatusEnum = pgEnum('assessment_status', ['draft', 'published', 'archived']);
+export const questionTypeEnum = pgEnum('assessment_question_type', [
+  'mcq',
+  'image_mcq',
+  'short_answer',
+  'long_answer',
+]);
+export const attemptStatusEnum = pgEnum('assessment_attempt_status', [
+  'in_progress',
+  'submitted',
+  /** Ended by the total timer running out rather than by the student submitting. */
+  'expired',
+  /** Superseded by a restart after an integrity breach. Kept, never deleted. */
+  'invalidated',
+]);
+export const reviewStatusEnum = pgEnum('assessment_review_status', [
+  /** Nothing to mark by hand: every question was auto-gradable. */
+  'auto',
+  'pending',
+  'reviewed',
+]);
+export const integrityEventEnum = pgEnum('assessment_integrity_event', [
+  'focus_lost',
+  'focus_returned',
+  'threshold_breached',
+  'restarted',
+]);
 export const waitlistStatusEnum = pgEnum('waitlist_status', [
   'new',
   'contacted',
@@ -361,6 +388,24 @@ export const roadmaps = pgTable(
      * syllabus without a join.
      */
     curriculumRef: varchar('curriculum_ref', { length: 200 }),
+    /**
+     * Whether an admin has hand-edited this student's sequence.
+     *
+     * The roadmap is generated from the master syllabus and, left alone, stays in syllabus
+     * order. The moment an admin reorders, inserts or repositions a topic for this one
+     * student, this flips — which is what "Custom" vs "Default" reports on the admin
+     * screen, and what `Reset to default` clears. It is a label on the sequence, never a
+     * gate: bulk advancement walks whatever order it finds, customised or not.
+     */
+    isCustomized: boolean('is_customized').notNull().default(false),
+    /**
+     * Set when the last topic of the subject is finished.
+     *
+     * Without it, "no next topic" and "subject finished" are the same silent state, and the
+     * bulk advance had no way to say which. A completed roadmap stops receiving daily
+     * assignments and reports itself as complete instead of quietly wrapping to topic 1.
+     */
+    completedAt: timestamp('completed_at', { withTimezone: true }),
     /** Bumped every time the roadmap is regenerated from the syllabus. */
     generatedAt: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -418,6 +463,15 @@ export const dailyAssignments = pgTable(
       .notNull()
       .references(() => cohortMembers.id, { onDelete: 'cascade' }),
     date: date('date').notNull(),
+    /**
+     * Which of the student's two subjects this day's topic belongs to.
+     *
+     * A student carries two roadmaps, so a day has up to two topics — one per slot — and
+     * the home screen shows both. The slot is derived from the roadmap the topic sits on;
+     * an off-roadmap topic (see `customTopicTitle`) has no roadmap to derive it from and
+     * takes the primary slot, because it is standing in for the day's main focus.
+     */
+    slot: roadmapSlotEnum('slot').notNull().default('primary'),
     topicId: uuid('topic_id').references(() => roadmapTopics.id, { onDelete: 'set null' }),
     /**
      * A topic taken straight from the syllabus, for a subject this student has no roadmap
@@ -452,7 +506,7 @@ export const dailyAssignments = pgTable(
     assignedAt: timestamp('assigned_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex('daily_assignment_unique').on(t.memberId, t.date)],
+  (t) => [uniqueIndex('daily_assignment_unique').on(t.memberId, t.date, t.slot)],
 );
 
 export type AssignmentSource = 'auto' | 'admin';
@@ -758,6 +812,205 @@ export const quizAttempts = pgTable(
   (t) => [index('quiz_attempts_member_idx').on(t.memberId)],
 );
 
+/* ------------------------------------------------------------ assessments */
+
+/**
+ * A timed, roadmap-linked questionnaire.
+ *
+ * Distinct from `quizzes`, which stay what they have always been: a short, optional,
+ * untimed knowledge check attached to a curriculum branch, taken as often as a student
+ * likes. An assessment is the graded thing — it has a clock, a pass mark, one attempt
+ * history per student, an integrity log, and a private result. Folding the two together
+ * would have meant every existing quiz suddenly acquiring a timer and a permanent record.
+ */
+export const assessments = pgTable(
+  'assessments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    cohortId: uuid('cohort_id')
+      .notNull()
+      .references(() => cohorts.id, { onDelete: 'cascade' }),
+    subjectId: uuid('subject_id').references(() => subjects.id, { onDelete: 'set null' }),
+    /**
+     * The place in the curriculum this assessment belongs to — the same address quizzes and
+     * materials are filed under, so one assessment written for
+     * `pathology/general-pathology/inflammation` reaches every student studying it whatever
+     * their personal roadmap looks like.
+     */
+    curriculumRef: varchar('curriculum_ref', { length: 200 }),
+    title: varchar('title', { length: 200 }).notNull(),
+    instructions: text('instructions'),
+    status: assessmentStatusEnum('status').notNull().default('draft'),
+    /** Whole-assessment limit in seconds. Null means only the per-question timers apply. */
+    totalTimeSeconds: integer('total_time_seconds'),
+    /** Fills in for any question that carries no timer of its own. */
+    defaultQuestionSeconds: integer('default_question_seconds').notNull().default(60),
+    /**
+     * How long the student may have the tab in the background before the attempt restarts.
+     *
+     * Configurable because it is a deterrent, not proctoring: it cannot tell a second phone
+     * from a notification shade, and a threshold tight enough to catch the former punishes
+     * everyone who gets a phone call. Five seconds is the brief's default.
+     */
+    focusGraceSeconds: integer('focus_grace_seconds').notNull().default(5),
+    /** Percentage at or above which an attempt counts as passed. */
+    passMarkPct: smallint('pass_mark_pct').notNull().default(60),
+    /** Whether a student may see the question-by-question breakdown after submitting. */
+    allowAnswerReview: boolean('allow_answer_review').notNull().default(true),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('assessments_cohort_idx').on(t.cohortId, t.status),
+    index('assessments_curriculum_ref_idx').on(t.curriculumRef),
+  ],
+);
+
+export const assessmentQuestions = pgTable(
+  'assessment_questions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    assessmentId: uuid('assessment_id')
+      .notNull()
+      .references(() => assessments.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull().default(0),
+    type: questionTypeEnum('type').notNull().default('mcq'),
+    prompt: text('prompt').notNull(),
+    /** Image-based MCQs only. A URL the admin supplies; nothing is uploaded here. */
+    imageUrl: text('image_url'),
+    /** MCQ choices in display order. Empty for the two subjective types. */
+    options: jsonb('options')
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** Index into `options`. Null for subjective questions, which are not auto-gradable. */
+    correctIndex: smallint('correct_index'),
+    /**
+     * The model answer for a subjective question.
+     *
+     * Never auto-compared against what the student wrote — it is what the admin reads
+     * beside the response while marking it. The exact response text is preserved verbatim
+     * on the answer row.
+     */
+    referenceAnswer: text('reference_answer'),
+    explanation: text('explanation'),
+    /** Overrides the assessment's default. Null means "use the default". */
+    timeLimitSeconds: integer('time_limit_seconds'),
+    points: smallint('points').notNull().default(1),
+  },
+  (t) => [index('assessment_questions_assessment_idx').on(t.assessmentId, t.position)],
+);
+
+/**
+ * One sitting of an assessment by one student.
+ *
+ * `attemptNumber` climbs and rows are never deleted, including the ones a restart
+ * invalidated: the brief's requirement is that integrity history stays auditable, and a
+ * restart that erased the attempt it replaced would destroy exactly the evidence the admin
+ * is meant to see.
+ */
+export const assessmentAttempts = pgTable(
+  'assessment_attempts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    assessmentId: uuid('assessment_id')
+      .notNull()
+      .references(() => assessments.id, { onDelete: 'cascade' }),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => cohortMembers.id, { onDelete: 'cascade' }),
+    attemptNumber: integer('attempt_number').notNull().default(1),
+    status: attemptStatusEnum('status').notNull().default('in_progress'),
+    /**
+     * Server-stamped. Every deadline on the screen is derived from this and from the
+     * assessment's limits, so a refresh re-derives the same instants and cannot buy time.
+     */
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Materialised from `startedAt + totalTimeSeconds`; null when there is no total limit. */
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    /** How many times this student has had to restart this assessment, ever. */
+    restartCount: integer('restart_count').notNull().default(0),
+    /** Points earned on auto-gradable questions, and the total those were out of. */
+    autoScore: integer('auto_score').notNull().default(0),
+    autoTotal: integer('auto_total').notNull().default(0),
+    /** Marks the admin added by hand for subjective questions. */
+    manualScore: integer('manual_score').notNull().default(0),
+    manualTotal: integer('manual_total').notNull().default(0),
+    reviewStatus: reviewStatusEnum('review_status').notNull().default('auto'),
+    reviewedByUserId: uuid('reviewed_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    /** Free-text note from the admin, shown to the student on their private result. */
+    feedback: text('feedback'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('assessment_attempt_unique').on(t.assessmentId, t.memberId, t.attemptNumber),
+    index('assessment_attempts_member_idx').on(t.memberId),
+    index('assessment_attempts_assessment_idx').on(t.assessmentId, t.status),
+  ],
+);
+
+export const assessmentAnswers = pgTable(
+  'assessment_answers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    attemptId: uuid('attempt_id')
+      .notNull()
+      .references(() => assessmentAttempts.id, { onDelete: 'cascade' }),
+    questionId: uuid('question_id')
+      .notNull()
+      .references(() => assessmentQuestions.id, { onDelete: 'cascade' }),
+    /** MCQ selection. Null when unanswered, expired, or the question is subjective. */
+    selectedIndex: smallint('selected_index'),
+    /** Subjective response, preserved exactly as the student typed it. */
+    textAnswer: text('text_answer'),
+    /** When the question was first shown — the clock this question's timer runs from. */
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    answeredAt: timestamp('answered_at', { withTimezone: true }),
+    /** True when the per-question timer ran out before an answer was submitted. */
+    expired: boolean('expired').notNull().default(false),
+    /** Null while a subjective answer is still awaiting review. */
+    isCorrect: boolean('is_correct'),
+    awardedPoints: smallint('awarded_points').notNull().default(0),
+    reviewerNote: text('reviewer_note'),
+  },
+  (t) => [uniqueIndex('assessment_answer_unique').on(t.attemptId, t.questionId)],
+);
+
+/**
+ * What the attempt did while nobody could see the tab.
+ *
+ * Recorded rather than judged. Page-visibility detection cannot prove a student was not
+ * reading a second device, so the product's honest claim is that it logs behaviour — the
+ * admin reads the log and decides, and the only automatic consequence is the restart the
+ * threshold triggers.
+ */
+export const assessmentIntegrityEvents = pgTable(
+  'assessment_integrity_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    attemptId: uuid('attempt_id')
+      .notNull()
+      .references(() => assessmentAttempts.id, { onDelete: 'cascade' }),
+    kind: integrityEventEnum('kind').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+    /** How long the tab was in the background, where the client could measure it. */
+    awayMs: integer('away_ms'),
+    detail: jsonb('detail')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+  },
+  (t) => [index('assessment_integrity_attempt_idx').on(t.attemptId, t.occurredAt)],
+);
+
 /* -------------------------------------------------------------- materials */
 
 export const materials = pgTable(
@@ -957,6 +1210,38 @@ export const quizQuestionsRelations = relations(quizQuestions, ({ one }) => ({
   quiz: one(quizzes, { fields: [quizQuestions.quizId], references: [quizzes.id] }),
 }));
 
+export const assessmentsRelations = relations(assessments, ({ many }) => ({
+  questions: many(assessmentQuestions),
+  attempts: many(assessmentAttempts),
+}));
+
+export const assessmentQuestionsRelations = relations(assessmentQuestions, ({ one }) => ({
+  assessment: one(assessments, {
+    fields: [assessmentQuestions.assessmentId],
+    references: [assessments.id],
+  }),
+}));
+
+export const assessmentAttemptsRelations = relations(assessmentAttempts, ({ one, many }) => ({
+  assessment: one(assessments, {
+    fields: [assessmentAttempts.assessmentId],
+    references: [assessments.id],
+  }),
+  answers: many(assessmentAnswers),
+  integrityEvents: many(assessmentIntegrityEvents),
+}));
+
+export const assessmentAnswersRelations = relations(assessmentAnswers, ({ one }) => ({
+  attempt: one(assessmentAttempts, {
+    fields: [assessmentAnswers.attemptId],
+    references: [assessmentAttempts.id],
+  }),
+  question: one(assessmentQuestions, {
+    fields: [assessmentAnswers.questionId],
+    references: [assessmentQuestions.id],
+  }),
+}));
+
 /* ------------------------------------------------------------ row types */
 
 export type User = typeof users.$inferSelect;
@@ -994,3 +1279,13 @@ export type AttendanceStatus = (typeof attendanceStatusEnum.enumValues)[number];
 export type Obstacle = (typeof obstacleEnum.enumValues)[number];
 export type EventType = (typeof eventTypeEnum.enumValues)[number];
 export type MaterialType = (typeof materialTypeEnum.enumValues)[number];
+export type Assessment = typeof assessments.$inferSelect;
+export type AssessmentQuestion = typeof assessmentQuestions.$inferSelect;
+export type AssessmentAttempt = typeof assessmentAttempts.$inferSelect;
+export type AssessmentAnswer = typeof assessmentAnswers.$inferSelect;
+export type AssessmentIntegrityEvent = typeof assessmentIntegrityEvents.$inferSelect;
+export type AssessmentStatus = (typeof assessmentStatusEnum.enumValues)[number];
+export type QuestionType = (typeof questionTypeEnum.enumValues)[number];
+export type AttemptStatus = (typeof attemptStatusEnum.enumValues)[number];
+export type ReviewStatus = (typeof reviewStatusEnum.enumValues)[number];
+export type IntegrityEventKind = (typeof integrityEventEnum.enumValues)[number];

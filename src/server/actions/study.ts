@@ -7,7 +7,7 @@ import { db } from '@/db/client';
 import {
   announcementReads,
   announcements,
-  dailyAssignments,
+  type RoadmapSlot,
   roadmapTopics,
   roadmaps,
   studentAchievements,
@@ -16,7 +16,7 @@ import {
 import { requireUserAction } from '@/lib/auth/guards';
 import { ledgerKey } from '@/lib/domain/points';
 import { getMemberContext } from '@/server/context';
-import { replaceActiveSubject } from '@/server/roadmap';
+import { replaceActiveSubject, syncRoadmapCompletion, todaysAssignment } from '@/server/roadmap';
 import { awardPoints, settleDay } from '@/server/scoring';
 
 import { type Result, fail, guarded, ok } from './shared';
@@ -65,8 +65,14 @@ function summarise(outcome: Awaited<ReturnType<typeof settleDay>>): SettleSummar
   };
 }
 
-/** Starts today's study block, or returns the one already in progress. */
-export async function startSessionAction(): Promise<Result<StudySessionState>> {
+/**
+ * Starts today's study block, or returns the one already in progress.
+ *
+ * `slot` names which of the student's two subjects they are sitting down to. It only
+ * decides which topic the new session is filed against; a session already running is
+ * returned untouched, because the timer is one block of time, not one per subject.
+ */
+export async function startSessionAction(slot?: RoadmapSlot): Promise<Result<StudySessionState>> {
   return guarded(async () => {
     const ctx = await context();
 
@@ -97,22 +103,15 @@ export async function startSessionAction(): Promise<Result<StudySessionState>> {
       return ok(toState(row));
     }
 
-    const assignment = await db
-      .select({
-        topicId: dailyAssignments.topicId,
-        plannedMinutes: dailyAssignments.plannedMinutes,
-      })
-      .from(dailyAssignments)
-      .where(and(eq(dailyAssignments.memberId, ctx.memberId), eq(dailyAssignments.date, ctx.today)))
-      .limit(1);
+    const assignment = await todaysAssignment(ctx.memberId, ctx.today, slot);
 
     const [created] = await db
       .insert(studySessions)
       .values({
         memberId: ctx.memberId,
         date: ctx.today,
-        topicId: assignment[0]?.topicId ?? null,
-        plannedMinutes: assignment[0]?.plannedMinutes ?? 90,
+        topicId: assignment?.topicId ?? null,
+        plannedMinutes: assignment?.plannedMinutes ?? 90,
         status: 'running',
         resumedAt: new Date(),
       })
@@ -228,41 +227,43 @@ export async function finishSessionAction(sessionId: string): Promise<Result<Fin
   }, 'We could not save your study block. Your points have not changed — please try again.');
 }
 
-/** Marks today's assigned topic complete and advances the roadmap. */
-export async function completeTargetAction(): Promise<Result<SettleSummary>> {
+/**
+ * Marks today's assigned topic complete and advances that subject's roadmap.
+ *
+ * `slot` says which subject was finished; without it the day's leading topic is the one
+ * that completes. Only the roadmap the topic sits on advances — finishing today's Anatomy
+ * must not skip a Physiology topic the student has not touched.
+ */
+export async function completeTargetAction(slot?: RoadmapSlot): Promise<Result<SettleSummary>> {
   return guarded(async () => {
     const ctx = await context();
 
-    const assignment = await db
-      .select({ topicId: dailyAssignments.topicId })
-      .from(dailyAssignments)
-      .where(and(eq(dailyAssignments.memberId, ctx.memberId), eq(dailyAssignments.date, ctx.today)))
-      .limit(1);
-
-    const topicId = assignment[0]?.topicId ?? null;
+    const assignment = await todaysAssignment(ctx.memberId, ctx.today, slot);
+    const topicId = assignment?.topicId ?? null;
 
     if (topicId) {
       // Ownership check: the topic must belong to a roadmap this student owns.
-      const owned = await db
-        .select({ id: roadmapTopics.id })
+      const [owned] = await db
+        .select({ roadmapId: roadmapTopics.roadmapId })
         .from(roadmapTopics)
         .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
         .where(and(eq(roadmapTopics.id, topicId), eq(roadmaps.memberId, ctx.memberId)))
         .limit(1);
 
-      if (owned.length > 0) {
+      if (owned) {
         await db
           .update(roadmapTopics)
           .set({ status: 'completed', completedAt: new Date() })
           .where(eq(roadmapTopics.id, topicId));
 
-        // Promote the next upcoming topic to in-progress.
+        // Promote the next upcoming topic *on the same roadmap* to in-progress.
         const next = await db
           .select({ id: roadmapTopics.id })
           .from(roadmapTopics)
-          .innerJoin(roadmaps, eq(roadmaps.id, roadmapTopics.roadmapId))
-          .where(and(eq(roadmaps.memberId, ctx.memberId), eq(roadmapTopics.status, 'upcoming')))
-          .orderBy(roadmapTopics.position)
+          .where(
+            and(eq(roadmapTopics.roadmapId, owned.roadmapId), eq(roadmapTopics.status, 'upcoming')),
+          )
+          .orderBy(asc(roadmapTopics.position))
           .limit(1);
 
         if (next[0]) {
@@ -271,6 +272,9 @@ export async function completeTargetAction(): Promise<Result<SettleSummary>> {
             .set({ status: 'in_progress' })
             .where(eq(roadmapTopics.id, next[0].id));
         }
+
+        // Finishing the last topic finishes the subject, and says so.
+        await syncRoadmapCompletion(owned.roadmapId, Boolean(next[0]));
       }
     }
 

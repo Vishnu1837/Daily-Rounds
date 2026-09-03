@@ -4,7 +4,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 import { db } from '@/db/client';
-import { dailyAssignments, focusTrees } from '@/db/schema';
+import { focusTrees } from '@/db/schema';
 import { requireUserAction } from '@/lib/auth/guards';
 import {
   type FocusPresetKey,
@@ -16,6 +16,7 @@ import {
 } from '@/lib/domain/grove';
 import { getMemberContext } from '@/server/context';
 import { sweepAbandonedTrees } from '@/server/grove';
+import { todaysAssignment } from '@/server/roadmap';
 
 import { type Result, fail, guarded, ok } from './shared';
 
@@ -65,11 +66,9 @@ export async function plantTreeAction(input: {
 
     const preset = presetByKey(input.preset);
 
-    const [assignment] = await db
-      .select({ topicId: dailyAssignments.topicId })
-      .from(dailyAssignments)
-      .where(and(eq(dailyAssignments.memberId, ctx.memberId), eq(dailyAssignments.date, ctx.today)))
-      .limit(1);
+    // A day carries a topic per subject; the tree is filed against the one the dashboard
+    // leads with, which is the same one the study timer opens on.
+    const assignment = await todaysAssignment(ctx.memberId, ctx.today);
 
     const plantedAt = new Date();
     const [created] = await db

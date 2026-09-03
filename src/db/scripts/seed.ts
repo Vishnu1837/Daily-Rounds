@@ -341,6 +341,14 @@ async function main() {
 
   // ---------------------------------------------------- goals and roadmaps
   const topicsByMember = new Map<string, { id: string; title: string; ref: string | null }[]>();
+  /**
+   * The second subject's topics, in order.
+   *
+   * The seeded study history still runs on the primary subject alone, but a day carries a
+   * topic per subject and the dashboard shows both — so the demo has to have both, or the
+   * feature reads as broken on seeded data.
+   */
+  const secondaryTopicsByMember = new Map<string, { id: string }[]>();
 
   for (const student of SEED_STUDENTS) {
     const memberId = memberByEmail.get(student.email)!;
@@ -370,6 +378,7 @@ async function main() {
     });
 
     const memberTopics: { id: string; title: string; ref: string | null; position: number }[] = [];
+    const secondaryTopics: { id: string; position: number }[] = [];
 
     for (const [slot, subject] of [
       ['primary', primary],
@@ -429,6 +438,8 @@ async function main() {
             position: t.position,
           })),
         );
+      } else {
+        secondaryTopics.push(...topicRows.map((t) => ({ id: t.id, position: t.position })));
       }
     }
 
@@ -437,6 +448,10 @@ async function main() {
       memberTopics
         .sort((a, b) => a.position - b.position)
         .map((t) => ({ id: t.id, title: t.title, ref: t.ref })),
+    );
+    secondaryTopicsByMember.set(
+      memberId,
+      secondaryTopics.sort((a, b) => a.position - b.position).map((t) => ({ id: t.id })),
     );
   }
   console.log(`  ✓ ${SEED_STUDENTS.length} students × 2 syllabus-generated roadmaps`);
@@ -568,6 +583,7 @@ async function main() {
   for (const student of SEED_STUDENTS) {
     const memberId = memberByEmail.get(student.email)!;
     const topics = topicsByMember.get(memberId)!;
+    const secondTopics = secondaryTopicsByMember.get(memberId) ?? [];
     const rng = makeRng(student.email);
 
     let topicCursor = 0;
@@ -581,9 +597,23 @@ async function main() {
       assignments.push({
         memberId,
         date,
+        slot: 'primary',
         topicId: topic.id,
         plannedMinutes: student.dailyMinutes,
       });
+
+      // The second subject moves at half the pace — a realistic split for a student
+      // carrying one subject properly and revising another alongside it.
+      const secondTopic = secondTopics[Math.min(Math.floor(i / 2), secondTopics.length - 1)];
+      if (secondTopic) {
+        assignments.push({
+          memberId,
+          date,
+          slot: 'secondary',
+          topicId: secondTopic.id,
+          plannedMinutes: Math.max(30, Math.round(student.dailyMinutes / 2)),
+        });
+      }
 
       // Only generate history for days that have actually happened.
       if (date > today) continue;
