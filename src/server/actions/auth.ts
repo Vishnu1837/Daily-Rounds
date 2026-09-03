@@ -16,6 +16,9 @@ import {
   signUpSchema,
 } from '@/lib/validation';
 import { createHash } from 'node:crypto';
+import { passwordResetMail } from '@/lib/mail/templates';
+import { sendMail } from '@/lib/mail/send';
+import { absoluteUrl } from '@/lib/url';
 import { homeForRole } from '@/lib/routes';
 import { PUBLIC_SIGNUP_OPEN } from '@/lib/site';
 
@@ -23,7 +26,7 @@ export type ActionState = {
   ok?: boolean;
   message?: string;
   errors?: Record<string, string>;
-  /** Only populated in development, where there is no mail provider wired up. */
+  /** Only populated in development, and only when no mail provider is configured. */
   devResetUrl?: string;
 };
 
@@ -119,7 +122,7 @@ export async function forgotPasswordAction(
   if (!parsed.success) return { errors: fieldErrors(parsed.error) };
 
   const rows = await db
-    .select({ id: users.id })
+    .select({ id: users.id, email: users.email, fullName: users.fullName })
     .from(users)
     .where(sql`lower(${users.email}) = ${parsed.data.email}`)
     .limit(1);
@@ -141,15 +144,59 @@ export async function forgotPasswordAction(
     expiresAt: new Date(Date.now() + 60 * 60 * 1000),
   });
 
-  const url = `/reset-password?token=${token}`;
+  // Absolute, because this is read in a mail client rather than in the browser that asked
+  // for it, where a bare path resolves against the wrong host or against nothing.
+  const url = await absoluteUrl(`/reset-password?token=${token}`);
 
-  // No mail provider is part of the MVP. In development the link is surfaced directly so
-  // the flow is fully usable; in production it is logged for the operator to relay.
-  if (process.env.NODE_ENV === 'production') {
-    console.info(`[daily-rounds] password reset requested for user ${user.id}: ${url}`);
-    return generic;
+  const sent = await sendMail(
+    passwordResetMail({ to: user.email, name: firstName(user.fullName), url }),
+  );
+
+  /*
+   * What the reader is told never depends on what happened here.
+   *
+   * `generic` is returned for a missing account, a successful send and a provider outage
+   * alike. Reporting a delivery failure would answer the question the generic response
+   * exists to refuse — "does this address have an account?" — since only a real account
+   * ever reaches a send at all.
+   *
+   * The operator still needs to know, so failures are logged. The link is not: it is a
+   * bearer credential for the account, and application logs are the wrong place to keep
+   * one.
+   */
+  if (sent.status === 'failed') {
+    console.error(`[daily-rounds] reset mail failed for user ${user.id}: ${sent.reason}`);
   }
-  return { ...generic, devResetUrl: url };
+
+  // With no provider configured there is nowhere for the link to go, so development shows
+  // it on the page and the flow stays usable end to end. Never in production: that would
+  // hand the link to whoever typed the address.
+  if (sent.status === 'not-configured' && process.env.NODE_ENV !== 'production') {
+    return { ...generic, devResetUrl: url };
+  }
+
+  /*
+   * Nowhere to send it, in production. The link goes to the log so the cohort lead can
+   * relay it by hand and a student is not simply stranded.
+   *
+   * This is a stopgap and reads like one. A reset link is a bearer credential for the
+   * account, and application logs are a poor place to keep one — but it is what this app
+   * did before it could send mail at all, and dropping it while no provider is configured
+   * would remove the only recovery path that exists. Once RESEND_API_KEY and MAIL_FROM are
+   * set this branch is unreachable, and the credential stops being logged.
+   */
+  if (sent.status === 'not-configured') {
+    console.error(
+      `[daily-rounds] no mail provider configured; reset link for user ${user.id}: ${url}`,
+    );
+  }
+
+  return generic;
+}
+
+/** Mail opens on a first name; the stored value is the full one. */
+function firstName(fullName: string): string | null {
+  return fullName.trim().split(/\s+/)[0] || null;
 }
 
 export async function resetPasswordAction(
