@@ -17,6 +17,7 @@ import { Reveal } from '@/components/ui/reveal';
 import { Segmented } from '@/components/ui/segmented';
 import { cn } from '@/lib/cn';
 import { leagueFor, nextLeague } from '@/lib/domain/level';
+import { HOW_XP_WORKS } from '@/lib/routes';
 import type { LeaderboardRow, Recognitions } from '@/server/queries/student';
 
 type SortKey = 'consistency' | 'streak' | 'points';
@@ -180,7 +181,7 @@ export function LeaderboardScreen({
       </Card>
 
       <p className="text-fg-subtle px-1 pb-1 text-center text-xs">
-        <Link href="/how-points-work" className="hover:text-fg-muted underline underline-offset-2">
+        <Link href={HOW_XP_WORKS} className="hover:text-fg-muted underline underline-offset-2">
           How ranking works
         </Link>
       </p>

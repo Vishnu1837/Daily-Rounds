@@ -37,8 +37,15 @@ async function context() {
   return ctx;
 }
 
-/** Everyone currently in the room for `date`, by fresh heartbeat. */
-async function occupantsOf(cohortId: string, date: string): Promise<RoomOccupant[]> {
+/**
+ * Everyone currently in the room, by fresh heartbeat.
+ *
+ * Deliberately not filtered by study date. The roster is a *live* fact and the heartbeat
+ * cutoff below already settles it, where the date does not: students sit in thirty
+ * timezones, so two people in the same room at the same instant can be on either side of
+ * their own midnight, and dating the query would have shown each of them an empty room.
+ */
+async function occupantsOf(cohortId: string): Promise<RoomOccupant[]> {
   const cutoff = new Date(Date.now() - PRESENCE_STALE_SECONDS * 1000);
 
   const rows = await db
@@ -53,7 +60,6 @@ async function occupantsOf(cohortId: string, date: string): Promise<RoomOccupant
     .where(
       and(
         eq(cohortMembers.cohortId, cohortId),
-        eq(studyRoomPresence.date, date),
         isNull(studyRoomPresence.leftAt),
         gt(studyRoomPresence.lastSeenAt, cutoff),
       ),
@@ -152,7 +158,7 @@ export async function joinStudyRoomAction(): Promise<Result<JoinResult>> {
       url: cohort.meetUrl,
       status,
       attendanceRecorded,
-      occupants: await occupantsOf(cohort.id, today),
+      occupants: await occupantsOf(cohort.id),
       nowMinutes,
     });
   }, 'We could not put you in the study room. Please try again.');
@@ -180,7 +186,7 @@ export async function heartbeatStudyRoomAction(): Promise<Result<RoomPulse>> {
       );
 
     return ok({
-      occupants: await occupantsOf(ctx.cohort.id, ctx.today),
+      occupants: await occupantsOf(ctx.cohort.id),
       nowMinutes: parseHm(timeInTimezone(ctx.cohort.timezone)) ?? 0,
     });
   }, 'We lost the study room connection.');
@@ -191,7 +197,7 @@ export async function studyRoomPulseAction(): Promise<Result<RoomPulse>> {
   return guarded(async () => {
     const ctx = await context();
     return ok({
-      occupants: await occupantsOf(ctx.cohort.id, ctx.today),
+      occupants: await occupantsOf(ctx.cohort.id),
       nowMinutes: parseHm(timeInTimezone(ctx.cohort.timezone)) ?? 0,
     });
   }, 'We could not refresh the study room.');
@@ -214,7 +220,7 @@ export async function leaveStudyRoomAction(): Promise<Result<RoomPulse>> {
       );
 
     return ok({
-      occupants: await occupantsOf(ctx.cohort.id, ctx.today),
+      occupants: await occupantsOf(ctx.cohort.id),
       nowMinutes: parseHm(timeInTimezone(ctx.cohort.timezone)) ?? 0,
     });
   }, 'We could not sign you out of the study room.');

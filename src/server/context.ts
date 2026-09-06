@@ -32,9 +32,31 @@ export type MemberContext = {
   calendar: CohortCalendar;
   rules: PointRules;
   thresholds: RiskThresholds;
-  /** Today, in the cohort's timezone. The single source of "what day is it". */
+  /**
+   * The zone this student's own day is measured in.
+   *
+   * Their choice from onboarding or the profile, with the cohort's zone as the fallback for
+   * a membership that predates the picker. Everything personal and day-shaped — the
+   * check-in window, the study block, the points ledger, the streak — is cut on this.
+   */
+  timezone: string;
+  /**
+   * Today, in the student's own timezone. The single source of "what day is it" for them.
+   *
+   * This used to be the cohort's date, which meant a student in Toronto was told their day
+   * had rolled over while it was still yesterday evening where they were sitting — and that
+   * the check-in they had not done yet was already missed.
+   */
   today: ISODate;
-  /** The day this student joined the cohort, in cohort time. */
+  /**
+   * Today on the cohort's clock.
+   *
+   * The study room is one shared moment for everybody, so anything anchored to it — the
+   * live roster, the attendance sheet a cohort lead reads — is dated here rather than in
+   * whichever of thirty zones the viewer happens to be in.
+   */
+  cohortToday: ISODate;
+  /** The day this student joined the cohort, in their own time. */
   joinedOn: ISODate;
 };
 
@@ -138,6 +160,8 @@ export const getMemberContext = cache(async (user: SessionUser): Promise<MemberC
     loadPointRules(row.cohort.id),
   ]);
 
+  const timezone = user.timezone || row.cohort.timezone;
+
   return {
     user,
     memberId: row.member.id,
@@ -145,8 +169,10 @@ export const getMemberContext = cache(async (user: SessionUser): Promise<MemberC
     calendar,
     rules,
     thresholds: thresholdsFor(row.cohort),
-    today: todayInTimezone(row.cohort.timezone),
-    joinedOn: formatInTimezone(row.member.joinedAt, row.cohort.timezone),
+    timezone,
+    today: todayInTimezone(timezone),
+    cohortToday: todayInTimezone(row.cohort.timezone),
+    joinedOn: formatInTimezone(row.member.joinedAt, timezone),
   };
 });
 

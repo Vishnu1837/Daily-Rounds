@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Clock, Flame, Lock, Target, Trophy } from 'lucide-react';
 
 import { Donut } from '@/components/charts/donut';
@@ -20,6 +21,7 @@ import { StatTile, Trend } from '@/components/ui/stat';
 import { cn } from '@/lib/cn';
 import { levelFromPoints } from '@/lib/domain/level';
 import { POINT_EVENT_LABELS } from '@/lib/domain/points';
+import { HOW_XP_WORKS } from '@/lib/routes';
 import type { ProgressData } from '@/server/queries/student';
 
 type LogEntry = {
@@ -114,8 +116,14 @@ export function ProgressScreen({
 
         <Reveal delay={1} className="lg:col-span-5">
           <Card padding="lg" className="h-full">
-            <LevelBadge info={level} size="lg" />
-            <XPBar info={level} className="mt-5" />
+            <Link
+              href={HOW_XP_WORKS}
+              aria-label="How XP works"
+              className="tap rounded-field -m-2 block p-2 transition-colors hover:bg-[var(--bg-sunken)]"
+            >
+              <LevelBadge info={level} size="lg" />
+              <XPBar info={level} className="mt-5" />
+            </Link>
             <button
               type="button"
               onClick={() => setLedgerOpen(true)}

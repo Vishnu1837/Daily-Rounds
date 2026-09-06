@@ -68,7 +68,8 @@ import {
   calculateOverallConsistency,
   calculateWeeklyProgress,
 } from '@/lib/domain/consistency';
-import { BEHAVIOUR_EVENTS, maxDailyBehaviourPoints } from '@/lib/domain/points';
+import type { PointRules } from '@/lib/domain/points';
+import { BEHAVIOUR_EVENTS, behaviourSlot, maxDailyBehaviourPoints } from '@/lib/domain/points';
 import { PRESENCE_STALE_SECONDS, parseHm, roomTitle } from '@/lib/domain/study-room';
 import {
   calculateBestStreak,
@@ -198,6 +199,15 @@ export type TodayTask = {
 export type HomeData = {
   weekNumber: number;
   weekdayLabel: string;
+  /**
+   * The hour it currently is where the student is, 0–23.
+   *
+   * Sent from the server rather than read off the browser so the greeting matches the
+   * timezone they chose — a rendered "Good morning" must not depend on whose machine
+   * rendered it, and a student travelling with a laptop still set to another country gets
+   * the day they told us they are living in.
+   */
+  localHour: number;
   streak: number;
   bestStreak: number;
   nextMilestone: number | null;
@@ -267,7 +277,7 @@ export type HomeData = {
 };
 
 export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
-  const { memberId, calendar, today, rules, cohort, user } = ctx;
+  const { memberId, calendar, today, rules, cohort } = ctx;
   const upTo = minDate(today, calendar.endDate);
 
   /*
@@ -277,7 +287,7 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
    * once, here, and the untranslated cohort window travels alongside it because that is
    * still what attendance is judged against.
    */
-  const viewerZone = user.timezone || cohort.timezone;
+  const viewerZone = ctx.timezone;
   const roomWindow = {
     startTime: formatTimeInZone(cohort.meetStartTime, today, cohort.timezone, viewerZone),
     endTime: formatTimeInZone(cohort.meetEndTime, today, cohort.timezone, viewerZone),
@@ -370,7 +380,9 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
       .where(
         and(
           eq(cohortMembers.cohortId, cohort.id),
-          eq(studyRoomPresence.date, today),
+          // Live presence is settled by the heartbeat cutoff, not by a date: the room is one
+          // instant shared across thirty timezones, and dating it empties the roster for
+          // anyone whose own midnight has already passed.
           isNull(studyRoomPresence.leftAt),
           gt(studyRoomPresence.lastSeenAt, new Date(Date.now() - PRESENCE_STALE_SECONDS * 1000)),
         ),
@@ -441,6 +453,7 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
   const { rank, cohortSize } = standing;
 
   return {
+    localHour: Number(timeInTimezone(ctx.timezone).slice(0, 2)),
     weekNumber: cohortWeekNumber(calendar, today),
     weekdayLabel: new Date(`${today}T12:00:00Z`).toLocaleDateString('en-GB', {
       weekday: 'long',
@@ -870,9 +883,14 @@ const EMPTY_RECOGNITIONS: CohortStandings['recognitions'] = {
  * recognition badges back at the marked rows so "You" reads correctly on both.
  */
 export const getLeaderboard = cache(async function getLeaderboard(
-  ctx: Pick<MemberContext, 'cohort' | 'today'> & { memberId?: string },
+  ctx: Pick<MemberContext, 'cohort' | 'cohortToday'> & { memberId?: string },
 ): Promise<{ rows: LeaderboardRow[]; recognitions: Recognitions }> {
-  const standings = await loadCohortStandings(ctx.cohort.id, ctx.today);
+  /*
+   * Cut on the COHORT's date, not the viewer's. A ranking is one shared table: keyed by
+   * each viewer's own date it would fragment the cache thirty ways and, worse, quietly
+   * show two students in different countries two different orderings of the same cohort.
+   */
+  const standings = await loadCohortStandings(ctx.cohort.id, ctx.cohortToday);
 
   const rows: LeaderboardRow[] = standings.rows.map((row) => ({
     ...row,
@@ -1040,8 +1058,8 @@ export type CalendarDay = {
 };
 
 export async function getCalendarMonth(ctx: MemberContext, month: ISODate): Promise<CalendarDay[]> {
-  const { memberId, calendar, today, cohort, user } = ctx;
-  const viewerZone = user.timezone || cohort.timezone;
+  const { memberId, calendar, today, cohort } = ctx;
+  const viewerZone = ctx.timezone;
   const first = `${month.slice(0, 7)}-01`;
   const firstAnchor = new Date(`${first}T12:00:00Z`);
   const daysInMonth = new Date(
@@ -1681,10 +1699,141 @@ const loadCohortPulse = async (cohortId: string, today: ISODate) => {
 };
 
 export const getCohortPulse = cache(async function getCohortPulse(
-  ctx: Pick<MemberContext, 'cohort' | 'today'>,
+  ctx: Pick<MemberContext, 'cohort' | 'cohortToday'>,
 ) {
-  return loadCohortPulse(ctx.cohort.id, ctx.today);
+  // Cohort-wide, so cohort-dated — see `getLeaderboard`. "How many of us showed up today"
+  // must be the same sentence for everyone reading it.
+  return loadCohortPulse(ctx.cohort.id, ctx.cohortToday);
 });
+
+/* ------------------------------------------------------- points explainer */
+
+export type EarnedToday = {
+  event: PointEvent;
+  points: number;
+  /** The admin's note on a correction, or whatever the awarding action recorded. */
+  reason: string | null;
+  /** `HH:mm` in the student's own timezone — when the ledger row was actually written. */
+  at: string;
+};
+
+export type PointsExplainer = {
+  /** The student's own date, so the page can say which day it is describing. */
+  today: ISODate;
+  timezoneLabel: string;
+  /** Every ledger row for today, earliest first. */
+  earnedToday: EarnedToday[];
+  todayPoints: number;
+  /** Behaviour points only — the part of today that counts toward consistency. */
+  behaviourToday: number;
+  maxDailyPoints: number;
+  /** Behaviours still on the table today, with what each would pay. */
+  remainingToday: { event: PointEvent; points: number }[];
+  isActiveDay: boolean;
+  isHolidayToday: boolean;
+  totalPoints: number;
+  /** Lifetime totals per event, largest first — "where your XP has come from". */
+  lifetimeByEvent: { event: PointEvent; points: number }[];
+  /** The last fortnight of daily totals, oldest first, for the sparkline. */
+  recentDays: { date: ISODate; points: number; isActiveDay: boolean }[];
+  streak: number;
+  nextMilestone: number | null;
+  rules: PointRules;
+};
+
+/**
+ * Everything the "how XP works" screen needs to answer two questions at once: what the
+ * rules are, and what *they* did today under them.
+ *
+ * The second half is the reason this query exists. A rules page on its own is a document;
+ * a rules page that shows the student their own morning against those rules is an
+ * explanation. Both halves come from the same ledger the totals come from, so the page can
+ * never disagree with the number in the header.
+ */
+export async function getPointsExplainer(ctx: MemberContext): Promise<PointsExplainer> {
+  const { memberId, calendar, today, rules, timezone } = ctx;
+  const from = addDays(today, -13);
+
+  const [todayRows, lifetimeRows, recentRows, totalPoints, activity] = await Promise.all([
+    db
+      .select({
+        event: pointsLedger.event,
+        points: pointsLedger.points,
+        reason: pointsLedger.reason,
+        createdAt: pointsLedger.createdAt,
+      })
+      .from(pointsLedger)
+      .where(and(eq(pointsLedger.memberId, memberId), eq(pointsLedger.occurredOn, today)))
+      .orderBy(asc(pointsLedger.createdAt)),
+    db
+      .select({ event: pointsLedger.event, points: sql<number>`sum(${pointsLedger.points})::int` })
+      .from(pointsLedger)
+      .where(eq(pointsLedger.memberId, memberId))
+      .groupBy(pointsLedger.event),
+    db
+      .select({
+        date: pointsLedger.occurredOn,
+        points: sql<number>`sum(${pointsLedger.points})::int`,
+      })
+      .from(pointsLedger)
+      .where(
+        and(
+          eq(pointsLedger.memberId, memberId),
+          gte(pointsLedger.occurredOn, from),
+          lte(pointsLedger.occurredOn, today),
+        ),
+      )
+      .groupBy(pointsLedger.occurredOn),
+    readTotalPoints(memberId),
+    readActivity(memberId, from, today),
+  ]);
+
+  const earnedToday: EarnedToday[] = todayRows.map((row) => ({
+    event: row.event,
+    points: row.points,
+    reason: row.reason,
+    at: new Intl.DateTimeFormat('en-GB', {
+      timeZone: timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(row.createdAt),
+  }));
+
+  // Attendance fills one slot whether it was scored present or late, so a student who
+  // arrived late is not also told they still owe us an arrival.
+  const filled = new Set(earnedToday.map((e) => behaviourSlot(e.event)).filter(Boolean));
+
+  const byDate = new Map(recentRows.map((r) => [r.date, r.points]));
+
+  return {
+    today,
+    timezoneLabel: timezoneLabel(timezone),
+    earnedToday,
+    todayPoints: earnedToday.reduce((sum, e) => sum + e.points, 0),
+    behaviourToday: earnedToday.reduce(
+      (sum, e) => (behaviourSlot(e.event) ? sum + Math.max(0, e.points) : sum),
+      0,
+    ),
+    maxDailyPoints: maxDailyBehaviourPoints(rules),
+    remainingToday: BEHAVIOUR_EVENTS.filter((e) => !filled.has(e)).map((event) => ({
+      event,
+      points: rules[event],
+    })),
+    isActiveDay: isActiveStudyDay(calendar, today),
+    isHolidayToday: isHoliday(calendar, today),
+    totalPoints,
+    lifetimeByEvent: lifetimeRows.filter((r) => r.points !== 0).sort((a, b) => b.points - a.points),
+    recentDays: datesBetween(from, today).map((date) => ({
+      date,
+      points: byDate.get(date) ?? 0,
+      isActiveDay: isActiveStudyDay(calendar, date),
+    })),
+    streak: calculateCurrentStreak(calendar, activity.showedUp, today).length,
+    nextMilestone: nextMilestone(calculateCurrentStreak(calendar, activity.showedUp, today).length),
+    rules,
+  };
+}
 
 /* ------------------------------------------------------------- point log */
 

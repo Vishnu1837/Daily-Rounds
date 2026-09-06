@@ -10,6 +10,7 @@ import { HeaderStats } from '@/components/nav/top-bar';
 import { Avatar } from '@/components/ui/avatar';
 import { requireUser } from '@/lib/auth/guards';
 import { minDate } from '@/lib/domain/calendar';
+import { HOW_XP_WORKS } from '@/lib/routes';
 import { levelFromPoints } from '@/lib/domain/level';
 import { calculateCurrentStreak } from '@/lib/domain/streak';
 import { getMemberContext } from '@/server/context';
@@ -90,10 +91,16 @@ export async function HeaderSubtitle() {
 export async function RailStanding() {
   const { level } = await loadStanding();
   return (
-    <>
+    // Same reasoning as the header pill: the level and the bar are the two things a student
+    // stares at without being told how either is calculated, so both open the explainer.
+    <Link
+      href={HOW_XP_WORKS}
+      aria-label={`Level ${level.level}, ${level.xp.toLocaleString()} XP. How XP works.`}
+      className="tap rounded-field -m-2 block p-2 transition-colors hover:bg-[var(--bg-sunken)]"
+    >
       <LevelBadge info={level} size="md" />
       <XPBar info={level} className="mt-4" />
-    </>
+    </Link>
   );
 }
 

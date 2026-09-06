@@ -48,7 +48,9 @@ function contextFor(cohort: Cohort, memberId: string): MemberContext {
     }),
     rules: DEFAULT_POINT_RULES,
     thresholds: DEFAULT_RISK_THRESHOLDS,
+    timezone: 'Asia/Kolkata',
     today: TODAY,
+    cohortToday: TODAY,
     joinedOn: cohort.startDate,
   };
 }

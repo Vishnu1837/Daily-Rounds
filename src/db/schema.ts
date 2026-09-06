@@ -725,7 +725,7 @@ export const pointsLedger = pgTable(
       .references(() => cohortMembers.id, { onDelete: 'cascade' }),
     event: pointEventEnum('event').notNull(),
     points: integer('points').notNull(),
-    /** The study day this award belongs to (cohort timezone). */
+    /** The study day this award belongs to, in the *student's* own timezone. */
     occurredOn: date('occurred_on').notNull(),
     /** Guards duplicate awards, e.g. `daily_check_in:<memberId>:<date>`. */
     idempotencyKey: text('idempotency_key').notNull(),

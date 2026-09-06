@@ -90,33 +90,37 @@ export function LinkDeviceLauncher() {
   return (
     <>
       {!dismissed && (
-        <div className="animate-rise fixed right-5 bottom-5 z-40 hidden lg:flex">
-          <div className="rounded-panel border-border bg-bg-elevated shadow-float flex items-center gap-1 border p-1">
-            <button
-              type="button"
-              onClick={() => {
-                // Minting happens here, in the gesture that asked for it, rather than in an
-                // effect watching `open`. A code is a credential with a two-minute life; it
-                // should be created by a student pressing a button and by nothing else.
-                setOpen(true);
-                void sheet.request();
-              }}
-              className="tap rounded-field text-fg hover:bg-bg-sunken flex items-center gap-2.5 px-3 py-2 text-sm font-semibold transition-colors"
-            >
-              <span className="bg-pulse-500/12 text-pulse-700 dark:text-pulse-300 grid size-8 place-items-center rounded-full">
-                <Smartphone className="size-4.5" aria-hidden />
-              </span>
-              Open on your phone
-            </button>
-            <button
-              type="button"
-              onClick={() => setDismissed()}
-              aria-label="Hide this for now"
-              className="tap rounded-field text-fg-subtle hover:bg-bg-sunken hover:text-fg grid size-8 place-items-center transition-colors"
-            >
-              <X className="size-4" aria-hidden />
-            </button>
-          </div>
+        <div className="animate-rise group fixed right-5 bottom-5 z-40 hidden lg:block">
+          {/*
+           * An icon, not a banner. This is a standing offer rather than a task, and a
+           * labelled panel parked over the corner of every screen charged full furniture
+           * for something a student needs once. The label lives in the tooltip and the
+           * accessible name instead, and the dismiss control only surfaces on hover — so
+           * the resting state is a single round button.
+           */}
+          <button
+            type="button"
+            onClick={() => {
+              // Minting happens here, in the gesture that asked for it, rather than in an
+              // effect watching `open`. A code is a credential with a two-minute life; it
+              // should be created by a student pressing a button and by nothing else.
+              setOpen(true);
+              void sheet.request();
+            }}
+            title="Open on your phone"
+            aria-label="Open on your phone"
+            className="tap border-border bg-bg-elevated shadow-float text-pulse-700 dark:text-pulse-300 hover:bg-pulse-500/12 ease-out-soft grid size-11 place-items-center rounded-full border transition-[transform,background-color] duration-200 hover:-translate-y-0.5 motion-reduce:hover:translate-y-0"
+          >
+            <Smartphone className="size-5" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={() => setDismissed()}
+            aria-label="Hide this for now"
+            className="tap border-border bg-bg-elevated text-fg-subtle hover:text-fg shadow-soft absolute -top-1.5 -right-1.5 grid size-5 place-items-center rounded-full border opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          >
+            <X className="size-3" aria-hidden />
+          </button>
         </div>
       )}
 

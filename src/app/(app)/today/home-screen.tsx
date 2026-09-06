@@ -9,6 +9,7 @@ import {
   CalendarDays,
   ChevronRight,
   Clock,
+  HelpCircle,
   Megaphone,
   Play,
   Target,
@@ -33,6 +34,7 @@ import { useToast } from '@/components/ui/toast';
 import { StudyRoomCard } from './study-room-card';
 import { cn } from '@/lib/cn';
 import { levelFromPoints } from '@/lib/domain/level';
+import { HOW_XP_WORKS } from '@/lib/routes';
 import { markAchievementsSeenAction } from '@/server/actions/study';
 import type { HomeData } from '@/server/queries/student';
 
@@ -45,10 +47,16 @@ type Pulse = {
   thresholdPct: number;
 };
 
-function greeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
+/**
+ * The hour comes from the server, resolved in the student's chosen timezone.
+ *
+ * Reading `new Date().getHours()` here said "Good evening" to a student in Manila because
+ * of where the machine that rendered the page happened to be — and flipped on hydration.
+ */
+function greeting(hour: number): string {
+  if (hour < 5) return 'Still up';
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
   return 'Good evening';
 }
 
@@ -125,7 +133,7 @@ export function HomeScreen({
         <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 px-1">
           <div>
             <p className="text-fg-muted text-sm font-medium">
-              {greeting()}, <span className="text-fg font-semibold">{firstName}</span>
+              {greeting(home.localHour)}, <span className="text-fg font-semibold">{firstName}</span>
             </p>
             <h1 className="text-fg mt-1 flex flex-wrap items-baseline gap-x-2.5 text-2xl font-extrabold tracking-tight sm:text-3xl">
               {home.weekdayLabel}
@@ -276,8 +284,8 @@ export function HomeScreen({
       )}
 
       <p className="text-fg-subtle px-1 pt-1 pb-1 text-center text-xs">
-        <Link href="/how-points-work" className="hover:text-fg-muted underline underline-offset-2">
-          How points and consistency work
+        <Link href={HOW_XP_WORKS} className="hover:text-fg-muted underline underline-offset-2">
+          How XP and consistency work
         </Link>
       </p>
     </div>
@@ -753,12 +761,19 @@ function LevelPanel({
       <XPBar info={level} className="mt-5" />
 
       <div className="border-border mt-5 grid grid-cols-2 gap-3 border-t pt-4">
-        <div>
-          <p className="eyebrow">Total XP</p>
+        {/* The total is the tappable half: it is the number students ask about. */}
+        <Link
+          href={HOW_XP_WORKS}
+          className="tap rounded-field -m-1.5 block p-1.5 transition-colors hover:bg-[var(--bg-sunken)]"
+        >
+          <p className="eyebrow flex items-center gap-1">
+            Total XP
+            <HelpCircle className="text-fg-subtle size-3" aria-hidden />
+          </p>
           <p className="stat-num text-citrus-700 dark:text-citrus-300 mt-1 text-xl">
             <AnimatedCounter value={level.xp} />
           </p>
-        </div>
+        </Link>
         <div>
           <p className="eyebrow">Cohort rank</p>
           <p className="stat-num text-fg mt-1 text-xl">

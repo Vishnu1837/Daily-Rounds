@@ -150,7 +150,9 @@ export async function completeOnboardingAction(
         : null,
       dailyMinutes: input.dailyCommitmentMinutes,
       cohortTimezone: cohort.timezone,
-      today: todayInTimezone(cohort.timezone),
+      // The roadmap starts on the student's own day, not the cohort's: someone finishing
+      // onboarding on Sunday evening in Toronto is not already into Monday.
+      today: todayInTimezone(input.timezone || cohort.timezone),
     });
 
     // A new member changes who is in the cohort ranking.

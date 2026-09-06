@@ -11,6 +11,7 @@ import { FormError, FormSuccess, Select, TextInput } from '@/components/ui/form'
 import { Sheet } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/toast';
 import { levelFromPoints } from '@/lib/domain/level';
+import { HOW_XP_WORKS } from '@/lib/routes';
 import { type ActionState, changePasswordAction, logoutAction } from '@/server/actions/auth';
 import { updateProfileAction } from '@/server/actions/onboarding';
 import { updateAvatarAction } from '@/server/actions/profile';
@@ -69,7 +70,12 @@ export function ProfileScreen({ user, cohort, goals, points }: Props) {
               Level {level.level} · {level.rank.title}
             </p>
           </div>
-          <div className="w-full sm:w-56">
+          {/* The whole XP block opens the explainer — it is the number, so it is the door. */}
+          <Link
+            href={HOW_XP_WORKS}
+            aria-label="How XP works"
+            className="tap w-full rounded-xl transition-colors hover:bg-white/10 sm:w-56 sm:p-2"
+          >
             <div className="text-2xs flex items-baseline justify-between font-bold tracking-[0.12em] text-white/60 uppercase">
               <span>Total XP</span>
               <span className="stat-num text-base tracking-normal text-white">
@@ -87,7 +93,7 @@ export function ProfileScreen({ user, cohort, goals, points }: Props) {
                 ? 'Top of the ladder'
                 : `${level.remaining.toLocaleString()} XP to level ${level.level + 1}`}
             </p>
-          </div>
+          </Link>
         </div>
       </Card>
 
@@ -164,8 +170,8 @@ export function ProfileScreen({ user, cohort, goals, points }: Props) {
       </Card>
 
       <p className="text-fg-subtle px-1 pb-1 text-center text-xs">
-        <Link href="/how-points-work" className="underline">
-          How points and consistency work
+        <Link href={HOW_XP_WORKS} className="underline">
+          How XP and consistency work
         </Link>
       </p>
 

@@ -7,7 +7,7 @@ import { Moon, Sun } from 'lucide-react';
 import { Logo } from '@/components/brand/logo';
 import { StreakFlame } from '@/components/gamification/streak-flame';
 import { cn } from '@/lib/cn';
-import { STUDENT_HOME } from '@/lib/routes';
+import { HOW_XP_WORKS, STUDENT_HOME } from '@/lib/routes';
 import { SITE } from '@/lib/site';
 
 /**
@@ -127,9 +127,17 @@ export function TopBar({
 export function HeaderStats({ streak, xp, level }: { streak: number; xp: number; level: number }) {
   return (
     <>
-      <span
-        className="rounded-pill bg-bg-sunken hidden items-center gap-2 py-1 pr-3 pl-1 sm:inline-flex"
-        title={`Level ${level} · ${xp.toLocaleString()} XP`}
+      {/*
+       * The XP pill is a link, not a label. It is the number a student sees most often and
+       * understands least, so tapping it opens the page that explains where it came from —
+       * including today's own ledger. A number with no way to interrogate it is a score,
+       * and a score nobody can audit stops being motivating.
+       */}
+      <Link
+        href={HOW_XP_WORKS}
+        title={`Level ${level} · ${xp.toLocaleString()} XP — how XP works`}
+        aria-label={`Level ${level}, ${xp.toLocaleString()} XP. How XP works.`}
+        className="tap rounded-pill bg-bg-sunken hover:bg-bg-inset ease-out-soft hidden items-center gap-2 py-1 pr-3 pl-1 transition-colors sm:inline-flex"
       >
         <span
           className="stat-num from-citrus-300 to-citrus-500 text-2xs text-ink-950 grid size-7 place-items-center rounded-full bg-linear-to-br"
@@ -141,7 +149,7 @@ export function HeaderStats({ streak, xp, level }: { streak: number; xp: number;
           {xp.toLocaleString()}
           <span className="text-2xs text-fg-subtle ml-1 font-bold">XP</span>
         </span>
-      </span>
+      </Link>
 
       <span
         className={cn(

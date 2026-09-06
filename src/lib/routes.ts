@@ -13,6 +13,15 @@ export const LANDING = '/';
 /** The signed-in student dashboard — the old `/`. */
 export const STUDENT_HOME = '/today';
 
+/**
+ * The XP explainer.
+ *
+ * Named because it is now reached from the XP number itself in four places — the header
+ * pill, the desktop rail, the profile and the progress screen — and a student tapping a
+ * number they do not understand should land on the same page every time.
+ */
+export const HOW_XP_WORKS = '/how-points-work';
+
 /** The admin console home. */
 export const ADMIN_HOME = '/admin';
 
