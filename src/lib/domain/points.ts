@@ -223,6 +223,34 @@ export function showedUpForDay(args: {
   return earned.some((e) => !isAdminGrantable(e.event));
 }
 
+/**
+ * Was this day marked present by a human the room could not corroborate?
+ *
+ * The companion to `showedUpForDay`, and the reason that function can afford to be strict.
+ *
+ * Refusing to let an admin mark assert attendance was the right call — it is what stops one
+ * click on "mark all present" manufacturing a cohort of unbroken streaks. But `showedUp` is
+ * not only the turnout number: the streak engine, the missed-day counter and risk detection
+ * are all built on it, so for a while the rule did not merely decline to credit a student
+ * for a hand-marked day, it actively counted the day against them. A cohort lead confirmed
+ * they were in the room and the app told them they had missed it.
+ *
+ * A day this returns true for is neither. It earns nothing — no streak, no consistency, no
+ * turnout — and it costs nothing: the streak steps over it the way it steps over a weekend,
+ * and it never becomes a missed day. Being marked present by hand is not evidence a student
+ * was there, but it is certainly not evidence they were absent.
+ *
+ * A mark of `absent` is not excused. That one is a judgement a lead actually made, and it
+ * goes on counting as a miss.
+ */
+export function attendanceExcusedForDay(args: {
+  entries: readonly { event: PointEvent; points: number }[];
+  verifiedPresence: boolean;
+}): boolean {
+  if (showedUpForDay(args)) return false;
+  return args.entries.some((e) => isAdminGrantable(e.event) && e.points > 0);
+}
+
 /* ------------------------------------------------------------ quiz scoring */
 
 /**

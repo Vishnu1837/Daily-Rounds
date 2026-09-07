@@ -60,7 +60,8 @@ const loadStanding = cache(async () => {
     readTotalPoints(ctx.memberId),
   ]);
   return {
-    streak: calculateCurrentStreak(ctx.calendar, activity.showedUp, ctx.today).length,
+    streak: calculateCurrentStreak(ctx.calendar, activity.showedUp, ctx.today, activity.excused)
+      .length,
     level: levelFromPoints(points),
   };
 });

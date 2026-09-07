@@ -65,6 +65,15 @@ export default async function AdminOverviewPage() {
 
   const unmarked = overview.size - overview.attendanceMarked;
 
+  /*
+   * Turnout counts only what the study room corroborated, and the attendance sheet counts
+   * every mark a lead made. Those are different questions with different answers, and the
+   * page used to print both without ever saying so — 60% turnout above a sheet reading 24
+   * present, which reads as a broken number rather than a strict one. This is the sentence
+   * that reconciles them.
+   */
+  const excused = overview.excusedToday;
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -87,7 +96,7 @@ export default async function AdminOverviewPage() {
             <CardAurora tone={restDay ? 'iris' : 'pulse'} />
             <div className="relative">
               <p className="text-2xs font-bold tracking-[0.16em] text-white/65 uppercase">
-                {restDay ? restLabel : 'Turnout today'}
+                {restDay ? restLabel : 'Verified turnout today'}
               </p>
 
               <div className="mt-3 flex flex-wrap items-end gap-x-5 gap-y-2">
@@ -95,7 +104,7 @@ export default async function AdminOverviewPage() {
                 <p className="pb-2 text-sm font-semibold text-white/75">
                   {restDay
                     ? 'No study day scheduled — the cohort streak is safe.'
-                    : `${overview.activeToday} of ${overview.size} students have shown up.`}
+                    : `${overview.activeToday} of ${overview.size} students were verified by the study room.`}
                 </p>
               </div>
 
@@ -108,7 +117,9 @@ export default async function AdminOverviewPage() {
               <p className="mt-2.5 text-sm text-white/70">
                 {restDay
                   ? `${restLabel} — nothing is expected today.`
-                  : `The cohort streak survives any day at least ${overview.thresholdPct}% show up.`}
+                  : excused > 0
+                    ? `Plus ${excused} marked present by hand, which this figure does not count. The cohort streak survives any day at least ${overview.thresholdPct}% of verifiable students show up.`
+                    : `The cohort streak survives any day at least ${overview.thresholdPct}% show up.`}
               </p>
 
               <dl className="mt-6 grid grid-cols-3 gap-3 border-t border-white/15 pt-5">
@@ -143,9 +154,15 @@ export default async function AdminOverviewPage() {
         <div className="grid grid-cols-2 gap-3 lg:col-span-5 lg:gap-4">
           <Reveal delay={1}>
             <StatTile
-              label="Active today"
+              label="Verified in the room"
               value={restDay ? '—' : `${overview.activeToday}/${overview.size}`}
-              sub={restDay ? restLabel : `${turnout}% turnout`}
+              sub={
+                restDay
+                  ? restLabel
+                  : excused > 0
+                    ? `+${excused} hand-marked`
+                    : `${turnout}% turnout`
+              }
               tone={restDay ? 'neutral' : turnout >= overview.thresholdPct ? 'success' : 'warning'}
               emphasis
               icon={<Users className="size-4" aria-hidden />}

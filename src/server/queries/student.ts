@@ -450,9 +450,9 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
       .limit(1),
   ]);
 
-  const streak = calculateCurrentStreak(calendar, activity.showedUp, today);
-  const best = calculateBestStreak(calendar, activity.showedUp, upTo);
-  const comeback = calculateComebackState(calendar, activity.showedUp, today);
+  const streak = calculateCurrentStreak(calendar, activity.showedUp, today, activity.excused);
+  const best = calculateBestStreak(calendar, activity.showedUp, upTo, activity.excused);
+  const comeback = calculateComebackState(calendar, activity.showedUp, today, activity.excused);
 
   const earned = new Map<PointEvent, number>();
   for (const row of ledgerRows) {
@@ -848,6 +848,7 @@ export const loadCohortStandings = async (
         ? {
             date: d,
             showedUp: row.showedUp,
+            excused: row.attendanceExcused,
             score: row.scorePct / 100,
             studyMinutes: row.studyMinutes,
             points: row.points,
@@ -855,6 +856,8 @@ export const loadCohortStandings = async (
         : undefined;
     };
     const showedUp = (d: ISODate) => days.get(d)?.showedUp ?? false;
+    // See `attendanceExcusedForDay`: neither a show-up nor a miss.
+    const excused = (d: ISODate) => days.get(d)?.attendanceExcused ?? false;
 
     // Today is still being lived; it joins these numbers when it ends. See ConsistencyOptions.
     const overall = calculateOverallConsistency(calendar, lookup, upTo, { inProgress: today });
@@ -877,8 +880,8 @@ export const loadCohortStandings = async (
       mbbsYear: m.mbbsYear,
       consistencyPct: overall.consistencyPct,
       showUpRatePct: overall.showUpRatePct,
-      streak: calculateCurrentStreak(calendar, showedUp, today).length,
-      bestStreak: calculateBestStreak(calendar, showedUp, upTo).length,
+      streak: calculateCurrentStreak(calendar, showedUp, today, excused).length,
+      bestStreak: calculateBestStreak(calendar, showedUp, upTo, excused).length,
       points: pointsBy.get(m.memberId) ?? 0,
       improvementPct: improvement.deltaPct,
       improvementComparable: improvement.comparable,
@@ -1376,8 +1379,8 @@ export async function getProgressData(ctx: MemberContext): Promise<ProgressData>
 
   return {
     overall,
-    streak: calculateCurrentStreak(calendar, activity.showedUp, today).length,
-    bestStreak: calculateBestStreak(calendar, activity.showedUp, upTo).length,
+    streak: calculateCurrentStreak(calendar, activity.showedUp, today, activity.excused).length,
+    bestStreak: calculateBestStreak(calendar, activity.showedUp, upTo, activity.excused).length,
     weeks,
     improvement: calculateImprovement(weeks),
     sessionsAttended: attendanceRows[0]?.present ?? 0,
@@ -1545,7 +1548,7 @@ export async function getCheckInContext(ctx: MemberContext): Promise<CheckInCont
       .limit(1),
   ]);
 
-  const comeback = calculateComebackState(calendar, activity.showedUp, today);
+  const comeback = calculateComebackState(calendar, activity.showedUp, today, activity.excused);
   const existing = existingRows[0];
 
   const assignedTopics = assignmentRows.map((r) => r.topicTitle).filter((t): t is string => !!t);
@@ -1739,7 +1742,7 @@ export async function getWeeklyReviewContext(ctx: MemberContext) {
     current,
     previous,
     deltaPct: current.consistencyPct - previous.consistencyPct,
-    streak: calculateCurrentStreak(calendar, activity.showedUp, today).length,
+    streak: calculateCurrentStreak(calendar, activity.showedUp, today, activity.excused).length,
     attendancePresent: attendanceCount[0]?.present ?? 0,
     topicsCompleted: topicsThisWeek[0]?.n ?? 0,
   };
@@ -1977,8 +1980,10 @@ export async function getPointsExplainer(ctx: MemberContext): Promise<PointsExpl
       points: byDate.get(date) ?? 0,
       isActiveDay: isActiveStudyDay(calendar, date),
     })),
-    streak: calculateCurrentStreak(calendar, activity.showedUp, today).length,
-    nextMilestone: nextMilestone(calculateCurrentStreak(calendar, activity.showedUp, today).length),
+    streak: calculateCurrentStreak(calendar, activity.showedUp, today, activity.excused).length,
+    nextMilestone: nextMilestone(
+      calculateCurrentStreak(calendar, activity.showedUp, today, activity.excused).length,
+    ),
     rules,
   };
 }

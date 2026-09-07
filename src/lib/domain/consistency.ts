@@ -44,6 +44,15 @@ export type ConsistencyOptions = {
 export type DayRecord = {
   date: ISODate;
   showedUp: boolean;
+  /**
+   * An admin marked this day present or late and the study room never corroborated it.
+   *
+   * Excluded from the numerator and the denominator alike, exactly as the in-progress day
+   * is — for the same reason. A day nobody can vouch for is not a day the student failed;
+   * scoring it zero would be a verdict the evidence does not support. Minutes still count.
+   * See `attendanceExcusedForDay`.
+   */
+  excused?: boolean;
   /** Behaviour completion in [0, 1]. */
   score: number;
   studyMinutes: number;
@@ -87,6 +96,12 @@ export function calculateConsistency(
      */
     if (day === inProgress) {
       minutes += rec?.studyMinutes ?? 0;
+      continue;
+    }
+
+    // A hand-marked day nobody could corroborate: no credit, and no penalty either.
+    if (rec?.excused) {
+      minutes += rec.studyMinutes;
       continue;
     }
 

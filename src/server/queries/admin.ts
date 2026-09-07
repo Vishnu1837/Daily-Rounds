@@ -83,6 +83,8 @@ export type AdminStudentRow = {
   /** False until there are two comparable weeks. The UI must show "—", not a number. */
   improvementComparable: boolean;
   showedUpToday: boolean;
+  /** Marked present or late by hand today, uncorroborated. See `attendanceExcusedForDay`. */
+  excusedToday: boolean;
   attendanceToday: AttendanceStatus | null;
   checkedInToday: boolean;
 };
@@ -194,6 +196,7 @@ export const getCohortStudents = cache(async function getCohortStudents(
         ? {
             date: d,
             showedUp: row.showedUp,
+            excused: row.attendanceExcused,
             score: row.scorePct / 100,
             studyMinutes: row.studyMinutes,
             points: row.points,
@@ -201,6 +204,8 @@ export const getCohortStudents = cache(async function getCohortStudents(
         : undefined;
     };
     const showedUp = (d: ISODate) => days.get(d)?.showedUp ?? false;
+    // See `attendanceExcusedForDay`: neither a show-up nor a miss.
+    const excused = (d: ISODate) => days.get(d)?.attendanceExcused ?? false;
     const joinedOn = m.joinedAt.toISOString().slice(0, 10);
 
     // Today is still being lived; it joins these numbers when it ends. See ConsistencyOptions.
@@ -210,6 +215,7 @@ export const getCohortStudents = cache(async function getCohortStudents(
       calendar,
       lookup,
       showedUp,
+      excused,
       today,
       since: joinedOn,
       thresholds,
@@ -229,8 +235,8 @@ export const getCohortStudents = cache(async function getCohortStudents(
       subjectName: subjectBy.get(m.memberId) ?? null,
       consistencyPct: overall.consistencyPct,
       showUpRatePct: overall.showUpRatePct,
-      streak: calculateCurrentStreak(calendar, showedUp, today).length,
-      bestStreak: calculateBestStreak(calendar, showedUp, upTo).length,
+      streak: calculateCurrentStreak(calendar, showedUp, today, excused).length,
+      bestStreak: calculateBestStreak(calendar, showedUp, upTo, excused).length,
       points: pointsBy.get(m.memberId) ?? 0,
       roadmapPct:
         !topics || topics.total === 0 ? 0 : Math.round((topics.completed / topics.total) * 100),
@@ -248,6 +254,7 @@ export const getCohortStudents = cache(async function getCohortStudents(
         };
       })(),
       showedUpToday: showedUp(today),
+      excusedToday: excused(today),
       attendanceToday: attendanceBy.get(m.memberId) ?? null,
       checkedInToday: checkedIn.has(m.memberId),
     };
@@ -256,9 +263,19 @@ export const getCohortStudents = cache(async function getCohortStudents(
 
 export type CohortOverview = {
   size: number;
+  /** Students the study room itself corroborated today. This is the turnout number. */
   activeToday: number;
   attendanceToday: number;
   attendanceMarked: number;
+  /**
+   * Marked present or late by hand today with nothing from the room behind it.
+   *
+   * Surfaced so the console can reconcile its own two numbers. "15 of 25 have shown up"
+   * sitting above a sheet reading 24 present is not a contradiction, but nothing on the
+   * screen said why, and a cohort lead reading it had no way to tell a strict metric from a
+   * broken one. See `attendanceExcusedForDay`.
+   */
+  excusedToday: number;
   avgConsistency: number;
   avgRoadmap: number;
   cohortStreak: number;
@@ -287,6 +304,14 @@ export async function getCohortOverview(ctx: CohortCtx): Promise<CohortOverview>
       .select({
         date: dailyActivity.date,
         showedUp: sql<number>`count(*) FILTER (WHERE ${dailyActivity.showedUp})::int`,
+        /*
+         * Days a lead marked present that the room never corroborated. Taken out of the
+         * cohort-streak denominator below rather than counted as no-shows — the same
+         * "neither credit nor penalty" rule the individual streak now follows, applied to
+         * the cohort. Leaving them in would let a lead's own bulk mark drag the cohort
+         * streak down. See `attendanceExcusedForDay`.
+         */
+        excused: sql<number>`count(*) FILTER (WHERE ${dailyActivity.attendanceExcused})::int`,
         minutes: sql<number>`coalesce(sum(${dailyActivity.studyMinutes}), 0)::int`,
       })
       .from(dailyActivity)
@@ -307,7 +332,10 @@ export async function getCohortOverview(ctx: CohortCtx): Promise<CohortOverview>
   const byDate = new Map(turnoutRows.map((r) => [r.date, r]));
   const cohortStreak = calculateCohortStreak(
     calendar,
-    (d) => ({ showedUp: byDate.get(d)?.showedUp ?? 0, total: active.length }),
+    (d) => ({
+      showedUp: byDate.get(d)?.showedUp ?? 0,
+      total: Math.max(0, active.length - (byDate.get(d)?.excused ?? 0)),
+    }),
     cohort.streakThresholdPct,
     today,
   );
@@ -321,6 +349,7 @@ export async function getCohortOverview(ctx: CohortCtx): Promise<CohortOverview>
     attendanceToday: active.filter((s) => s.attendanceToday && s.attendanceToday !== 'absent')
       .length,
     attendanceMarked: active.filter((s) => s.attendanceToday !== null).length,
+    excusedToday: active.filter((s) => s.excusedToday).length,
     avgConsistency: avg(active.map((s) => s.consistencyPct)),
     avgRoadmap: avg(active.map((s) => s.roadmapPct)),
     cohortStreak: cohortStreak.length,
@@ -521,6 +550,7 @@ export async function getStudentDetail(ctx: CohortCtx, memberId: string) {
       ? {
           date: d,
           showedUp: row.showedUp,
+          excused: row.attendanceExcused,
           score: row.scorePct / 100,
           studyMinutes: row.studyMinutes,
           points: row.points,
@@ -528,6 +558,8 @@ export async function getStudentDetail(ctx: CohortCtx, memberId: string) {
       : undefined;
   };
   const showedUp = (d: ISODate) => map.get(d)?.showedUp ?? false;
+  // See `attendanceExcusedForDay`: neither a show-up nor a miss.
+  const excused = (d: ISODate) => map.get(d)?.attendanceExcused ?? false;
   const joinedOn = member.joinedAt.toISOString().slice(0, 10);
 
   return {
@@ -535,12 +567,13 @@ export async function getStudentDetail(ctx: CohortCtx, memberId: string) {
     goals: goalRows[0] ?? null,
     overall: calculateOverallConsistency(calendar, lookup, upTo, { inProgress: today }),
     weeks: calculateWeeklyProgress(calendar, lookup, upTo, { inProgress: today }),
-    streak: calculateCurrentStreak(calendar, showedUp, today).length,
-    bestStreak: calculateBestStreak(calendar, showedUp, upTo).length,
+    streak: calculateCurrentStreak(calendar, showedUp, today, excused).length,
+    bestStreak: calculateBestStreak(calendar, showedUp, upTo, excused).length,
     risk: calculateRiskStatus({
       calendar,
       lookup,
       showedUp,
+      excused,
       today,
       since: joinedOn,
       thresholds: ctx.thresholds,

@@ -13,7 +13,7 @@ import {
   calculateWeeklyProgress,
   isSettledWeek,
 } from './consistency';
-import { type ShowedUp, calculateBestStreak, calculateCurrentStreak } from './streak';
+import { type Excused, type ShowedUp, calculateBestStreak, calculateCurrentStreak } from './streak';
 
 export type AchievementTier = 'bronze' | 'silver' | 'gold';
 
@@ -21,6 +21,8 @@ export type AchievementContext = {
   calendar: CohortCalendar;
   lookup: DayLookup;
   showedUp: ShowedUp;
+  /** See `attendanceExcusedForDay`. A hand-marked day breaks no badge streak. */
+  excused?: Excused;
   today: ISODate;
   totalCheckIns: number;
   totalStudyMinutes: number;
@@ -54,10 +56,10 @@ export type AchievementDefinition = {
 export const BADGES_ARE_PUBLIC = true;
 
 const currentStreak = (ctx: AchievementContext) =>
-  calculateCurrentStreak(ctx.calendar, ctx.showedUp, ctx.today).length;
+  calculateCurrentStreak(ctx.calendar, ctx.showedUp, ctx.today, ctx.excused).length;
 
 const bestStreak = (ctx: AchievementContext) =>
-  calculateBestStreak(ctx.calendar, ctx.showedUp, ctx.today).length;
+  calculateBestStreak(ctx.calendar, ctx.showedUp, ctx.today, ctx.excused).length;
 
 /**
  * The student's weeks, in order, with the one they are still living left out.
