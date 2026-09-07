@@ -43,6 +43,7 @@ import {
   calculateWeeklyProgress,
   isSettledWeek,
 } from '@/lib/domain/consistency';
+import { displayBand } from '@/lib/domain/points';
 import { ACHIEVEMENTS } from '@/lib/domain/achievements';
 import { RISK_ORDER, calculateRiskStatus } from '@/lib/domain/risk';
 import {
@@ -550,7 +551,13 @@ export async function getStudentDetail(ctx: CohortCtx, memberId: string) {
       const row = map.get(date);
       return {
         date,
-        band: row?.band ?? ('missed' as const),
+        /*
+         * Today reads as a day not finished, not a day missed — the same rule the student's
+         * own calendar follows. An admin opening a student's record on a Monday morning was
+         * shown a red square for a day nobody had had a chance to live yet, which is exactly
+         * the impression this work exists to stop giving.
+         */
+        band: displayBand(row?.band ?? 'missed', date === today),
         isActiveDay: true,
         points: row?.points ?? 0,
       };
