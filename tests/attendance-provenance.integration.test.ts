@@ -13,12 +13,16 @@ import { createTestCohort, createTestMember, db, schema } from './helpers/db';
  * row, so a register could read 26 present on a morning one person attended — and the
  * leaderboard derived from it could not be defended to the students on it.
  *
- * Two rules together fix that, and both are tested here:
+ * The fix is provenance, not refusal, and both halves are tested here:
  *
- *   1. the *row* records its own provenance (`source`), so nothing has to be inferred;
- *   2. a mark with no corroboration cannot, on its own, make the day count as showing up —
- *      it still pays its points, because a cohort lead who was in the room knows something
- *      the software does not.
+ *   1. the *row* records where it came from (`attendance.source`), so nothing is inferred;
+ *   2. the derived day records whether its show-up rests on a mark and nothing else
+ *      (`daily_activity.hand_marked_only`), so the console can report the verified split.
+ *
+ * The mark itself is trusted — a cohort lead who was in the room knows something the
+ * software does not, and requiring the room to corroborate them meant a register of 23
+ * present reported 68% turnout and told seven students they had missed the day. What makes
+ * the leaderboard defensible is that a bulk mark is visible as one, not that it is refused.
  */
 
 const MONDAY = '2025-09-08';
@@ -72,7 +76,7 @@ describe('attendance provenance', () => {
     expect(row!.source).toBe('admin');
   });
 
-  it('an admin mark alone pays its points but does not assert the student showed up', async () => {
+  it('an admin mark alone counts as showing up, and is recorded as a mark alone', async () => {
     const ctx = await createTestCohort();
     const { memberId } = await createTestMember(ctx.cohort.id);
 
@@ -95,7 +99,16 @@ describe('attendance provenance', () => {
 
     expect(record.points).toBe(20);
     expect(record.score).toBeGreaterThan(0);
-    expect(record.showedUp).toBe(false);
+    expect(record.showedUp).toBe(true);
+
+    // The provenance is still on the row, which is what keeps a bulk mark legible.
+    const [row] = await db
+      .select({ handMarkedOnly: schema.dailyActivity.handMarkedOnly })
+      .from(schema.dailyActivity)
+      .where(
+        and(eq(schema.dailyActivity.memberId, memberId), eq(schema.dailyActivity.date, MONDAY)),
+      );
+    expect(row?.handMarkedOnly).toBe(true);
   });
 
   it('the same mark counts once the room corroborates it', async () => {

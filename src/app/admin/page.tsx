@@ -66,13 +66,13 @@ export default async function AdminOverviewPage() {
   const unmarked = overview.size - overview.attendanceMarked;
 
   /*
-   * Turnout counts only what the study room corroborated, and the attendance sheet counts
-   * every mark a lead made. Those are different questions with different answers, and the
-   * page used to print both without ever saying so — 60% turnout above a sheet reading 24
-   * present, which reads as a broken number rather than a strict one. This is the sentence
-   * that reconciles them.
+   * Turnout counts every student who turned up, however that was recorded. The split below
+   * is what keeps that honest: a cohort lead can mark the whole column present in one click,
+   * and the console says how many of the day's show-ups rest on a mark alone rather than
+   * burying it inside a single percentage.
    */
-  const excused = overview.excusedToday;
+  const handMarked = overview.handMarkedToday;
+  const verified = overview.activeToday - handMarked;
 
   return (
     <div className="space-y-5">
@@ -96,7 +96,7 @@ export default async function AdminOverviewPage() {
             <CardAurora tone={restDay ? 'iris' : 'pulse'} />
             <div className="relative">
               <p className="text-2xs font-bold tracking-[0.16em] text-white/65 uppercase">
-                {restDay ? restLabel : 'Verified turnout today'}
+                {restDay ? restLabel : 'Turnout today'}
               </p>
 
               <div className="mt-3 flex flex-wrap items-end gap-x-5 gap-y-2">
@@ -104,7 +104,7 @@ export default async function AdminOverviewPage() {
                 <p className="pb-2 text-sm font-semibold text-white/75">
                   {restDay
                     ? 'No study day scheduled — the cohort streak is safe.'
-                    : `${overview.activeToday} of ${overview.size} students were verified by the study room.`}
+                    : `${overview.activeToday} of ${overview.size} students have shown up.`}
                 </p>
               </div>
 
@@ -117,8 +117,8 @@ export default async function AdminOverviewPage() {
               <p className="mt-2.5 text-sm text-white/70">
                 {restDay
                   ? `${restLabel} — nothing is expected today.`
-                  : excused > 0
-                    ? `Plus ${excused} marked present by hand, which this figure does not count. The cohort streak survives any day at least ${overview.thresholdPct}% of verifiable students show up.`
+                  : handMarked > 0
+                    ? `${verified} verified by the study room, ${handMarked} marked by a cohort lead. The cohort streak survives any day at least ${overview.thresholdPct}% show up.`
                     : `The cohort streak survives any day at least ${overview.thresholdPct}% show up.`}
               </p>
 
@@ -154,13 +154,13 @@ export default async function AdminOverviewPage() {
         <div className="grid grid-cols-2 gap-3 lg:col-span-5 lg:gap-4">
           <Reveal delay={1}>
             <StatTile
-              label="Verified in the room"
+              label="Active today"
               value={restDay ? '—' : `${overview.activeToday}/${overview.size}`}
               sub={
                 restDay
                   ? restLabel
-                  : excused > 0
-                    ? `+${excused} hand-marked`
+                  : handMarked > 0
+                    ? `${turnout}% turnout · ${verified} verified`
                     : `${turnout}% turnout`
               }
               tone={restDay ? 'neutral' : turnout >= overview.thresholdPct ? 'success' : 'warning'}

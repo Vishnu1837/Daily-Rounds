@@ -21,35 +21,6 @@ import {
 
 export type ShowedUp = (date: ISODate) => boolean;
 
-/**
- * Days that are neither shown up for nor missed.
- *
- * Currently one thing: an active study day an admin marked present or late that the study
- * room never corroborated (see `attendanceExcusedForDay`). The engine steps over such a day
- * exactly as it steps over a weekend — it does not extend a streak and it does not break
- * one, and it is never reported as a missed day.
- *
- * Optional everywhere it appears. Omitting it gives the old behaviour, in which the only two
- * states are showed-up and missed.
- */
-export type Excused = (date: ISODate) => boolean;
-
-/** Never excused — the default when a caller has no attendance provenance to offer. */
-const NONE: Excused = () => false;
-
-/**
- * The previous active study day that is not excused.
- *
- * Every walk in this module goes backwards through active study days, and each of them has
- * to skip excused days rather than stop on them. Doing that in one place is what stops the
- * streak, the best streak and the comeback state from disagreeing about what a day was.
- */
-function previousCountedDay(cal: CohortCalendar, date: ISODate, excused: Excused): ISODate | null {
-  let cursor = previousActiveStudyDay(cal, date);
-  while (cursor !== null && excused(cursor)) cursor = previousActiveStudyDay(cal, cursor);
-  return cursor;
-}
-
 export type StreakResult = {
   length: number;
   startedOn: ISODate | null;
@@ -69,12 +40,9 @@ export function calculateCurrentStreak(
   cal: CohortCalendar,
   showedUp: ShowedUp,
   today: ISODate,
-  excused: Excused = NONE,
 ): StreakResult {
   let cursor: ISODate | null =
-    isActiveStudyDay(cal, today) && showedUp(today)
-      ? today
-      : previousCountedDay(cal, today, excused);
+    isActiveStudyDay(cal, today) && showedUp(today) ? today : previousActiveStudyDay(cal, today);
 
   // A date after the cohort ended still reports the final streak.
   if (cursor === null) cursor = currentOrPreviousActiveStudyDay(cal, today);
@@ -88,7 +56,7 @@ export function calculateCurrentStreak(
     if (lastDay === null) lastDay = cursor;
     startedOn = cursor;
     length += 1;
-    cursor = previousCountedDay(cal, cursor, excused);
+    cursor = previousActiveStudyDay(cal, cursor);
   }
 
   return { length, startedOn, lastDay };
@@ -99,7 +67,6 @@ export function calculateBestStreak(
   cal: CohortCalendar,
   showedUp: ShowedUp,
   upTo: ISODate,
-  excused: Excused = NONE,
 ): BestStreakResult {
   const days = activeStudyDaysBetween(cal, cal.startDate, upTo);
 
@@ -110,8 +77,6 @@ export function calculateBestStreak(
   let runStart: ISODate | null = null;
 
   for (const day of days) {
-    // Stepped over, exactly as a weekend is: it neither lengthens the run nor ends it.
-    if (excused(day) && !showedUp(day)) continue;
     if (showedUp(day)) {
       if (run === 0) runStart = day;
       run += 1;
@@ -148,14 +113,13 @@ export function calculateComebackState(
   cal: CohortCalendar,
   showedUp: ShowedUp,
   today: ISODate,
-  excused: Excused = NONE,
 ): ComebackState {
   const missedDays: ISODate[] = [];
-  let cursor = previousCountedDay(cal, today, excused);
+  let cursor = previousActiveStudyDay(cal, today);
 
   while (cursor !== null && !showedUp(cursor)) {
     missedDays.unshift(cursor);
-    cursor = previousCountedDay(cal, cursor, excused);
+    cursor = previousActiveStudyDay(cal, cursor);
   }
 
   return {
@@ -170,9 +134,8 @@ export function consecutiveMissedActiveDays(
   cal: CohortCalendar,
   showedUp: ShowedUp,
   today: ISODate,
-  excused: Excused = NONE,
 ): number {
-  return calculateComebackState(cal, showedUp, today, excused).missedDays.length;
+  return calculateComebackState(cal, showedUp, today).missedDays.length;
 }
 
 export const STREAK_MILESTONES = [3, 5, 10, 15, 20, 30, 50] as const;

@@ -61,12 +61,7 @@ export async function submitCheckInAction(
         .limit(1),
       loadActivity(ctx.memberId, ctx.calendar.startDate, minDate(ctx.today, ctx.calendar.endDate)),
     ]);
-    const comeback = calculateComebackState(
-      ctx.calendar,
-      activity.showedUp,
-      ctx.today,
-      activity.excused,
-    );
+    const comeback = calculateComebackState(ctx.calendar, activity.showedUp, ctx.today);
 
     const values = {
       memberId: ctx.memberId,

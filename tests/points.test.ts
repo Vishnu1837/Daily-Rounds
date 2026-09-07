@@ -10,6 +10,7 @@ import {
   maxDailyBehaviourPoints,
   quizPoints,
   showedUpForDay,
+  showedUpOnMarkAlone,
 } from '@/lib/domain/points';
 
 const rules = DEFAULT_POINT_RULES;
@@ -126,15 +127,18 @@ describe('day bands', () => {
     ).toBe(true);
   });
 
-  it('does not let an admin attendance mark stand in for showing up', () => {
+  it('lets an admin attendance mark stand in for showing up', () => {
     const marked = [{ event: 'live_session_present', points: rules.live_session_present }] as const;
-    expect(showedUpForDay({ entries: marked, verifiedPresence: false })).toBe(false);
+    expect(showedUpForDay({ entries: marked, verifiedPresence: false })).toBe(true);
     expect(showedUpForDay({ entries: marked, verifiedPresence: true })).toBe(true);
+    // The mark counts; the console is told it was only a mark. See `showedUpOnMarkAlone`.
+    expect(showedUpOnMarkAlone({ entries: marked, verifiedPresence: false })).toBe(true);
+    expect(showedUpOnMarkAlone({ entries: marked, verifiedPresence: true })).toBe(false);
   });
 
   it('treats a late mark the same way as a present one', () => {
     const late = [{ event: 'live_session_late', points: rules.live_session_late }] as const;
-    expect(showedUpForDay({ entries: late, verifiedPresence: false })).toBe(false);
+    expect(showedUpForDay({ entries: late, verifiedPresence: false })).toBe(true);
     expect(showedUpForDay({ entries: late, verifiedPresence: true })).toBe(true);
   });
 

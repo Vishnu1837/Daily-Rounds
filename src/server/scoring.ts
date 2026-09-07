@@ -28,8 +28,8 @@ import {
   bandForDay,
   dayScore,
   ledgerKey,
-  attendanceExcusedForDay,
   showedUpForDay,
+  showedUpOnMarkAlone,
 } from '@/lib/domain/points';
 import {
   calculateComebackState,
@@ -190,17 +190,16 @@ export async function recomputeDay(args: {
   const showedUp = showedUpForDay({ entries, verifiedPresence });
 
   /*
-   * The third state: marked present or late by a cohort lead, with nothing from the room to
-   * corroborate it. Not a show-up, and — this is the part that was missing — not a miss
-   * either. Recorded here so the streak engine and risk can step over the day instead of
-   * charging the student for a mark they had no hand in. See `attendanceExcusedForDay`.
+   * Reporting only — the day counts in full either way. This records whether the show-up
+   * rests on a cohort lead's mark and nothing else, so the admin console can show the
+   * verified split behind its headline instead of a number nobody can interrogate. See
+   * `showedUpOnMarkAlone`.
    */
-  const attendanceExcused = attendanceExcusedForDay({ entries, verifiedPresence });
+  const handMarkedOnly = showedUpOnMarkAlone({ entries, verifiedPresence });
 
   const record: DayRecord = {
     date,
     showedUp,
-    excused: attendanceExcused,
     score,
     studyMinutes,
     points,
@@ -213,7 +212,7 @@ export async function recomputeDay(args: {
       date,
       isActiveDay: isActive,
       showedUp: record.showedUp,
-      attendanceExcused,
+      handMarkedOnly,
       points,
       scorePct: Math.round(score * 100),
       band: bandForDay(score, isActive),
@@ -225,7 +224,7 @@ export async function recomputeDay(args: {
       set: {
         isActiveDay: isActive,
         showedUp: record.showedUp,
-        attendanceExcused,
+        handMarkedOnly,
         points,
         scorePct: Math.round(score * 100),
         band: bandForDay(score, isActive),
@@ -308,9 +307,8 @@ export async function recomputeRange(args: {
 export type LoadedActivity = {
   lookup: DayLookup;
   showedUp: (date: ISODate) => boolean;
-  /** See `attendanceExcusedForDay`. Passed alongside `showedUp` wherever a streak, a missed
-   * day or a risk level is derived, so all three agree about what a day was. */
-  excused: (date: ISODate) => boolean;
+  /** See `showedUpOnMarkAlone`. Reporting only — nothing scored reads this. */
+  handMarkedOnly: (date: ISODate) => boolean;
   records: DayRecord[];
 };
 
@@ -333,11 +331,12 @@ export async function loadActivity(
     .orderBy(asc(dailyActivity.date));
 
   const map = new Map<ISODate, DayRecord>();
+  const handMarked = new Set<ISODate>();
   for (const row of rows) {
+    if (row.handMarkedOnly) handMarked.add(row.date);
     map.set(row.date, {
       date: row.date,
       showedUp: row.showedUp,
-      excused: row.attendanceExcused,
       score: row.scorePct / 100,
       studyMinutes: row.studyMinutes,
       points: row.points,
@@ -347,7 +346,7 @@ export async function loadActivity(
   return {
     lookup: (date) => map.get(date),
     showedUp: (date) => map.get(date)?.showedUp ?? false,
-    excused: (date) => map.get(date)?.excused ?? false,
+    handMarkedOnly: (date) => handMarked.has(date),
     records: [...map.values()],
   };
 }
@@ -464,7 +463,7 @@ export async function settleDay(args: {
     ]),
   ]);
 
-  const streak = calculateCurrentStreak(calendar, activity.showedUp, date, activity.excused);
+  const streak = calculateCurrentStreak(calendar, activity.showedUp, date);
   let pointsAwarded = 0;
 
   const milestone = reachedMilestone(streak.length);
@@ -488,7 +487,6 @@ export async function settleDay(args: {
       calendar,
       lookup: activity.lookup,
       showedUp: activity.showedUp,
-      excused: activity.excused,
       today: date,
       totalCheckIns: checkInCount[0]?.n ?? 0,
       totalStudyMinutes: minutesRow[0]?.n ?? 0,
@@ -538,7 +536,7 @@ export async function settleDay(args: {
 
   return {
     pointsAwarded,
-    streak: calculateCurrentStreak(calendar, settled.showedUp, date, settled.excused).length,
+    streak: calculateCurrentStreak(calendar, settled.showedUp, date).length,
     milestone,
     newAchievements,
   };
@@ -555,7 +553,7 @@ export async function getComebackState(args: {
     args.calendar.startDate,
     minDate(args.date, args.calendar.endDate),
   );
-  return calculateComebackState(args.calendar, activity.showedUp, args.date, activity.excused);
+  return calculateComebackState(args.calendar, activity.showedUp, args.date);
 }
 
 /**

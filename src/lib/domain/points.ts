@@ -197,58 +197,57 @@ function isAdminGrantable(event: PointEvent): boolean {
 /**
  * Did this student turn up today?
  *
- * "Showing up" stays deliberately generous — any real behaviour on an active study day
- * counts, and returning at 30% beats not returning — but it is no longer satisfied by the
- * attendance mark alone.
+ * "Showing up" is deliberately generous: any real behaviour on an active study day counts,
+ * and returning at 30% beats not returning. An attendance mark counts, whoever made it.
  *
- * Attendance is the one behaviour a cohort lead can grant to the whole cohort in a single
- * click, and it is worth more points than any other, so a bulk mark used to hand every
- * student a scoring day, an unbroken streak and `on_track` status whether or not they had
- * opened the app. That made the metric the product exists to report unfalsifiable in the
- * wrong direction: the register said 26 present on a day when one student was in the room.
+ * That last part was restricted for a while, and the restriction is worth recording because
+ * the reasoning behind it was sound. Attendance is the one behaviour a cohort lead can grant
+ * to the whole cohort in a single click, and it is worth more points than any other, so a
+ * bulk mark can hand every student a scoring day, an unbroken streak and `on_track` status
+ * whether or not they opened the app — the register once read 26 present on a morning one
+ * student was in the room. Requiring the study room to corroborate the mark closed that off.
  *
- * So attendance counts toward showing up only when the room itself corroborates it —
- * `verifiedPresence` is a `study_room_presence` row, written by the student's own client
- * heartbeat and not reachable from the admin screens. An admin mark still awards its points
- * and still lifts the day score; it just cannot, on its own, assert that someone was there.
+ * It also closed off something else. `showedUp` is not only the turnout number; the streak
+ * engine, the missed-day counter and risk detection all read it. So the rule did not merely
+ * decline to credit a hand-marked day, it counted the day against the student: a cohort lead
+ * confirmed they were in the room and the app told them they had missed it. On 2026-09-07
+ * that was 7 of 23 marked students, two of them flagged for intervention.
+ *
+ * The cohort lead is in the room and the software is not, and this product is run by people
+ * who mark a register. So the mark is trusted again, and the exposure that comes with it is
+ * handled by making it visible rather than by refusing it: `showedUpOnMarkAlone` says which
+ * days rest on a hand mark and nothing else, `attendance.source` says who made every mark,
+ * and the admin console reports the verified count alongside the headline. A number that can
+ * be inflated and shows you when it has been is more use than one nobody trusts.
  */
 export function showedUpForDay(args: {
   entries: readonly { event: PointEvent; points: number }[];
   /** True when the student's client registered them in the study room that day. */
   verifiedPresence: boolean;
 }): boolean {
-  const earned = args.entries.filter((e) => behaviourSlot(e.event) && e.points > 0);
-  if (earned.length === 0) return false;
   if (args.verifiedPresence) return true;
-  return earned.some((e) => !isAdminGrantable(e.event));
+  return args.entries.some((e) => behaviourSlot(e.event) && e.points > 0);
 }
 
 /**
- * Was this day marked present by a human the room could not corroborate?
+ * Did this day's show-up rest on an admin's attendance mark and nothing else?
  *
- * The companion to `showedUpForDay`, and the reason that function can afford to be strict.
+ * Not a penalty and not a deduction — the day counts in full everywhere. This is the
+ * reporting flag that keeps the headline honest: it is what lets the admin console say "23
+ * of 25 showed up, 17 of them verified by the study room", so a bulk mark is visible as a
+ * bulk mark instead of being indistinguishable from a full room.
  *
- * Refusing to let an admin mark assert attendance was the right call — it is what stops one
- * click on "mark all present" manufacturing a cohort of unbroken streaks. But `showedUp` is
- * not only the turnout number: the streak engine, the missed-day counter and risk detection
- * are all built on it, so for a while the rule did not merely decline to credit a student
- * for a hand-marked day, it actively counted the day against them. A cohort lead confirmed
- * they were in the room and the app told them they had missed it.
- *
- * A day this returns true for is neither. It earns nothing — no streak, no consistency, no
- * turnout — and it costs nothing: the streak steps over it the way it steps over a weekend,
- * and it never becomes a missed day. Being marked present by hand is not evidence a student
- * was there, but it is certainly not evidence they were absent.
- *
- * A mark of `absent` is not excused. That one is a judgement a lead actually made, and it
- * goes on counting as a miss.
+ * False for a day the student also worked under their own steam, and false for a verified
+ * join — in both cases there is evidence beyond the mark.
  */
-export function attendanceExcusedForDay(args: {
+export function showedUpOnMarkAlone(args: {
   entries: readonly { event: PointEvent; points: number }[];
   verifiedPresence: boolean;
 }): boolean {
-  if (showedUpForDay(args)) return false;
-  return args.entries.some((e) => isAdminGrantable(e.event) && e.points > 0);
+  if (args.verifiedPresence) return false;
+  const earned = args.entries.filter((e) => behaviourSlot(e.event) && e.points > 0);
+  if (earned.length === 0) return false;
+  return earned.every((e) => isAdminGrantable(e.event));
 }
 
 /* ------------------------------------------------------------ quiz scoring */

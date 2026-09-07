@@ -12,7 +12,7 @@ import type { RiskLevel } from '@/db/schema';
 
 import type { CohortCalendar, ISODate } from './calendar';
 import { type DayLookup, calculateConsistency } from './consistency';
-import { type Excused, type ShowedUp, consecutiveMissedActiveDays } from './streak';
+import { type ShowedUp, consecutiveMissedActiveDays } from './streak';
 import { activeStudyDaysBetween, addDays, weekStart } from './calendar';
 
 export type RiskThresholds = {
@@ -55,13 +55,6 @@ export function calculateRiskStatus(args: {
   calendar: CohortCalendar;
   lookup: DayLookup;
   showedUp: ShowedUp;
-  /**
-   * Days an admin marked present or late that the room never corroborated. They are stepped
-   * over rather than counted as misses — without this, the two students the console flagged
-   * for intervention on 2026-09-07 were flagged for days a cohort lead had confirmed them
-   * present for. See `attendanceExcusedForDay`.
-   */
-  excused?: Excused;
   today: ISODate;
   /** The day the student joined; days before it never count against them. */
   since?: ISODate;
@@ -71,7 +64,7 @@ export function calculateRiskStatus(args: {
   const { calendar, lookup, showedUp, today } = args;
   const since = args.since && args.since > calendar.startDate ? args.since : calendar.startDate;
 
-  const missed = consecutiveMissedActiveDays(calendar, showedUp, today, args.excused);
+  const missed = consecutiveMissedActiveDays(calendar, showedUp, today);
 
   /*
    * Today is excluded from every window below. Risk is a judgement about a student's record,

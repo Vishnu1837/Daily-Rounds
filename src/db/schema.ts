@@ -795,14 +795,15 @@ export const dailyActivity = pgTable(
     isActiveDay: boolean('is_active_day').notNull(),
     showedUp: boolean('showed_up').notNull().default(false),
     /**
-     * A day an admin marked present or late that the room never corroborated.
+     * True when this day's `showedUp` rests on a cohort lead's attendance mark and nothing
+     * else — no study-room join, no work the student did themselves.
      *
-     * The third state between showing up and missing. `showedUp` stays false — turnout only
-     * ever counts what was verified — but the streak engine, the missed-day counter and risk
-     * all skip the day rather than holding it against the student. See `showedUpForDay` and
-     * `attendanceExcusedForDay`.
+     * Reporting only. Nothing scored reads it: the day counts in full toward turnout, the
+     * streak, consistency and risk exactly as any other. It exists so the admin console can
+     * show the verified split behind its headline, which is what keeps a bulk mark visible
+     * as a bulk mark. See `showedUpOnMarkAlone`.
      */
-    attendanceExcused: boolean('attendance_excused').notNull().default(false),
+    handMarkedOnly: boolean('hand_marked_only').notNull().default(false),
     points: integer('points').notNull().default(0),
     /** Behaviour completion for the day, 0–100. The exact consistency numerator. */
     scorePct: smallint('score_pct').notNull().default(0),
