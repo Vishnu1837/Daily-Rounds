@@ -495,6 +495,16 @@ separate.
 
 ### 2. Turn the scheduled sweep on
 
+**The cron schedule is once a day (`0 20 * * *`, 01:30 IST), not every 15 minutes.** This
+project is on Vercel's Hobby plan, which permits exactly one cron run per day — and a more
+frequent expression is not merely ignored, it **fails the entire deployment**. That is what
+kept three commits of fixes from ever reaching production, silently, with a green git push
+each time. If the project moves to Pro, change it back to `*/15 * * * *` in `vercel.json`.
+
+A daily backstop is weaker but less so than it sounds: the grove and study screens sweep the
+caller's own rows on every read, so the only student it leaves waiting is one who has not
+opened the app at all.
+
 Set `CRON_SECRET` on the Vercel project. Vercel Cron sends it automatically as a bearer token
 to the schedule already declared in `vercel.json` (`/api/cron/sweep`, every 15 minutes).
 

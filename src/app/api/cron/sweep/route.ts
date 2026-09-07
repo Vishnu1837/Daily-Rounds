@@ -14,6 +14,17 @@ import { runSweep } from '@/server/sweep';
  * call them. On Vercel that is a Cron Job, which issues an ordinary GET to this path on a
  * schedule declared in `vercel.json`. See docs/DEPLOYMENT.md for the exact configuration.
  *
+ * **The schedule is once a day (01:30 IST), because the project is on Vercel's Hobby plan
+ * and that plan permits exactly one cron run per day.** An every-15-minutes schedule is
+ * rejected outright, and the rejection fails the whole deployment rather than just the cron
+ * — which is how three commits of fixes sat unshipped without anything obviously broken.
+ * On Pro, change it to every 15 minutes; the sweep is idempotent and likes running often.
+ *
+ * A daily backstop is weaker than a quarter-hourly one but not by as much as it sounds: the
+ * grove and study screens sweep the caller's own rows on every read, so the only student
+ * this leaves waiting is one who does not open the app at all — and their rows are settled
+ * the moment they next do.
+ *
  * Both sweeps are idempotent, so this endpoint is safe to call twice, to retry after a
  * timeout, and to overlap with the lazy per-student sweeps that already run on the grove and
  * study screens. Being safe to call twice is what makes it safe to schedule at all.
