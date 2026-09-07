@@ -400,15 +400,38 @@ export async function settleDay(args: {
        * invalidated are excluded — a sitting that was thrown away is not one the student
        * completed. Only the *count* reaches the badge engine; the score never does, which
        * is what keeps a public badge from carrying a private mark.
+       *
+       * The `CASE` clauses are `scorePercent`'s rule, written in SQL: while a review is
+       * pending, the questions still sitting with a cohort lead count towards neither the
+       * score nor the total. Without them this asked a different question from the one the
+       * student's own result screen answers — a paper of ten MCQs answered perfectly and ten
+       * unmarked essay points read as 100% to the student and 50% here, so the badge was
+       * quietly withheld from someone who had been told they passed. With 107 answers
+       * awaiting marking in the cohort, that was not a rare case.
        */
       db
         .select({
           completed: sql<number>`count(*)::int`,
           passed: sql<number>`count(*) FILTER (
-              WHERE (${assessmentAttempts.autoTotal} + ${assessmentAttempts.manualTotal}) > 0
+              WHERE (
+                ${assessmentAttempts.autoTotal} + CASE
+                  WHEN ${assessmentAttempts.reviewStatus} = 'pending' THEN 0
+                  ELSE ${assessmentAttempts.manualTotal}
+                END
+              ) > 0
                 AND round(
-                  100.0 * (${assessmentAttempts.autoScore} + ${assessmentAttempts.manualScore})
-                  / (${assessmentAttempts.autoTotal} + ${assessmentAttempts.manualTotal})
+                  100.0 * (
+                    ${assessmentAttempts.autoScore} + CASE
+                      WHEN ${assessmentAttempts.reviewStatus} = 'pending' THEN 0
+                      ELSE ${assessmentAttempts.manualScore}
+                    END
+                  )
+                  / (
+                    ${assessmentAttempts.autoTotal} + CASE
+                      WHEN ${assessmentAttempts.reviewStatus} = 'pending' THEN 0
+                      ELSE ${assessmentAttempts.manualTotal}
+                    END
+                  )
                 ) >= ${assessments.passMarkPct}
             )::int`,
         })

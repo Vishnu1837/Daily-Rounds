@@ -1,7 +1,8 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { SessionUser } from '@/lib/auth/session';
+import { scorePercent } from '@/lib/assessments/grade';
 import { BEHAVIOUR_EVENTS, DEFAULT_POINT_RULES, quizPoints } from '@/lib/domain/points';
 
 import { createTestCohort, createTestMember, db, schema } from './helpers/db';
@@ -296,5 +297,71 @@ describe('the review queue', () => {
     expect(queue[0]!.waitingDays).toBe(7);
     expect(queue[0]!.unmarked).toBe(1);
     expect(queue[0]!.assessmentTitle).toBe('Inflammation check');
+  });
+});
+
+describe('the badge engine and the result screen answer the same question', () => {
+  it('counts a pass on the marked questions, as the student was already told', async () => {
+    const ctx = await createTestCohort();
+    const student = await createTestMember(ctx.cohort.id);
+    const { assessment, questions } = await createAssessment(ctx.cohort.id);
+    state.user = sessionUser(student.user.id);
+
+    // Both MCQs right (2 of 2), and an essay worth 2 more points left unmarked. The pass
+    // mark is 60%.
+    const attemptId = await sit(assessment.id, questions, [0, 0], 'An answer for a human.');
+
+    const [attempt] = await db
+      .select()
+      .from(schema.assessmentAttempts)
+      .where(eq(schema.assessmentAttempts.id, attemptId));
+
+    expect(attempt!.reviewStatus).toBe('pending');
+
+    // What the student is shown: the unmarked half counts towards neither side.
+    const shown = scorePercent(attempt!, false);
+    expect(shown.pct).toBe(100);
+    expect(shown.provisional).toBe(true);
+    expect(shown.pct).toBeGreaterThanOrEqual(assessment.passMarkPct);
+
+    /*
+     * What the badge engine now sees. It used to divide by the whole paper while the essay
+     * scored zero — 2 of 4, 50%, below the pass mark — so a student told they had passed was
+     * quietly denied the badge until somebody marked their essay. With a marking backlog,
+     * that is indefinitely.
+     */
+    const badge = await db
+      .select({
+        passed: sql<number>`count(*) FILTER (
+            WHERE (
+              ${schema.assessmentAttempts.autoTotal} + CASE
+                WHEN ${schema.assessmentAttempts.reviewStatus} = 'pending' THEN 0
+                ELSE ${schema.assessmentAttempts.manualTotal}
+              END
+            ) > 0
+              AND round(
+                100.0 * (
+                  ${schema.assessmentAttempts.autoScore} + CASE
+                    WHEN ${schema.assessmentAttempts.reviewStatus} = 'pending' THEN 0
+                    ELSE ${schema.assessmentAttempts.manualScore}
+                  END
+                )
+                / (
+                  ${schema.assessmentAttempts.autoTotal} + CASE
+                    WHEN ${schema.assessmentAttempts.reviewStatus} = 'pending' THEN 0
+                    ELSE ${schema.assessmentAttempts.manualTotal}
+                  END
+                )
+              ) >= ${schema.assessments.passMarkPct}
+          )::int`,
+      })
+      .from(schema.assessmentAttempts)
+      .innerJoin(
+        schema.assessments,
+        eq(schema.assessments.id, schema.assessmentAttempts.assessmentId),
+      )
+      .where(eq(schema.assessmentAttempts.id, attemptId));
+
+    expect(badge[0]!.passed).toBe(1);
   });
 });

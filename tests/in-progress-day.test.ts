@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildCalendar } from '@/lib/domain/calendar';
+import { displayBand } from '@/lib/domain/points';
 import {
   type DayRecord,
   calculateConsistency,
@@ -189,5 +190,25 @@ describe('the exclusion is scoped to the day that is actually in progress', () =
     expect(calculateConsistency(cal, lookup, '2026-09-02', '2026-09-04')).toEqual(
       calculateConsistency(cal, lookup, '2026-09-02', '2026-09-04', { inProgress: null }),
     );
+  });
+});
+
+describe('today is not painted as a failure before it has happened', () => {
+  it('shows an untouched active day as a rest square while it is still today', () => {
+    // `recomputeRange` writes a daily_activity row for today, so after an admin pressed
+    // Recalculate every student had a stored `missed` band for a day that had barely begun —
+    // and the calendar drew it red.
+    expect(displayBand('missed', true)).toBe('off');
+  });
+
+  it('still marks it missed once the day is over', () => {
+    expect(displayBand('missed', false)).toBe('missed');
+  });
+
+  it('leaves every other band alone, so a day fills in as it is worked through', () => {
+    for (const band of ['perfect', 'strong', 'active', 'weak', 'off', 'bonus'] as const) {
+      expect(displayBand(band, true)).toBe(band);
+      expect(displayBand(band, false)).toBe(band);
+    }
   });
 });

@@ -155,6 +155,22 @@ export function bandForDay(score: number, isActiveDay: boolean): DayBandName {
   return 'missed';
 }
 
+/**
+ * The band to *draw* for a day, given that today is not over.
+ *
+ * `bandForDay` answers what a day was worth. This answers what to show while it is still
+ * being lived, and the two differ in exactly one case: an active day with nothing on it yet
+ * is `missed` by score and is not a miss in fact. Painting today red from midnight tells a
+ * student their day has already gone wrong before it has started — and it is the same
+ * mistake the consistency denominator was making, in colour.
+ *
+ * Every other band passes through untouched, so a day that is going well still fills in as
+ * the student works through it.
+ */
+export function displayBand(band: DayBandName, isInProgress: boolean): DayBandName {
+  return isInProgress && band === 'missed' ? 'off' : band;
+}
+
 export const BAND_LABELS: Record<DayBandName, string> = {
   perfect: 'Perfect day',
   strong: 'Strong day',

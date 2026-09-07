@@ -74,7 +74,12 @@ import {
   isSettledWeek,
 } from '@/lib/domain/consistency';
 import type { PointRules } from '@/lib/domain/points';
-import { BEHAVIOUR_EVENTS, behaviourSlot, maxDailyBehaviourPoints } from '@/lib/domain/points';
+import {
+  BEHAVIOUR_EVENTS,
+  behaviourSlot,
+  displayBand,
+  maxDailyBehaviourPoints,
+} from '@/lib/domain/points';
 import { PRESENCE_STALE_SECONDS, parseHm, roomTitle } from '@/lib/domain/study-room';
 import {
   calculateBestStreak,
@@ -1346,15 +1351,14 @@ export async function getProgressData(ctx: MemberContext): Promise<ProgressData>
     return {
       date,
       /*
-       * `date < today`, not `<=`. Today has not been missed until it is over — the same rule
-       * the consistency denominator and the streak engine follow — and painting it red from
-       * midnight told every student their day had already gone wrong before it started.
+       * Today has not been missed until it is over — the same rule the consistency
+       * denominator and the streak engine follow. Painting it red from midnight told every
+       * student their day had already gone wrong before it started.
        */
-      band: (rec
-        ? bandOf(rec.score, active)
-        : active && date < today
-          ? 'missed'
-          : 'off') as DayBand,
+      band: displayBand(
+        (rec ? bandOf(rec.score, active) : active && date < today ? 'missed' : 'off') as DayBand,
+        date === today,
+      ) as DayBand,
       isActiveDay: active,
       points: rec?.points ?? 0,
     };
