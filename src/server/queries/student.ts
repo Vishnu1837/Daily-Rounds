@@ -71,6 +71,7 @@ import {
   calculateImprovement,
   calculateOverallConsistency,
   calculateWeeklyProgress,
+  isSettledWeek,
 } from '@/lib/domain/consistency';
 import type { PointRules } from '@/lib/domain/points';
 import { BEHAVIOUR_EVENTS, behaviourSlot, maxDailyBehaviourPoints } from '@/lib/domain/points';
@@ -512,7 +513,9 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
         }
       : null;
 
-  const weekly = calculateCurrentWeekConsistency(calendar, activity.lookup, upTo);
+  const weekly = calculateCurrentWeekConsistency(calendar, activity.lookup, upTo, {
+    inProgress: today,
+  });
   const topics = topicCounts[0] ?? { total: 0, completed: 0 };
   const { rank, cohortSize } = standing;
 
@@ -669,6 +672,8 @@ export type LeaderboardRow = {
   bestStreak: number;
   points: number;
   improvementPct: number;
+  /** False until two comparable weeks exist. The UI shows "—", never a number. */
+  improvementComparable: boolean;
   perfectWeeks: number;
   /**
    * Badges this student has earned, visible to the whole cohort.
@@ -846,8 +851,10 @@ export const loadCohortStandings = async (
     };
     const showedUp = (d: ISODate) => days.get(d)?.showedUp ?? false;
 
-    const overall = calculateOverallConsistency(calendar, lookup, upTo);
-    const weeks = calculateWeeklyProgress(calendar, lookup, upTo);
+    // Today is still being lived; it joins these numbers when it ends. See ConsistencyOptions.
+    const overall = calculateOverallConsistency(calendar, lookup, upTo, { inProgress: today });
+    const weeks = calculateWeeklyProgress(calendar, lookup, upTo, { inProgress: today });
+    const improvement = calculateImprovement(weeks.filter((w) => isSettledWeek(w, today)));
 
     return {
       memberId: m.memberId,
@@ -860,10 +867,16 @@ export const loadCohortStandings = async (
       streak: calculateCurrentStreak(calendar, showedUp, today).length,
       bestStreak: calculateBestStreak(calendar, showedUp, upTo).length,
       points: pointsBy.get(m.memberId) ?? 0,
-      improvementPct: calculateImprovement(weeks).deltaPct,
+      improvementPct: improvement.deltaPct,
+      improvementComparable: improvement.comparable,
       badges: badgesBy.get(m.memberId) ?? [],
-      perfectWeeks: weeks.filter((w) => w.activeDays > 0 && w.completedDays === w.activeDays)
-        .length,
+      /*
+       * Settled weeks only. The week in progress has only its elapsed days, so counting it
+       * called a week perfect on a Tuesday — and the leaderboard published that to the cohort.
+       */
+      perfectWeeks: weeks.filter(
+        (w) => isSettledWeek(w, today) && w.activeDays > 0 && w.completedDays === w.activeDays,
+      ).length,
     };
   });
 
@@ -1218,8 +1231,8 @@ export async function getCalendarMonth(ctx: MemberContext, month: ISODate): Prom
       isToday: date === today,
       isFuture: date > today,
       inCohort: date >= calendar.startDate && date <= calendar.endDate,
-      band:
-        activity?.band ?? (isActiveStudyDay(calendar, date) && date <= today ? 'missed' : 'off'),
+      // `date < today`: an untouched today is a day not finished, not a day missed.
+      band: activity?.band ?? (isActiveStudyDay(calendar, date) && date < today ? 'missed' : 'off'),
       points: activity?.points ?? 0,
       studyMinutes: activity?.studyMinutes ?? 0,
       showedUp: activity?.showedUp ?? false,
@@ -1317,8 +1330,11 @@ export async function getProgressData(ctx: MemberContext): Promise<ProgressData>
       readTotalPoints(memberId),
     ]);
 
-  const overall = calculateOverallConsistency(calendar, activity.lookup, upTo);
-  const weeks = calculateWeeklyProgress(calendar, activity.lookup, upTo);
+  // Today is still being lived; it joins these numbers when it ends. See ConsistencyOptions.
+  const overall = calculateOverallConsistency(calendar, activity.lookup, upTo, {
+    inProgress: today,
+  });
+  const weeks = calculateWeeklyProgress(calendar, activity.lookup, upTo, { inProgress: today });
   const earnedBy = new Map(achievementRows.map((r) => [r.code, r.earnedOn]));
 
   const heatmap = datesBetween(
@@ -1329,9 +1345,14 @@ export async function getProgressData(ctx: MemberContext): Promise<ProgressData>
     const active = isActiveStudyDay(calendar, date);
     return {
       date,
+      /*
+       * `date < today`, not `<=`. Today has not been missed until it is over — the same rule
+       * the consistency denominator and the streak engine follow — and painting it red from
+       * midnight told every student their day had already gone wrong before it started.
+       */
       band: (rec
         ? bandOf(rec.score, active)
-        : active && date <= today
+        : active && date < today
           ? 'missed'
           : 'off') as DayBand,
       isActiveDay: active,
@@ -1693,7 +1714,10 @@ export async function getWeeklyReviewContext(ctx: MemberContext) {
       ),
   ]);
 
-  const current = calculateConsistency(calendar, activity.lookup, thisWeek, upTo);
+  const current = calculateConsistency(calendar, activity.lookup, thisWeek, upTo, {
+    inProgress: today,
+  });
+  // Entirely in the past, so nothing to exclude.
   const previous = calculateConsistency(calendar, activity.lookup, lastWeek, addDays(lastWeek, 6));
   const submitted = new Set(existingRows.map((r) => r.weekStart));
 

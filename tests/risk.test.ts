@@ -94,10 +94,29 @@ describe('calculateRiskStatus', () => {
       '2025-09-16': 0.4,
       '2025-09-17': 0.5,
     });
-    const r = calculateRiskStatus({ calendar: cal, lookup, showedUp, today: '2025-09-17' });
+    // Thursday: Mon–Wed have finished, so there are three settled days to judge. Today is
+    // excluded from the sample, so the comparison needs the week to have got that far.
+    const r = calculateRiskStatus({ calendar: cal, lookup, showedUp, today: '2025-09-18' });
     expect(r.previousWeekPct).toBeGreaterThan(r.currentWeekPct);
     expect(r.level).toBe('at_risk');
     expect(r.reasons.some((x) => x.includes('dropped'))).toBe(true);
+  });
+
+  it('will not call a week a collapse before enough of it has finished', () => {
+    // The same student, judged on Wednesday: only Monday and Tuesday have settled. Two days
+    // is not a week, and comparing them against a full one is how every student got flagged
+    // at the start of every week.
+    const { lookup, showedUp } = ctx({
+      '2025-09-08': 1,
+      '2025-09-09': 1,
+      '2025-09-10': 1,
+      '2025-09-11': 1,
+      '2025-09-12': 1,
+      '2025-09-15': 0.5,
+      '2025-09-16': 0.4,
+    });
+    const r = calculateRiskStatus({ calendar: cal, lookup, showedUp, today: '2025-09-17' });
+    expect(r.reasons.some((x) => x.includes('dropped'))).toBe(false);
   });
 
   it('escalates for very low overall participation', () => {

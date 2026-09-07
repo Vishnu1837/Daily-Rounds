@@ -65,19 +65,27 @@ export function calculateRiskStatus(args: {
   const since = args.since && args.since > calendar.startDate ? args.since : calendar.startDate;
 
   const missed = consecutiveMissedActiveDays(calendar, showedUp, today);
-  const overall = calculateConsistency(calendar, lookup, since, today);
+
+  /*
+   * Today is excluded from every window below. Risk is a judgement about a student's record,
+   * and until the day is over today is not part of the record — counting it would have flagged
+   * the whole cohort every morning and cleared them again by evening.
+   */
+  const inProgress = { inProgress: today };
+  const overall = calculateConsistency(calendar, lookup, since, today, inProgress);
 
   // Trailing window: the last N active study days the student has actually had.
   const recentDays = activeStudyDaysBetween(calendar, since, today).slice(
     -t.participationWindowDays,
   );
   const recent = recentDays.length
-    ? calculateConsistency(calendar, lookup, recentDays[0]!, today)
+    ? calculateConsistency(calendar, lookup, recentDays[0]!, today, inProgress)
     : overall;
 
   const thisWeekStart = weekStart(today);
   const lastWeekStart = addDays(thisWeekStart, -7);
-  const currentWeek = calculateConsistency(calendar, lookup, thisWeekStart, today);
+  const currentWeek = calculateConsistency(calendar, lookup, thisWeekStart, today, inProgress);
+  // Entirely in the past, so nothing to exclude.
   const previousWeek = calculateConsistency(
     calendar,
     lookup,

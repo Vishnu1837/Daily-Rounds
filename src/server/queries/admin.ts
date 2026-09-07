@@ -41,6 +41,7 @@ import {
   calculateImprovement,
   calculateOverallConsistency,
   calculateWeeklyProgress,
+  isSettledWeek,
 } from '@/lib/domain/consistency';
 import { ACHIEVEMENTS } from '@/lib/domain/achievements';
 import { RISK_ORDER, calculateRiskStatus } from '@/lib/domain/risk';
@@ -79,6 +80,8 @@ export type AdminStudentRow = {
   riskReasons: string[];
   missedActiveDays: number;
   improvementPct: number;
+  /** False until there are two comparable weeks. The UI must show "—", not a number. */
+  improvementComparable: boolean;
   showedUpToday: boolean;
   attendanceToday: AttendanceStatus | null;
   checkedInToday: boolean;
@@ -200,7 +203,9 @@ export const getCohortStudents = cache(async function getCohortStudents(
     const showedUp = (d: ISODate) => days.get(d)?.showedUp ?? false;
     const joinedOn = m.joinedAt.toISOString().slice(0, 10);
 
-    const overall = calculateOverallConsistency(calendar, lookup, upTo);
+    // Today is still being lived; it joins these numbers when it ends. See ConsistencyOptions.
+    const inProgress = { inProgress: today };
+    const overall = calculateOverallConsistency(calendar, lookup, upTo, inProgress);
     const risk = calculateRiskStatus({
       calendar,
       lookup,
@@ -232,8 +237,17 @@ export const getCohortStudents = cache(async function getCohortStudents(
       risk: risk.level,
       riskReasons: risk.reasons,
       missedActiveDays: risk.missedActiveDays,
-      improvementPct: calculateImprovement(calculateWeeklyProgress(calendar, lookup, upTo))
-        .deltaPct,
+      ...(() => {
+        const improvement = calculateImprovement(
+          calculateWeeklyProgress(calendar, lookup, upTo, inProgress).filter((w) =>
+            isSettledWeek(w, today),
+          ),
+        );
+        return {
+          improvementPct: improvement.deltaPct,
+          improvementComparable: improvement.comparable,
+        };
+      })(),
       showedUpToday: showedUp(today),
       attendanceToday: attendanceBy.get(m.memberId) ?? null,
       checkedInToday: checkedIn.has(m.memberId),
@@ -520,8 +534,8 @@ export async function getStudentDetail(ctx: CohortCtx, memberId: string) {
   return {
     member: { ...member, joinedOn },
     goals: goalRows[0] ?? null,
-    overall: calculateOverallConsistency(calendar, lookup, upTo),
-    weeks: calculateWeeklyProgress(calendar, lookup, upTo),
+    overall: calculateOverallConsistency(calendar, lookup, upTo, { inProgress: today }),
+    weeks: calculateWeeklyProgress(calendar, lookup, upTo, { inProgress: today }),
     streak: calculateCurrentStreak(calendar, showedUp, today).length,
     bestStreak: calculateBestStreak(calendar, showedUp, upTo).length,
     risk: calculateRiskStatus({

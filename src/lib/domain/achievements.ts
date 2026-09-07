@@ -9,9 +9,9 @@ import type { CohortCalendar, ISODate } from './calendar';
 import { addDays, weekStart } from './calendar';
 import {
   type DayLookup,
-  calculateConsistency,
   calculateImprovement,
   calculateWeeklyProgress,
+  isSettledWeek,
 } from './consistency';
 import { type ShowedUp, calculateBestStreak, calculateCurrentStreak } from './streak';
 
@@ -59,10 +59,21 @@ const currentStreak = (ctx: AchievementContext) =>
 const bestStreak = (ctx: AchievementContext) =>
   calculateBestStreak(ctx.calendar, ctx.showedUp, ctx.today).length;
 
-const anyPerfectWeek = (ctx: AchievementContext) =>
-  calculateWeeklyProgress(ctx.calendar, ctx.lookup, ctx.today).some(
-    (w) => w.activeDays > 0 && w.completedDays === w.activeDays,
+/**
+ * The student's weeks, in order, with the one they are still living left out.
+ *
+ * Every badge below that makes a claim about a *week* reads from here. Without the filter,
+ * "Perfect Week" fired on a Tuesday: the current week's elapsed days were its only days, so
+ * two good mornings in a row satisfied "every active day completed" — and gold badges were
+ * being handed out for a week that had barely started.
+ */
+const settledWeeks = (ctx: AchievementContext) =>
+  calculateWeeklyProgress(ctx.calendar, ctx.lookup, ctx.today, { inProgress: ctx.today }).filter(
+    (w) => isSettledWeek(w, ctx.today),
   );
+
+const anyPerfectWeek = (ctx: AchievementContext) =>
+  settledWeeks(ctx).some((w) => w.activeDays > 0 && w.completedDays === w.activeDays);
 
 export const ACHIEVEMENTS: AchievementDefinition[] = [
   {
@@ -151,9 +162,7 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     description: 'Improve your weekly consistency by 15 points or more.',
     emoji: '📈',
     tier: 'silver',
-    earned: (ctx) =>
-      calculateImprovement(calculateWeeklyProgress(ctx.calendar, ctx.lookup, ctx.today)).deltaPct >=
-      15,
+    earned: (ctx) => calculateImprovement(settledWeeks(ctx)).deltaPct >= 15,
   },
   {
     code: 'ten_check_ins',
@@ -193,12 +202,20 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     description: 'Show up for every active study day across two consecutive weeks.',
     emoji: '🏆',
     tier: 'gold',
+    /*
+     * The two most recent *finished* weeks. A fortnight cannot be claimed complete from
+     * inside it, so this now lands the day after the second week ends rather than on its
+     * final evening — which is a day later than before, and the only defensible reading.
+     */
     earned: (ctx) => {
-      const thisWeek = weekStart(ctx.today);
-      const lastWeek = addDays(thisWeek, -7);
-      const a = calculateConsistency(ctx.calendar, ctx.lookup, lastWeek, addDays(lastWeek, 6));
-      const b = calculateConsistency(ctx.calendar, ctx.lookup, thisWeek, ctx.today);
-      return a.activeDays > 0 && a.missedDays === 0 && b.activeDays > 0 && b.missedDays === 0;
+      const weeks = settledWeeks(ctx);
+      if (weeks.length < 2) return false;
+      const [a, b] = weeks.slice(-2) as [(typeof weeks)[number], (typeof weeks)[number]];
+      // Consecutive: a fortnight is two weeks in a row, not any two good weeks.
+      if (addDays(a.weekStart, 7) !== b.weekStart) return false;
+      const perfect = (w: (typeof weeks)[number]) =>
+        w.activeDays > 0 && w.completedDays === w.activeDays;
+      return perfect(a) && perfect(b);
     },
   },
   {

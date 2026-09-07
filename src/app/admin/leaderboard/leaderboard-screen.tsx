@@ -57,7 +57,13 @@ export function AdminLeaderboardScreen({
       case 'points':
         return copy.sort((a, b) => b.points - a.points || a.rank - b.rank);
       case 'improvement':
-        return copy.sort((a, b) => b.improvementPct - a.improvementPct || a.rank - b.rank);
+        // Rows with nothing to compare sort last, rather than ranking as a flat zero.
+        return copy.sort(
+          (a, b) =>
+            Number(b.improvementComparable) - Number(a.improvementComparable) ||
+            b.improvementPct - a.improvementPct ||
+            a.rank - b.rank,
+        );
       case 'showUp':
         return copy.sort((a, b) => b.showUpRatePct - a.showUpRatePct || a.rank - b.rank);
       case 'name':
@@ -204,18 +210,37 @@ export function AdminLeaderboardScreen({
                       <td className="text-fg-muted px-3 py-3 text-right text-sm tabular-nums">
                         {row.perfectWeeks}
                       </td>
+                      {/*
+                        A dash until two finished weeks exist to compare. This column used to
+                        read −89%, −75%, −74% straight down the cohort, which was one week of
+                        data subtracted from an unfinished Monday rather than anybody
+                        declining. "Not enough data yet" is the honest cell.
+                      */}
                       <td
                         className={cn(
                           'px-3 py-3 text-right text-sm tabular-nums',
-                          row.improvementPct > 0
-                            ? 'text-success-strong dark:text-success'
-                            : row.improvementPct < 0
-                              ? 'text-danger-strong dark:text-danger'
-                              : 'text-fg-muted',
+                          !row.improvementComparable
+                            ? 'text-fg-subtle'
+                            : row.improvementPct > 0
+                              ? 'text-success-strong dark:text-success'
+                              : row.improvementPct < 0
+                                ? 'text-danger-strong dark:text-danger'
+                                : 'text-fg-muted',
                         )}
+                        title={
+                          row.improvementComparable
+                            ? undefined
+                            : 'Needs two finished weeks before a comparison means anything'
+                        }
                       >
-                        {row.improvementPct > 0 ? '+' : ''}
-                        {row.improvementPct}%
+                        {row.improvementComparable ? (
+                          <>
+                            {row.improvementPct > 0 ? '+' : ''}
+                            {row.improvementPct}%
+                          </>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className="text-fg-muted px-5 py-3 text-right text-sm tabular-nums">
                         {row.points}
