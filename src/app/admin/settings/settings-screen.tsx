@@ -12,7 +12,13 @@ import { FormError, Select, TextInput } from '@/components/ui/form';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/ui/page-header';
 import { cn } from '@/lib/cn';
-import { POINT_EVENT_LABELS, type PointRules } from '@/lib/domain/points';
+import {
+  COMPUTED_POINT_EVENTS,
+  COMPUTED_POINT_EXPLANATIONS,
+  EDITABLE_POINT_EVENTS,
+  POINT_EVENT_LABELS,
+  type PointRules,
+} from '@/lib/domain/points';
 import { roomTitle } from '@/lib/domain/study-room';
 import type { RiskThresholds } from '@/lib/domain/risk';
 import {
@@ -61,18 +67,37 @@ type Cohort = {
 
 type Day = { id: string; date: string; label: string };
 
+export type SweepStatus = {
+  /**
+   * Minutes since the run started, measured on the *server*.
+   *
+   * Not a timestamp for the client to subtract from its own clock: this whole body of work
+   * exists because timing decisions taken against a browser's idea of the time were wrong,
+   * and "has the sweep stopped?" is exactly such a decision. It also keeps the component
+   * pure, which is what the React compiler wants of it anyway.
+   */
+  ageMinutes: number;
+  finished: boolean;
+  ok: boolean | null;
+  affected: Record<string, number>;
+  error: string | null;
+};
+
 export function SettingsScreen({
   cohort,
   thresholds,
   rules,
   holidays,
   extras,
+  sweep,
 }: {
   cohort: Cohort;
   thresholds: RiskThresholds;
   rules: PointRules;
   holidays: Day[];
   extras: Day[];
+  /** The newest background sweep, or null before one has ever run. */
+  sweep: SweepStatus | null | undefined;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -327,9 +352,80 @@ export function SettingsScreen({
         </div>
       </Card>
 
+      <SweepPanel sweep={sweep ?? null} />
+
       <RestartCohortPanel cohortId={cohort.id} cohortName={cohort.name} />
     </div>
   );
+}
+
+/**
+ * Whether the background sweep is actually running.
+ *
+ * Its existence is the point. The audit found focus rounds that had been "growing" for three
+ * days and study blocks running for a week, and the cause was not a broken sweep — it was
+ * that none had ever been scheduled, and nothing in the product could have said so. A job
+ * that silently stops is indistinguishable from a cohort with nothing to sweep, unless
+ * somewhere shows the last time it ran.
+ *
+ * Three states, and the middle one is the one worth having: never run (the scheduler is not
+ * configured), ran a while ago (it has stopped), ran just now (fine).
+ */
+function SweepPanel({ sweep }: { sweep: SweepStatus | null }) {
+  // The schedule is every 15 minutes; an hour without one has stopped, not slipped.
+  const stale = sweep === null || sweep.ageMinutes > 60;
+  const failed = sweep !== null && (sweep.ok === false || !sweep.finished);
+
+  return (
+    <Card>
+      <CardHeader
+        title="Background sweep"
+        description="Settles focus rounds and study blocks that nobody closed. Runs every 15 minutes."
+      />
+      <div className="p-5 pt-4">
+        <div className="flex flex-wrap items-center gap-2">
+          {!sweep ? (
+            <Badge tone="danger">Never run</Badge>
+          ) : failed ? (
+            <Badge tone="danger">Last run failed</Badge>
+          ) : stale ? (
+            <Badge tone="warning">Last run {formatAge(sweep.ageMinutes)} ago</Badge>
+          ) : (
+            <Badge tone="success">Ran {formatAge(sweep.ageMinutes)} ago</Badge>
+          )}
+          {sweep?.ok === true && (
+            <span className="text-fg-muted text-sm">
+              {sweep.affected.trees_grown ?? 0} rounds settled ·{' '}
+              {sweep.affected.sessions_closed ?? 0} study blocks closed
+            </span>
+          )}
+        </div>
+
+        {sweep?.error && (
+          <p className="border-danger/30 bg-danger/8 text-fg mt-3 rounded-2xl border p-3.5 text-sm">
+            {sweep.error}
+          </p>
+        )}
+
+        {!sweep && (
+          <p className="bg-warning/10 text-fg-muted mt-3 rounded-2xl p-3.5 text-sm leading-relaxed">
+            No sweep has ever run. Overdue focus rounds and abandoned study blocks are still tidied
+            when a student opens the grove or starts a block, but a student who does not open the
+            app is never reached. Set <code>CRON_SECRET</code> on the deployment to switch the
+            schedule on — see docs/DEPLOYMENT.md.
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function formatAge(minutes: number): string {
+  if (minutes < 1) return 'less than a minute';
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.floor(hours / 24)} days`;
 }
 
 function PointRulesCard({ cohortId, rules }: { cohortId: string; rules: PointRules }) {
@@ -338,9 +434,14 @@ function PointRulesCard({ cohortId, rules }: { cohortId: string; rules: PointRul
   const [pending, startTransition] = useTransition();
   const [draft, setDraft] = useState<Record<string, number>>(rules);
 
-  const editable = (Object.keys(rules) as (keyof PointRules)[]).filter(
-    (k) => k !== 'streak_bonus' && k !== 'admin_adjustment',
-  );
+  /*
+   * The editable set comes from the domain, not from a list maintained here. It used to be
+   * a local filter that excluded two events and forgot `achievement` — so the screen showed
+   * an Achievement field that saved a number nothing ever read, while the ledger went on
+   * paying 10/25/50 by tier. A cohort lead reading this screen was being told about a system
+   * that did not exist.
+   */
+  const editable = EDITABLE_POINT_EVENTS;
 
   return (
     <Card>
@@ -368,6 +469,22 @@ function PointRulesCard({ cohortId, rules }: { cohortId: string; rules: PointRul
           Quiz points are deliberately excluded from the consistency calculation, so raising them
           cannot let quiz performance overtake showing up.
         </p>
+
+        <div className="border-border mt-5 border-t pt-4">
+          <p className="eyebrow">Set automatically</p>
+          <p className="text-fg-muted mt-1.5 text-sm">
+            These are worked out when the award is made, so they have no single value to set here.
+            The ledger and the student&rsquo;s own points page both use exactly these rules.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {COMPUTED_POINT_EVENTS.map((event) => (
+              <li key={event} className="flex flex-col gap-0.5">
+                <span className="text-fg text-sm font-semibold">{POINT_EVENT_LABELS[event]}</span>
+                <span className="text-fg-subtle text-sm">{COMPUTED_POINT_EXPLANATIONS[event]}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
         <Button
           className="mt-4"
           size="lg"

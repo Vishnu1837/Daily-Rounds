@@ -28,7 +28,5 @@ export default async function AdminGrovePage() {
 
   const rows = await getCohortGroves({ cohort: { id: cohort.id } });
 
-  return (
-    <CohortGroveScreen rows={rows} cohortName={cohort.name} rowBasePath="/admin/students" />
-  );
+  return <CohortGroveScreen rows={rows} cohortName={cohort.name} rowBasePath="/admin/students" />;
 }

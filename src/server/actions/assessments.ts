@@ -30,6 +30,8 @@ import {
   inPaperOrder,
 } from '@/server/assessment-paper';
 import { getCohortContext, getMemberContext } from '@/server/context';
+import { ledgerKey, quizPoints } from '@/lib/domain/points';
+import { awardMany } from '@/server/scoring';
 
 import { type Result, fail, guarded, ok, recordAudit } from './shared';
 
@@ -471,6 +473,8 @@ async function ownedAttempt(attemptId: string, memberId: string) {
       focusGraceSeconds: assessments.focusGraceSeconds,
       defaultQuestionSeconds: assessments.defaultQuestionSeconds,
       totalTimeSeconds: assessments.totalTimeSeconds,
+      /** Carried so the ledger entry can name the paper the student sat. */
+      assessmentTitle: assessments.title,
     })
     .from(assessmentAttempts)
     .innerJoin(assessments, eq(assessments.id, assessmentAttempts.assessmentId))
@@ -915,6 +919,53 @@ export async function submitAttemptAction(
       .where(eq(assessmentAttempts.id, attemptId));
 
     /*
+     * Pay for the sitting.
+     *
+     * Assessments awarded nothing at all before this — a student could sit a timed paper and
+     * watch their points not move, which is the clearest way a product can say that the work
+     * did not count. They go through `quiz_attempt` / `quiz_bonus`, the events that already
+     * exist for exactly this shape of thing, rather than through a second scoring path of
+     * their own. Both are excluded from `BEHAVIOUR_EVENTS` by construction, so no amount of
+     * assessment performance can move consistency or outrank showing up (ADR-004).
+     *
+     * The accuracy bonus is computed on the **auto-graded portion only**, and is never
+     * revised afterwards. Two reasons, and the second is the important one:
+     *
+     *  - it can be paid the moment the student submits, alongside the result they are
+     *    already being shown, rather than arriving days later when a human gets to the
+     *    written answers;
+     *  - it is a single award under a single key at a single moment, so it stays idempotent
+     *    and needs no correction machinery. Revising it after a review would mean a second
+     *    re-cut of a paid award, and this system has exactly one of those on purpose
+     *    (ADR-003).
+     *
+     * Written answers are marked by a human for feedback, which is what they are for. The
+     * student's result screen says so in as many words.
+     */
+    const { attempt: attemptPoints, bonus } = quizPoints(autoScore, autoTotal, ctx.rules);
+
+    await awardMany([
+      {
+        memberId: ctx.memberId,
+        event: 'quiz_attempt',
+        points: attemptPoints,
+        occurredOn: ctx.today,
+        idempotencyKey: ledgerKey.assessmentAttempt(ctx.memberId, attemptId),
+        reason: `Sat "${attempt.assessmentTitle}"`,
+        metadata: { assessmentId: attempt.assessmentId, attemptId },
+      },
+      {
+        memberId: ctx.memberId,
+        event: 'quiz_bonus',
+        points: bonus,
+        occurredOn: ctx.today,
+        idempotencyKey: ledgerKey.assessmentBonus(ctx.memberId, attemptId),
+        reason: `${autoScore} of ${autoTotal} on the auto-marked questions`,
+        metadata: { assessmentId: attempt.assessmentId, attemptId, autoScore, autoTotal },
+      },
+    ]);
+
+    /*
      * Badges are evaluated by the scoring pass, which reads the attempt counts back out of
      * the database — so it has to run after the row above is written, and it deliberately
      * never sees the score itself.
@@ -930,6 +981,7 @@ export async function submitAttemptAction(
 
     revalidatePath('/assessments');
     revalidatePath(`/assessments/${attempt.assessmentId}`);
+    revalidatePath('/progress');
     revalidatePath('/today');
     return ok({ attemptId });
   }, 'We could not submit that attempt. Please try again.');

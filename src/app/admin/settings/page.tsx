@@ -5,6 +5,7 @@ import { requireAdmin } from '@/lib/auth/guards';
 import { DEFAULT_RISK_THRESHOLDS } from '@/lib/domain/risk';
 import { getCohortContext, getPrimaryCohort } from '@/server/context';
 import { getCohortCalendarConfig } from '@/server/queries/admin';
+import { latestSweepRun } from '@/server/sweep';
 
 import { SettingsScreen } from './settings-screen';
 
@@ -21,7 +22,10 @@ export default async function SettingsPage() {
   const ctx = await getCohortContext(cohort);
   if (!ctx) redirect('/admin/no-cohort');
 
-  const { holidays, extras } = await getCohortCalendarConfig(cohort.id);
+  const [{ holidays, extras }, sweep] = await Promise.all([
+    getCohortCalendarConfig(cohort.id),
+    latestSweepRun(),
+  ]);
 
   return (
     <SettingsScreen
@@ -42,6 +46,7 @@ export default async function SettingsPage() {
       rules={ctx.rules}
       holidays={holidays.map((h) => ({ id: h.id, date: h.date, label: h.label }))}
       extras={extras.map((e) => ({ id: e.id, date: e.date, label: e.label }))}
+      sweep={sweep}
     />
   );
 }

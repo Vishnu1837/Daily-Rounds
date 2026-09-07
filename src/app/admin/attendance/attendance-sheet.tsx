@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/feedback';
 import { TextInput } from '@/components/ui/form';
+import { Sheet } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/ui/page-header';
 import { cn } from '@/lib/cn';
@@ -25,6 +26,11 @@ type Row = {
   mbbsYear: number | null;
   status: Status | null;
   note: string | null;
+  /** Where the saved mark came from. Null when the day has not been marked at all. */
+  source: 'verified' | 'admin' | null;
+  overrideReason: string | null;
+  /** True when the student's own client registered them in the room that day. */
+  verifiedPresence: boolean;
 };
 
 const OPTIONS: { value: Status; label: string; className: string }[] = [
@@ -63,6 +69,8 @@ export function AttendanceSheet({
   const toast = useToast();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState('');
+  const [reason, setReason] = useState('');
+  const [confirming, setConfirming] = useState(false);
 
   const [draft, setDraft] = useState<Record<string, Status>>(() =>
     Object.fromEntries(rows.filter((r) => r.status).map((r) => [r.memberId, r.status!])),
@@ -105,20 +113,43 @@ export function AttendanceSheet({
     setDraft(Object.fromEntries(filtered.map((r) => [r.memberId, status])));
   }
 
+  /** Marks about to be written that contradict what the study room recorded for itself. */
+  const overruled = useMemo(
+    () =>
+      rows.filter((r) => {
+        const next = draft[r.memberId];
+        if (!next || next === saved[r.memberId]) return false;
+        return r.source === 'verified' || r.verifiedPresence;
+      }),
+    [rows, draft, saved],
+  );
+
+  const changed = useMemo(
+    () => Object.keys(draft).filter((k) => draft[k] !== saved[k]).length,
+    [draft, saved],
+  );
+
+  const reasonValid = reason.trim().length >= 3;
+
   function save() {
     const entries = Object.entries(draft).map(([memberId, status]) => ({ memberId, status }));
     if (entries.length === 0) {
       toast.error('Nothing to save', 'Mark at least one student first.');
       return;
     }
+    if (!reasonValid) {
+      toast.error('A reason is required', 'Say why you are marking this by hand.');
+      return;
+    }
     // The button is disabled while pending, so a second submission cannot start.
     startTransition(async () => {
-      const result = await markAttendanceAction(cohortId, { date, entries });
+      const result = await markAttendanceAction(cohortId, { date, reason, entries });
       if (!result.ok) {
         toast.error('Attendance not saved', result.message);
         return;
       }
       setSaved({ ...draft });
+      setConfirming(false);
       toast.success(
         'Attendance saved',
         `${result.data.marked} students updated, points recalculated`,
@@ -235,6 +266,17 @@ export function AttendanceSheet({
                   <p className="text-fg-subtle truncate text-xs">
                     {row.mbbsYear ? `Year ${row.mbbsYear}` : '—'}
                     {row.status && ` · saved as ${row.status}`}
+                    {/*
+                      Where the saved mark came from. "Joined the room" is the student's own
+                      client saying so; anything else is a person, and the reason they gave
+                      is shown rather than left in a log nobody opens.
+                    */}
+                    {row.source === 'verified' && ' · joined the room'}
+                    {row.source === 'admin' &&
+                      row.overrideReason &&
+                      ` · marked by hand: ${row.overrideReason}`}
+                    {row.source === 'admin' && !row.overrideReason && ' · marked by hand'}
+                    {!row.status && row.verifiedPresence && ' · was in the room'}
                   </p>
                 </div>
               </div>
@@ -276,13 +318,80 @@ export function AttendanceSheet({
       <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+4.25rem)] z-20 lg:bottom-4">
         <Card className="shadow-lift flex items-center justify-between gap-3 p-3">
           <p className="text-fg-muted text-sm">
-            {dirty ? 'You have unsaved changes' : 'Everything is saved'}
+            {dirty
+              ? `${changed} unsaved ${changed === 1 ? 'change' : 'changes'}`
+              : 'Everything is saved'}
           </p>
-          <Button size="md" loading={pending} disabled={!dirty || pending} onClick={save}>
-            Save attendance
+          <Button
+            size="md"
+            loading={pending}
+            disabled={!dirty || pending}
+            onClick={() => setConfirming(true)}
+          >
+            Save attendance…
           </Button>
         </Card>
       </div>
+
+      {/*
+        The confirmation step exists because this write is worth the same as a bulk XP grant
+        and used to cost one click. It does three things a plain Save cannot: it states how
+        many students are about to be changed, it names the ones whose own study-room record
+        is being overruled, and it requires the reason that every admin mark now carries.
+      */}
+      <Sheet open={confirming} onClose={() => setConfirming(false)} title="Record this attendance?">
+        <div className="space-y-5 p-5">
+          <div className="bg-bg-sunken rounded-2xl p-4">
+            <p className="text-fg text-sm font-semibold">
+              {changed} {changed === 1 ? 'student' : 'students'} on {dateLabel}.
+            </p>
+            <p className="text-fg-muted mt-1.5 text-sm leading-relaxed">
+              Study-room points are awarded or withdrawn immediately, and every mark is stamped as a
+              cohort-lead override with the reason below.
+            </p>
+          </div>
+
+          {overruled.length > 0 && (
+            <div className="border-warning/30 bg-warning/10 rounded-2xl border p-4">
+              <p className="text-fg text-sm font-semibold">
+                {overruled.length} of these already joined the room themselves
+              </p>
+              <p className="text-fg-muted mt-1.5 text-sm leading-relaxed">
+                {overruled
+                  .slice(0, 6)
+                  .map((r) => r.name)
+                  .join(', ')}
+                {overruled.length > 6 && ` and ${overruled.length - 6} more`}. Your mark replaces
+                what the study room recorded for them.
+              </p>
+            </div>
+          )}
+
+          <TextInput
+            label="Why are you marking this by hand?"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. Room link was down; everyone was on the backup call"
+            autoComplete="off"
+            hint="Shown with the mark and kept in the audit log."
+          />
+
+          <div className="flex gap-3">
+            <Button variant="outline" size="lg" fullWidth onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="lg"
+              fullWidth
+              loading={pending}
+              disabled={!reasonValid || pending}
+              onClick={save}
+            >
+              Record attendance
+            </Button>
+          </div>
+        </div>
+      </Sheet>
     </div>
   );
 }

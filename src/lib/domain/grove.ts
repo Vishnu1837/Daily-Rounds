@@ -146,14 +146,24 @@ export const AWAY_GRACE_SECONDS = 20;
 export const GROWTH_TOLERANCE_SECONDS = 5;
 
 /**
- * A tree still growing this long past its due time is treated as abandoned.
+ * How long after `due_at` a still-`growing` row waits before the server settles it itself.
  *
- * Wide on purpose. The common way to sit out a round is to put the phone face down, which
- * means the browser is frozen when the countdown runs out and cannot claim the tree until
- * the student picks the phone back up. Ten minutes covers "the round ended, I finished my
- * paragraph, then I looked at my phone" without covering "I went to dinner".
+ * This is a *scheduling* delay, not a deadline the student can miss. It exists only so the
+ * browser gets first refusal on claiming its own round — see `resolveOverdueRound`, which
+ * decides the outcome, and which does not consult this value at all.
  */
-export const ABANDON_SWEEP_SECONDS = 600;
+export const SWEEP_DELAY_SECONDS = 600;
+
+/**
+ * A round abandoned inside this window is discarded rather than recorded.
+ *
+ * Starting a timer and stopping it twenty seconds later is not a broken promise; it is a
+ * misclick, a wrong preset, or a student changing their mind before they had begun. Charging
+ * it as a stump made the grove read as a wall of failures nobody had actually earned, and a
+ * survival percentage nobody trusted. Past two minutes the commitment is real and leaving
+ * costs a stump exactly as before.
+ */
+export const MIN_COMMITMENT_SECONDS = 120;
 
 export type WitherReason = 'left' | 'gave_up' | 'abandoned';
 
@@ -179,11 +189,51 @@ export function hasRunFullRound(input: {
   return elapsed >= input.focusMinutes * 60 - GROWTH_TOLERANCE_SECONDS;
 }
 
-/** True once a still-growing tree is so overdue that nobody can still be sitting with it. */
-export function isAbandoned(input: { plantedAt: Date; focusMinutes: number; now?: Date }): boolean {
+/**
+ * Is this round young enough that abandoning it should leave no trace?
+ *
+ * Measured from `planted_at` on the server, like every other grove decision.
+ */
+export function isBriefAbort(input: { plantedAt: Date; now?: Date }): boolean {
   const now = input.now ?? new Date();
   const elapsed = (now.getTime() - input.plantedAt.getTime()) / 1000;
-  return elapsed > input.focusMinutes * 60 + ABANDON_SWEEP_SECONDS;
+  return elapsed < MIN_COMMITMENT_SECONDS;
+}
+
+/** True once a still-growing row is overdue enough that the server should settle it. */
+export function isSweepable(input: { dueAt: Date; now?: Date }): boolean {
+  const now = input.now ?? new Date();
+  return now.getTime() >= input.dueAt.getTime() + SWEEP_DELAY_SECONDS * 1000;
+}
+
+export type RoundResolution = 'growing' | 'grown';
+
+/**
+ * What a still-`growing` row is actually worth, decided from server timestamps alone.
+ *
+ * The contract a round makes is "sit here for N minutes". Nothing in it says the browser
+ * has to be awake to report back — and the usual way to keep the promise is to put the
+ * phone face down, which is precisely the state in which a tab cannot call anything. The
+ * sweep used to read that silence as quitting and wither the round, so the students who
+ * followed the instructions best lost the most trees.
+ *
+ * So silence proves nothing either way, and the only thing that decides the outcome is
+ * whether `planted_at` → `due_at` has elapsed on the server's clock:
+ *
+ *   - not yet due  → still growing, leave it alone;
+ *   - past due     → grown.
+ *
+ * Quitting is still recorded, and still leaves a stump. It just has to be *said* —
+ * `witherTreeAction`, from the button the student pressed — rather than inferred from a
+ * tab that stopped talking. That is the difference between evidence and absence of evidence,
+ * and it is the same rule the study block already applies to its elapsed seconds.
+ */
+export function resolveOverdueRound(input: {
+  plantedAt: Date;
+  focusMinutes: number;
+  now?: Date;
+}): RoundResolution {
+  return hasRunFullRound(input) ? 'grown' : 'growing';
 }
 
 /* ------------------------------------------------------------------ groves */

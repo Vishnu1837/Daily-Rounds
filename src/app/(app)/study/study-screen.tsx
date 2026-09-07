@@ -21,6 +21,7 @@ import { cn } from '@/lib/cn';
 import {
   AWAY_GRACE_SECONDS,
   DEFAULT_PRESET,
+  MIN_COMMITMENT_SECONDS,
   FOCUS_PRESETS,
   type FocusPresetKey,
   SPECIES_NAMES,
@@ -39,6 +40,7 @@ import {
   plantTreeAction,
   witherTreeAction,
 } from '@/server/actions/grove';
+import { studyRoomHoldAction } from '@/server/actions/study-room';
 import {
   type StudySessionState,
   completeTargetAction,
@@ -264,8 +266,15 @@ export function StudySessionScreen({
       if (!current || settling.current) return;
       settling.current = true;
 
-      // Optimistic on purpose. The student has already broken the round; making them watch a
-      // spinner before being told so would be the one moment in this flow that felt slow.
+      /*
+       * Optimistic on purpose. The student has already broken the round; making them watch a
+       * spinner before being told so would be the one moment in this flow that felt slow.
+       *
+       * The stump is drawn immediately and *withdrawn* below if the server discarded the
+       * round instead. Being optimistic in the harsher direction is the right way round: a
+       * student who sees a stump appear and then vanish has been let off, where the reverse
+       * would be a punishment arriving after they were told they were fine.
+       */
       setTree(null);
       setTrees((prev) => [
         ...prev,
@@ -276,7 +285,19 @@ export function StudySessionScreen({
       setBreakEndsAt(null);
 
       const result = await witherTreeAction(current.id, reason);
-      if (!result.ok) toast.error('Could not record that', result.message);
+      if (!result.ok) {
+        toast.error('Could not record that', result.message);
+      } else if (!result.data.recorded) {
+        // Too short to count against them: the sapling was pulled up, so take the stump back
+        // out of the plot and say why, rather than showing a loss the grove does not hold.
+        setTrees((prev) => prev.filter((t) => t.id !== current.id));
+        setLost(null);
+        setPhase('idle');
+        toast.success(
+          'Nothing lost',
+          `Under ${Math.round(MIN_COMMITMENT_SECONDS / 60)} minutes in, so that round does not count against you.`,
+        );
+      }
       await pauseBlock();
       settling.current = false;
       router.refresh();
@@ -297,6 +318,30 @@ export function StudySessionScreen({
   // Most rounds are sat out on a phone, so the round asks to keep the screen lit rather than
   // relying on the student to keep tapping it awake. It is only a request — see the hook.
   useScreenWakeLock(view === 'focus');
+
+  /**
+   * The one place a student is allowed to go: the study room.
+   *
+   * Joining opens the meeting in another tab, and that tab taking focus is byte-for-byte the
+   * same signal as opening something else — so before the away timer kills anything it asks
+   * the server whether this student is currently sitting in the room. The check happens when
+   * the timer *fires* rather than when it is armed, so it costs a round trip only in the
+   * handful of seconds where a round is actually about to be lost.
+   *
+   * A failed check spares the round. That direction is deliberate and matches the rest of
+   * this screen: a wrongly killed tree is the failure that makes students stop believing the
+   * mechanic, and the round is settled by server time regardless — a student who really has
+   * walked away still does not get to claim it until its full length has elapsed.
+   */
+  const killIfNotInRoom = useCallback(async () => {
+    try {
+      const hold = await studyRoomHoldAction();
+      if (hold.ok && hold.data.suspended) return;
+    } catch {
+      return;
+    }
+    await killRound('left');
+  }, [killRound]);
 
   /**
    * Going somewhere else kills the tree. Putting the phone down does not.
@@ -339,7 +384,7 @@ export function StudySessionScreen({
         return;
       }
       if (document.hasFocus()) return;
-      timer = window.setTimeout(() => void killRound('left'), AWAY_GRACE_SECONDS * 1000);
+      timer = window.setTimeout(() => void killIfNotInRoom(), AWAY_GRACE_SECONDS * 1000);
     };
 
     document.addEventListener('visibilitychange', onVisibility);
@@ -347,7 +392,7 @@ export function StudySessionScreen({
       document.removeEventListener('visibilitychange', onVisibility);
       disarm();
     };
-  }, [view, killRound]);
+  }, [view, killIfNotInRoom]);
 
   // A closed tab is a walked-away round; the sweep settles it server-side within two minutes,
   // so this only has to make sure the student knew.
@@ -725,7 +770,8 @@ export function StudySessionScreen({
                 </Button>
                 <p className="text-xs leading-relaxed text-white/50">
                   Switch to another tab or app for more than {AWAY_GRACE_SECONDS} seconds and the
-                  tree dies. Locking your screen is fine — the tree keeps growing in the dark.
+                  tree dies. Locking your screen is fine — the tree keeps growing in the dark, and
+                  so does the study room while it is open.
                 </p>
               </>
             ) : view === 'break' ? (
@@ -733,6 +779,16 @@ export function StudySessionScreen({
                 <Button size="lg" fullWidth onClick={skipBreak}>
                   Skip the break
                 </Button>
+                {/*
+                  Offered here because this is the moment the work is freshest and the student
+                  is already stopped. The check-in opens pre-filled from the round that just
+                  grew (see `buildCheckInPrefill`), so taking it up is a read-and-confirm
+                  rather than a form — which is the whole point of asking now instead of at
+                  eleven at night.
+                */}
+                <LinkButton href="/check-in" variant="outline" size="lg" fullWidth>
+                  Log this in your check-in
+                </LinkButton>
                 <p className="text-fg-subtle text-xs">
                   The next round starts when you say so — a break that starts a round for you is
                   just a round you did not choose.

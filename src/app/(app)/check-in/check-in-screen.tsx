@@ -63,13 +63,28 @@ export function CheckInScreen({
   const [formError, setFormError] = useState<string | undefined>();
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  /*
+   * The form opens already answered, from what the day's records show.
+   *
+   * An existing check-in always wins — re-opening the form must show what the student
+   * actually said, not a fresh guess about it. Otherwise the pre-fill stands in, and every
+   * field of it is editable: these are suggestions, never submissions. `context.prefill` is
+   * built server-side by `buildCheckInPrefill`, which is where the rules live — including why
+   * a day is never pre-filled as "none".
+   */
+  const prefill = context.prefill;
+
   const [completion, setCompletion] = useState<Completion | null>(
-    context.existing?.completion ?? null,
+    context.existing?.completion ?? prefill.completion ?? null,
   );
   const [minutes, setMinutes] = useState<string>(
-    String(context.existing?.actualMinutes ?? context.sessionMinutes ?? ''),
+    String(
+      context.existing?.actualMinutes ?? prefill.actualMinutes ?? context.sessionMinutes ?? '',
+    ),
   );
-  const [whatStudied, setWhatStudied] = useState(context.existing?.whatStudied ?? '');
+  const [whatStudied, setWhatStudied] = useState(
+    context.existing?.whatStudied ?? prefill.whatStudied ?? '',
+  );
   const [obstacle, setObstacle] = useState<Obstacle>('none');
   const [obstacleNote, setObstacleNote] = useState('');
   const [tomorrowTarget, setTomorrowTarget] = useState(
@@ -349,6 +364,14 @@ export function CheckInScreen({
                   rows={4}
                   error={errors.whatStudied}
                 />
+                {/*
+                  Says where the suggestion came from, and that it is only a suggestion. A
+                  pre-filled field with no explanation reads as something the app decided about
+                  you; one that shows its working reads as a record you can correct.
+                */}
+                {prefill.source && !context.existing && (
+                  <p className="text-fg-subtle mt-2 text-xs leading-relaxed">{prefill.source}</p>
+                )}
               </Step>
             )}
 

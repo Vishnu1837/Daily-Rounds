@@ -15,7 +15,12 @@ import {
   weekStart,
 } from '@/lib/domain/calendar';
 import { bestRefMatch } from '@/lib/curriculum';
-import { DEFAULT_POINT_RULES, ledgerKey, quizPoints } from '@/lib/domain/points';
+import {
+  DEFAULT_POINT_RULES,
+  EDITABLE_POINT_EVENTS,
+  ledgerKey,
+  quizPoints,
+} from '@/lib/domain/points';
 import { hashPassword } from '@/lib/auth/password';
 import { generateRoadmapForSubject } from '@/lib/roadmap/generate';
 import { type Challenge } from '@/lib/validation';
@@ -265,8 +270,14 @@ async function main() {
     label: 'Saturday catch-up session',
   });
 
+  /*
+   * Only the events an admin can actually set. A row for a computed event — a streak bonus,
+   * an achievement, an admin adjustment — would be a number nothing reads, sitting in the
+   * table the settings screen presents as the scoring configuration. See
+   * `COMPUTED_POINT_EVENTS`.
+   */
   await db.insert(schema.pointRules).values(
-    (Object.keys(DEFAULT_POINT_RULES) as (keyof typeof DEFAULT_POINT_RULES)[]).map((event) => ({
+    EDITABLE_POINT_EVENTS.map((event) => ({
       cohortId: cohort.id,
       event,
       points: DEFAULT_POINT_RULES[event],
@@ -840,6 +851,17 @@ async function main() {
   }
 
   // ------------------------------------------------ derive activity + badges
+  /*
+   * Imported dynamically, and reached only under `--conditions=react-server` (see the
+   * `db:seed` script). `@/server/scoring` pulls in `@/server/cache`, which is marked
+   * `server-only` — and that package's default export throws the moment anything outside a
+   * React Server Component build imports it, which a plain `tsx` run is.
+   *
+   * The flag makes Node resolve `server-only` through its `react-server` export condition,
+   * which is an empty module. Without it the seeder wrote every row and then died on this
+   * line, leaving `daily_activity` empty and a freshly seeded database showing nobody with
+   * any consistency at all.
+   */
   const { recomputeRange, settleDay } = await import('@/server/scoring');
   for (const student of SEED_STUDENTS) {
     const memberId = memberByEmail.get(student.email)!;

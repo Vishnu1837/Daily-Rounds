@@ -49,6 +49,15 @@ export const treeSpeciesEnum = pgEnum('focus_tree_species', [
 ]);
 export const witherReasonEnum = pgEnum('focus_wither_reason', ['left', 'gave_up', 'abandoned']);
 export const attendanceStatusEnum = pgEnum('attendance_status', ['present', 'late', 'absent']);
+/**
+ * Where an attendance mark came from.
+ *
+ * `verified` is the student's own join, backed by a `study_room_presence` row their client
+ * wrote. `admin` is a human overrule, which carries a mandatory reason. The two used to be
+ * the same row, which is what made a one-click bulk mark indistinguishable from 26 people
+ * walking into a room. See `showedUpForDay`.
+ */
+export const attendanceSourceEnum = pgEnum('attendance_source', ['verified', 'admin']);
 export const checkInCompletionEnum = pgEnum('check_in_completion', [
   'completed',
   'partial',
@@ -129,6 +138,8 @@ export const dayBandEnum = pgEnum('day_band', [
   'weak',
   'missed',
   'off',
+  /** A rest day the student chose to work anyway. Credited, never required. */
+  'bonus',
 ]);
 export const pointEventEnum = pgEnum('point_event', [
   'daily_check_in',
@@ -168,6 +179,14 @@ export const users = pgTable(
      */
     avatarUrl: text('avatar_url'),
     onboardingCompletedAt: timestamp('onboarding_completed_at', { withTimezone: true }),
+    /**
+     * The last time this account was seen signed in — not only the last password login.
+     *
+     * It was written by the login form alone, and sessions last thirty days, so an active
+     * student who never signs out showed a `last_login_at` months old on every admin screen
+     * that asked when they were last here. It is now refreshed by any authenticated request,
+     * throttled to at most once an hour per account (`touchLastSeen`).
+     */
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -560,6 +579,20 @@ export const studySessions = pgTable(
     resumedAt: timestamp('resumed_at', { withTimezone: true }),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
     endedAt: timestamp('ended_at', { withTimezone: true }),
+    /**
+     * Set when the server closed this block rather than the student.
+     *
+     * A block nobody finished used to stay `running` forever, and everything that summed
+     * `elapsed_seconds` inherited the arithmetic. The sweep closes them now; this column is
+     * what stops that being a silent rewrite — a student, or an admin looking at a number
+     * that surprises them, can see which blocks they ended themselves.
+     */
+    autoClosedAt: timestamp('auto_closed_at', { withTimezone: true }),
+    /**
+     * Whatever `elapsed_seconds` said before a cap was applied to it, or null if it was
+     * never capped. The correction stays inspectable and, if it was wrong, reversible.
+     */
+    rawElapsedSeconds: integer('raw_elapsed_seconds'),
   },
   (t) => [index('study_sessions_member_date_idx').on(t.memberId, t.date)],
 );
@@ -639,6 +672,13 @@ export const attendance = pgTable(
     eventId: uuid('event_id').references(() => events.id, { onDelete: 'cascade' }),
     status: attendanceStatusEnum('status').notNull(),
     note: text('note'),
+    /** How this mark was made. See `attendanceSourceEnum`. */
+    source: attendanceSourceEnum('source').notNull().default('admin'),
+    /**
+     * Why an admin overruled the room. Required for every `admin` mark, so a student asking
+     * "why am I down as absent?" has an answer that is not "someone clicked something".
+     */
+    overrideReason: text('override_reason'),
     markedBy: uuid('marked_by').references(() => users.id, { onDelete: 'set null' }),
     markedAt: timestamp('marked_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1218,6 +1258,39 @@ export const weeklyReviews = pgTable(
   (t) => [uniqueIndex('weekly_review_unique').on(t.memberId, t.weekStart)],
 );
 
+/* ------------------------------------------------------------- sweep runs */
+
+/**
+ * One row per run of the background sweep, successful or not.
+ *
+ * The audit found trees that had been "growing" for three days and study blocks running for
+ * a week. Neither was a broken sweep — it was that no sweep had ever been scheduled, and
+ * nothing in the product could have said so. A sweep that silently stops running is
+ * indistinguishable from a cohort that had nothing to sweep, unless it leaves a trace.
+ *
+ * A row is written when a run starts and updated when it finishes, so a run that dies
+ * mid-flight is visible as one with a null `ok` rather than as no row at all.
+ */
+export const sweepRuns = pgTable(
+  'sweep_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** `overdue_trees`, `stale_sessions`, or `all` for a full pass. */
+    kind: varchar('kind', { length: 32 }).notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    /** Null while in flight — and permanently, for a run that never came back. */
+    ok: boolean('ok'),
+    /** What it changed, e.g. `{ trees_grown: 4, sessions_closed: 2 }`. */
+    affected: jsonb('affected')
+      .$type<Record<string, number>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    error: text('error'),
+  },
+  (t) => [index('sweep_runs_started_idx').on(t.startedAt)],
+);
+
 /* -------------------------------------------------------------- audit log */
 
 export const auditLog = pgTable(
@@ -1383,3 +1456,5 @@ export type QuestionType = (typeof questionTypeEnum.enumValues)[number];
 export type AttemptStatus = (typeof attemptStatusEnum.enumValues)[number];
 export type ReviewStatus = (typeof reviewStatusEnum.enumValues)[number];
 export type IntegrityEventKind = (typeof integrityEventEnum.enumValues)[number];
+export type AttendanceSource = (typeof attendanceSourceEnum.enumValues)[number];
+export type SweepRun = typeof sweepRuns.$inferSelect;

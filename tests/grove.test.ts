@@ -5,15 +5,19 @@ import {
   FOCUS_PRESETS,
   GROWTH_STAGES,
   GROWTH_TOLERANCE_SECONDS,
+  MIN_COMMITMENT_SECONDS,
+  SWEEP_DELAY_SECONDS,
   type TreeRecord,
   breakAfterRound,
   formatFocusMinutes,
   groveStats,
   growthStage,
   hasRunFullRound,
-  isAbandoned,
+  isBriefAbort,
+  isSweepable,
   plantingStreak,
   presetByKey,
+  resolveOverdueRound,
   speciesFor,
 } from '@/lib/domain/grove';
 
@@ -108,14 +112,53 @@ describe('hasRunFullRound', () => {
   });
 });
 
-describe('isAbandoned', () => {
-  it('leaves a round alone while it could still be running', () => {
-    expect(isAbandoned({ plantedAt: at(10), focusMinutes: 25 })).toBe(false);
-    expect(isAbandoned({ plantedAt: at(25.5), focusMinutes: 25 })).toBe(false);
+describe('isSweepable', () => {
+  const due = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000);
+
+  it('leaves a round alone until the browser has had its window to claim it', () => {
+    expect(isSweepable({ dueAt: due(-5) })).toBe(false);
+    expect(isSweepable({ dueAt: due(0) })).toBe(false);
+    expect(isSweepable({ dueAt: due(SWEEP_DELAY_SECONDS / 60 - 1) })).toBe(false);
   });
 
-  it('sweeps a round that is well past due', () => {
-    expect(isAbandoned({ plantedAt: at(40), focusMinutes: 25 })).toBe(true);
+  it('takes over once the delay has passed', () => {
+    expect(isSweepable({ dueAt: due(SWEEP_DELAY_SECONDS / 60 + 1) })).toBe(true);
+  });
+});
+
+describe('resolveOverdueRound', () => {
+  it('grows a round whose promised length has elapsed, however late the browser is', () => {
+    expect(resolveOverdueRound({ plantedAt: at(25), focusMinutes: 25 })).toBe('grown');
+    // The audit case: phone face down, picked up long after the round ended.
+    expect(resolveOverdueRound({ plantedAt: at(180), focusMinutes: 25 })).toBe('grown');
+  });
+
+  it('leaves a round that has not run its length still growing, never withered', () => {
+    expect(resolveOverdueRound({ plantedAt: at(5), focusMinutes: 25 })).toBe('growing');
+  });
+
+  it('never withers anything: silence is not evidence of quitting', () => {
+    const outcomes = [1, 10, 24, 26, 600].map((m) =>
+      resolveOverdueRound({ plantedAt: at(m), focusMinutes: 25 }),
+    );
+    expect(outcomes).not.toContain('withered');
+  });
+});
+
+describe('isBriefAbort', () => {
+  it('treats a round abandoned in the first two minutes as a misclick', () => {
+    expect(isBriefAbort({ plantedAt: at(0.1) })).toBe(true);
+    expect(isBriefAbort({ plantedAt: at(1.9) })).toBe(true);
+  });
+
+  it('holds the student to anything past the commitment window', () => {
+    expect(isBriefAbort({ plantedAt: at(2.1) })).toBe(false);
+    expect(isBriefAbort({ plantedAt: at(20) })).toBe(false);
+  });
+
+  it('is shorter than the shortest preset, so no round can be quit for free', () => {
+    const shortest = Math.min(...FOCUS_PRESETS.map((p) => p.focusMinutes));
+    expect(MIN_COMMITMENT_SECONDS).toBeLessThan(shortest * 60);
   });
 });
 

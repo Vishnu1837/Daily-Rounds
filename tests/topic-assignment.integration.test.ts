@@ -549,9 +549,8 @@ describe('assignSyllabusTopicAction', () => {
     ]);
 
     state.user = sessionUser(admin.user.id, 'admin');
-    const { assignSyllabusTopicAction, assignIndividualTopicAction } = await import(
-      '@/server/actions/admin'
-    );
+    const { assignSyllabusTopicAction, assignIndividualTopicAction } =
+      await import('@/server/actions/admin');
 
     await assignSyllabusTopicAction(cohort.id, {
       memberId: student.memberId,

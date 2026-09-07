@@ -231,6 +231,78 @@ export async function getAssessmentAttempts(
   });
 }
 
+export type ReviewQueueRow = {
+  attemptId: string;
+  assessmentId: string;
+  assessmentTitle: string;
+  memberId: string;
+  studentName: string;
+  submittedAt: Date | null;
+  /** Days between submission and now, on the server clock. */
+  waitingDays: number;
+  /** Written answers on this attempt that still carry no mark. */
+  unmarked: number;
+};
+
+/**
+ * Everything across the cohort still waiting for a human to mark it, oldest first.
+ *
+ * The per-assessment screens already carried a pending count, but nothing showed the whole
+ * backlog in one place — so a paper set three weeks ago and never marked was invisible
+ * unless somebody happened to open that assessment. The audit counted 107 ungraded answers
+ * sitting behind that gap, and every one of them is a student looking at "Pending review" on
+ * a result they sat and cannot see.
+ *
+ * Oldest first is the ordering that matters: the student who has waited longest is the one
+ * the queue should hand you next.
+ */
+export async function getReviewQueue(ctx: CohortCtx, limit = 50): Promise<ReviewQueueRow[]> {
+  const rows = await db
+    .select({
+      attemptId: assessmentAttempts.id,
+      assessmentId: assessmentAttempts.assessmentId,
+      assessmentTitle: assessments.title,
+      memberId: assessmentAttempts.memberId,
+      studentName: users.fullName,
+      submittedAt: assessmentAttempts.submittedAt,
+      /*
+       * Aged in SQL, against the server clock — never handed to a component to subtract from
+       * the browser's. Same rule as the sweep panel.
+       */
+      waitingDays: sql<number>`greatest(0, floor(extract(
+        epoch FROM (now() - coalesce(${assessmentAttempts.submittedAt}, ${assessmentAttempts.startedAt}))
+      ) / 86400))::int`,
+      /*
+       * Answers with something written in them and no mark yet. `is_correct IS NULL` is what
+       * "not yet marked" means on an answer row — an answer marked wrong is `false`, which
+       * is a decision somebody made and not a gap.
+       */
+      unmarked: sql<number>`(
+        SELECT count(*)::int FROM ${assessmentAnswers}
+        WHERE ${assessmentAnswers.attemptId} = ${assessmentAttempts.id}
+          AND ${assessmentAnswers.isCorrect} IS NULL
+          AND ${assessmentAnswers.textAnswer} IS NOT NULL
+          AND length(btrim(${assessmentAnswers.textAnswer})) > 0
+      )`,
+    })
+    .from(assessmentAttempts)
+    .innerJoin(assessments, eq(assessments.id, assessmentAttempts.assessmentId))
+    .innerJoin(cohortMembers, eq(cohortMembers.id, assessmentAttempts.memberId))
+    .innerJoin(users, eq(users.id, cohortMembers.userId))
+    .where(
+      and(
+        eq(assessments.cohortId, ctx.cohort.id),
+        eq(assessmentAttempts.reviewStatus, 'pending'),
+        // A sitting a restart threw away is not work anybody is waiting on.
+        inArray(assessmentAttempts.status, ['submitted', 'expired']),
+      ),
+    )
+    .orderBy(asc(assessmentAttempts.submittedAt))
+    .limit(limit);
+
+  return rows;
+}
+
 /* -------------------------------------------------- one attempt, in full */
 
 export type AttemptAnswerView = {

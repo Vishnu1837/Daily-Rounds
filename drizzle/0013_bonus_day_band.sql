@@ -1,0 +1,16 @@
+-- The day a student studied when nobody asked them to.
+--
+-- `daily_activity` has always stored a weekend's points and minutes; `band_for_day` then
+-- threw them away, mapping every non-active day to `off` whatever was on it. So a Sunday
+-- spent working looked identical on the calendar to a Sunday spent asleep, and the audit
+-- found 18 student-days that existed in the source records and were credited nowhere a
+-- student could see. A rest day the student chose to work is the single most encouraging
+-- thing this product can show someone, and it was the one thing it hid.
+--
+-- `bonus` is that day. It is deliberately a *display and credit* band, not a scoring one:
+-- consistency and streaks keep counting active study days only, so a student is still never
+-- penalised for resting, and a weekend can still never be required. See ADR-004/005.
+--
+-- Alone in its own migration because a new enum value may not be used inside the same
+-- transaction that adds it, and the migration runner sends each file as one batch.
+ALTER TYPE "day_band" ADD VALUE IF NOT EXISTS 'bonus';

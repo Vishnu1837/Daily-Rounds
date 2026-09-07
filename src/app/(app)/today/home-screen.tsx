@@ -170,6 +170,13 @@ export function HomeScreen({
         )}
       </AnimatePresence>
 
+      {/* -------------------------------------------------- yesterday's plan */}
+      {home.yesterdayCommitment && (
+        <Reveal>
+          <CommitmentCard commitment={home.yesterdayCommitment} focus={home.assignment} />
+        </Reveal>
+      )}
+
       {/* ------------------------------------------------------------- bento */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
         <Reveal delay={1} className="lg:col-span-7">
@@ -916,5 +923,62 @@ function UpcomingEvent({ event }: { event: HomeData['upcoming'][number] }) {
         </LinkButton>
       )}
     </div>
+  );
+}
+
+/**
+ * What the student said, last time, that they would do today.
+ *
+ * `check_ins.tomorrow_target` has been collected since launch and paid 10 XP, and was shown
+ * back to the student nowhere at all — only to admins on a review screen. Asking someone to
+ * write a commitment and then never mentioning it again is the fastest way to teach them
+ * that the commitment does not matter, which is the opposite of what this product is for.
+ *
+ * Two actions, and neither invents any data. **Start that** opens the study screen, which
+ * already begins a block and plants a round against today's assigned topic — so the round is
+ * pre-associated exactly as the brief asks, without a second mechanism for saying which
+ * topic a commitment is about. **Change it** goes to the check-in, where the target lives and
+ * can be rewritten.
+ *
+ * The card disappears the moment today's check-in is filed. At that point the student has
+ * made a new commitment and being asked about the old one is noise.
+ */
+function CommitmentCard({
+  commitment,
+  focus,
+}: {
+  commitment: NonNullable<HomeData['yesterdayCommitment']>;
+  focus: HomeData['assignment'];
+}) {
+  const when = commitment.fromYesterday
+    ? 'Yesterday you said'
+    : `On ${new Date(`${commitment.madeOn}T12:00:00Z`).toLocaleDateString('en-GB', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'short',
+        timeZone: 'UTC',
+      })} you said`;
+
+  return (
+    <Card padding="lg" className="border-iris-500/25">
+      <p className="eyebrow">{when}</p>
+      <blockquote className="text-fg mt-2 text-lg leading-snug font-bold text-balance">
+        &ldquo;{commitment.text}&rdquo;
+      </blockquote>
+      {focus?.topicTitle && (
+        <p className="text-fg-subtle mt-2 text-sm">
+          Today&rsquo;s topic is {focus.topicTitle}
+          {focus.subjectName ? ` · ${focus.subjectName}` : ''}.
+        </p>
+      )}
+      <div className="mt-4 flex flex-wrap gap-2.5">
+        <LinkButton href="/study" size="md">
+          Start that
+        </LinkButton>
+        <LinkButton href="/check-in" variant="outline" size="md">
+          Change it
+        </LinkButton>
+      </div>
+    </Card>
   );
 }

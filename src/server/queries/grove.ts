@@ -13,7 +13,7 @@ import {
   presetByKey,
 } from '@/lib/domain/grove';
 import type { MemberContext } from '@/server/context';
-import { sweepAbandonedTrees } from '@/server/grove';
+import { settleOverdueTrees } from '@/server/grove';
 
 /**
  * How far back the grove goes.
@@ -71,19 +71,19 @@ export type GroveData = {
 /**
  * Everything the grove screen needs, plus the live round.
  *
- * Reads settle the student's own abandoned rounds first (see `sweepAbandonedTrees`), so the
+ * Reads settle the student's own overdue rounds first (see `settleOverdueTrees`), so the
  * grove can never show a tree that has been "growing" since last Tuesday.
  */
 export async function getGroveData(ctx: MemberContext): Promise<GroveData> {
   const since = addDays(ctx.today, -(HISTORY_DAYS - 1));
 
   /*
-   * The sweep only ever moves this student's own rows from `growing` to `withered`, and the
-   * cohort card counts `grown` rows across everyone else — so the two cannot affect each
-   * other and there is no reason for the cohort read to wait behind the write.
+   * The sweep only ever settles this student's own rows, and the cohort card counts `grown`
+   * rows across everyone else — so the two cannot affect each other and there is no reason
+   * for the cohort read to wait behind the write.
    */
   const [, cohortRows] = await Promise.all([
-    sweepAbandonedTrees(ctx.memberId),
+    settleOverdueTrees(ctx.memberId),
     cohortPlantersToday(ctx),
   ]);
 
@@ -197,7 +197,7 @@ export type StudyGrove = {
 
 /** The small slice the study screen needs before it draws its first frame. */
 export async function getStudyGrove(ctx: MemberContext): Promise<StudyGrove> {
-  await sweepAbandonedTrees(ctx.memberId);
+  await settleOverdueTrees(ctx.memberId);
 
   const since = addDays(ctx.today, -(HISTORY_DAYS - 1));
   const [todayRows, historyRows, live] = await Promise.all([

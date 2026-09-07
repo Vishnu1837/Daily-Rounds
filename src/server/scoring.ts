@@ -12,6 +12,7 @@ import {
   pointsLedger,
   quizAttempts,
   studentAchievements,
+  studyRoomPresence,
   studySessions,
 } from '@/db/schema';
 import type { CohortCalendar, ISODate } from '@/lib/domain/calendar';
@@ -27,7 +28,7 @@ import {
   bandForDay,
   dayScore,
   ledgerKey,
-  showedUpFromScore,
+  showedUpForDay,
 } from '@/lib/domain/points';
 import {
   calculateComebackState,
@@ -138,7 +139,7 @@ export async function recomputeDay(args: {
 }): Promise<DayRecord> {
   const { memberId, date, calendar, rules } = args;
 
-  const [entries, sessionRows, checkInRows] = await Promise.all([
+  const [entries, sessionRows, checkInRows, presenceRows] = await Promise.all([
     db
       .select({ event: pointsLedger.event, points: pointsLedger.points })
       .from(pointsLedger)
@@ -152,6 +153,16 @@ export async function recomputeDay(args: {
       .from(checkIns)
       .where(and(eq(checkIns.memberId, memberId), eq(checkIns.date, date)))
       .limit(1),
+    /*
+     * The room's own record of who was in it. Written only by the student's client
+     * heartbeat, which is what makes it the corroboration `showedUpForDay` asks for — an
+     * admin can mark the attendance sheet but cannot manufacture one of these.
+     */
+    db
+      .select({ id: studyRoomPresence.id })
+      .from(studyRoomPresence)
+      .where(and(eq(studyRoomPresence.memberId, memberId), eq(studyRoomPresence.date, date)))
+      .limit(1),
   ]);
 
   const isActive = isActiveStudyDay(calendar, date);
@@ -162,9 +173,23 @@ export async function recomputeDay(args: {
   const trackedMinutes = Math.round(sessionRows.reduce((sum, s) => sum + s.elapsedSeconds, 0) / 60);
   const studyMinutes = checkInRows[0]?.actualMinutes ?? trackedMinutes;
 
+  /*
+   * Whether the student turned up, independent of whether anyone asked them to.
+   *
+   * This used to be `isActive && …`, which meant a rest day the student worked was recorded
+   * as a day they did not show up — the source rows existed, the points were paid, and the
+   * only surface that could have said so said the opposite. The audit counted 18 such days.
+   *
+   * Nothing downstream is put at risk by recording it honestly, and that is by construction:
+   * `calculateConsistency` and the streak engine both iterate `activeStudyDaysBetween`, so a
+   * bonus day is never in either denominator and can never make a weekend expected. See
+   * ADR-004 and ADR-005 — the exclusion is structural, not a matter of this flag.
+   */
+  const showedUp = showedUpForDay({ entries, verifiedPresence: presenceRows.length > 0 });
+
   const record: DayRecord = {
     date,
-    showedUp: isActive && showedUpFromScore(score),
+    showedUp,
     score,
     studyMinutes,
     points,
@@ -212,19 +237,42 @@ export async function recomputeRange(args: {
 }): Promise<void> {
   const { memberId, cohortId, calendar, rules } = args;
   const days = activeStudyDaysBetween(calendar, args.from, args.to);
-  // Also refresh non-active days that carry data, so the calendar shows weekend effort.
-  const extra = await db
-    .selectDistinct({ date: pointsLedger.occurredOn })
-    .from(pointsLedger)
-    .where(
-      and(
-        eq(pointsLedger.memberId, memberId),
-        gte(pointsLedger.occurredOn, args.from),
-        lte(pointsLedger.occurredOn, args.to),
-      ),
-    );
 
-  const all = [...new Set<ISODate>([...days, ...extra.map((e) => e.date)])].sort();
+  /*
+   * Non-active days that carry data are refreshed too, so a weekend the student worked is
+   * recomputed into a bonus day rather than left at whatever the last pass wrote.
+   *
+   * Both sources are needed. The ledger catches any day that was paid for; study sessions
+   * catch a weekend block that ran but fell short of the payout threshold, which records
+   * minutes and no ledger row at all — and minutes are the whole of what a student sees on
+   * a day like that.
+   */
+  const [paid, sat] = await Promise.all([
+    db
+      .selectDistinct({ date: pointsLedger.occurredOn })
+      .from(pointsLedger)
+      .where(
+        and(
+          eq(pointsLedger.memberId, memberId),
+          gte(pointsLedger.occurredOn, args.from),
+          lte(pointsLedger.occurredOn, args.to),
+        ),
+      ),
+    db
+      .selectDistinct({ date: studySessions.date })
+      .from(studySessions)
+      .where(
+        and(
+          eq(studySessions.memberId, memberId),
+          gte(studySessions.date, args.from),
+          lte(studySessions.date, args.to),
+        ),
+      ),
+  ]);
+
+  const all = [
+    ...new Set<ISODate>([...days, ...paid.map((e) => e.date), ...sat.map((e) => e.date)]),
+  ].sort();
 
   /*
    * Days are independent of one another — `recomputeDay` reads and writes exactly one

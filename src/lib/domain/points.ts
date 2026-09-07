@@ -24,10 +24,60 @@ export const DEFAULT_POINT_RULES: PointRules = {
   reflection: 10,
   quiz_attempt: 5,
   quiz_bonus: 5,
-  streak_bonus: 0, // computed per milestone
-  achievement: 25,
+  // The three below are placeholders, not settings. See `COMPUTED_POINT_EVENTS`.
+  streak_bonus: 0,
+  achievement: 0,
+  admin_adjustment: 0,
   weekly_review: 15,
-  admin_adjustment: 0, // supplied by the admin
+};
+
+/**
+ * The events whose value is NOT read from `point_rules`, and cannot be.
+ *
+ * Their amounts are computed at the moment of the award and vary per instance, so a single
+ * stored number could not express them:
+ *
+ *   - `streak_bonus` — a fixed ladder by milestone, `milestoneBonusPoints()`;
+ *   - `achievement` — by badge tier, `achievementPoints()`;
+ *   - `admin_adjustment` — whatever the admin typed, with a reason attached.
+ *
+ * The rows still exist in `point_rules` because the table is keyed on the enum, but their
+ * values are never consulted. That was the bug: the settings screen offered an editable
+ * **Achievement** field that changed nothing at all, and the ledger paid ten-to-fifty while
+ * the configuration said twenty-five — so the screen the cohort lead used to understand
+ * scoring was describing a system that did not exist.
+ *
+ * This list is the single source of that distinction. `EDITABLE_POINT_EVENTS` derives from
+ * it, the settings UI renders from that, and `updatePointRulesAction` validates against it,
+ * so the screen and the server can no longer drift apart — and adding a new computed event
+ * cannot leave a dead control behind.
+ */
+export const COMPUTED_POINT_EVENTS = [
+  'streak_bonus',
+  'achievement',
+  'admin_adjustment',
+] as const satisfies readonly PointEvent[];
+
+export type ComputedPointEvent = (typeof COMPUTED_POINT_EVENTS)[number];
+
+export function isComputedPointEvent(event: PointEvent): event is ComputedPointEvent {
+  return (COMPUTED_POINT_EVENTS as readonly PointEvent[]).includes(event);
+}
+
+/** The events an admin can actually set a value for. Everything else is computed. */
+export const EDITABLE_POINT_EVENTS = (Object.keys(DEFAULT_POINT_RULES) as PointEvent[]).filter(
+  (event) => !isComputedPointEvent(event),
+);
+
+/**
+ * How a computed event's value is arrived at, in one line, for the screens that have to
+ * explain it. Keeping the copy here rather than in a component is what stops the admin
+ * screen and the student screen describing the same rule differently.
+ */
+export const COMPUTED_POINT_EXPLANATIONS: Record<ComputedPointEvent, string> = {
+  streak_bonus: 'Set by the milestone reached — a fixed ladder from 3 days to 50.',
+  achievement: 'Set by the badge tier: bronze 10, silver 25, gold 50.',
+  admin_adjustment: 'Whatever a cohort lead enters, with a reason recorded against it.',
 };
 
 /**
@@ -80,11 +130,24 @@ export function dayScore(
   return Math.min(1, earned / max);
 }
 
-export type DayBandName = 'perfect' | 'strong' | 'active' | 'weak' | 'missed' | 'off';
+export type DayBandName = 'perfect' | 'strong' | 'active' | 'weak' | 'missed' | 'off' | 'bonus';
 
-/** Maps a day score to the band used by the calendar and the activity heatmap. */
+/**
+ * Maps a day score to the band used by the calendar and the activity heatmap.
+ *
+ * The non-active branch is the one that changed. It used to return `off` unconditionally,
+ * which meant a Sunday spent working and a Sunday spent asleep drew the same empty square —
+ * the audit found 18 student-days recorded in the source tables and shown nowhere. A rest
+ * day with real work on it is now a `bonus` day.
+ *
+ * `bonus` is a display and credit band, deliberately not a scoring one. Consistency and
+ * streaks still count active study days only (ADR-004, ADR-005), so the denominator does not
+ * grow when a student works a weekend: they cannot be penalised for resting, and a weekend
+ * can never quietly become expected. The day's XP and minutes were always being stored; this
+ * is what finally shows them.
+ */
 export function bandForDay(score: number, isActiveDay: boolean): DayBandName {
-  if (!isActiveDay) return 'off';
+  if (!isActiveDay) return score > 0 ? 'bonus' : 'off';
   if (score >= 0.95) return 'perfect';
   if (score >= 0.75) return 'strong';
   if (score >= 0.4) return 'active';
@@ -99,15 +162,49 @@ export const BAND_LABELS: Record<DayBandName, string> = {
   weak: 'Weak day',
   missed: 'Missed day',
   off: 'Rest day',
+  bonus: 'Bonus day',
 };
 
 /**
- * "Showing up" is deliberately generous: any real behaviour on an active study day counts.
- * Consistency measures *how much* of the day was completed; show-up rate measures whether
- * the student turned up at all. Returning at 30% beats not returning.
+ * The two events an admin can grant with a click on the attendance sheet.
+ *
+ * They are real behaviour when the student recorded them by walking into the room, and
+ * nothing at all when a cohort lead ticked the whole column — and the ledger cannot tell
+ * those apart, because both paths write the same row. See `showedUpForDay`.
  */
-export function showedUpFromScore(score: number): boolean {
-  return score > 0;
+const ADMIN_GRANTABLE_EVENTS = ['live_session_present', 'live_session_late'] as const;
+
+function isAdminGrantable(event: PointEvent): boolean {
+  return (ADMIN_GRANTABLE_EVENTS as readonly PointEvent[]).includes(event);
+}
+
+/**
+ * Did this student turn up today?
+ *
+ * "Showing up" stays deliberately generous — any real behaviour on an active study day
+ * counts, and returning at 30% beats not returning — but it is no longer satisfied by the
+ * attendance mark alone.
+ *
+ * Attendance is the one behaviour a cohort lead can grant to the whole cohort in a single
+ * click, and it is worth more points than any other, so a bulk mark used to hand every
+ * student a scoring day, an unbroken streak and `on_track` status whether or not they had
+ * opened the app. That made the metric the product exists to report unfalsifiable in the
+ * wrong direction: the register said 26 present on a day when one student was in the room.
+ *
+ * So attendance counts toward showing up only when the room itself corroborates it —
+ * `verifiedPresence` is a `study_room_presence` row, written by the student's own client
+ * heartbeat and not reachable from the admin screens. An admin mark still awards its points
+ * and still lifts the day score; it just cannot, on its own, assert that someone was there.
+ */
+export function showedUpForDay(args: {
+  entries: readonly { event: PointEvent; points: number }[];
+  /** True when the student's client registered them in the study room that day. */
+  verifiedPresence: boolean;
+}): boolean {
+  const earned = args.entries.filter((e) => behaviourSlot(e.event) && e.points > 0);
+  if (earned.length === 0) return false;
+  if (args.verifiedPresence) return true;
+  return earned.some((e) => !isAdminGrantable(e.event));
 }
 
 /* ------------------------------------------------------------ quiz scoring */
@@ -140,6 +237,18 @@ export const ledgerKey = {
     `quiz_attempt:${memberId}:${quizId}:${date}`,
   quizBonus: (memberId: string, quizId: string, date: string) =>
     `quiz_bonus:${memberId}:${quizId}:${date}`,
+  /*
+   * Keyed on the *attempt*, not on the assessment and the date.
+   *
+   * A student may sit the same assessment more than once, and each sitting is its own piece
+   * of work — so an assessment-and-date key would silently refuse to pay for the second one.
+   * The attempt id is the natural unit, and it also makes a re-submitted or replayed
+   * submission a no-op at the database, exactly as every other award here is.
+   */
+  assessmentAttempt: (memberId: string, attemptId: string) =>
+    `quiz_attempt:assessment:${memberId}:${attemptId}`,
+  assessmentBonus: (memberId: string, attemptId: string) =>
+    `quiz_bonus:assessment:${memberId}:${attemptId}`,
   streakMilestone: (memberId: string, milestone: number) => `streak_bonus:${memberId}:${milestone}`,
   achievement: (memberId: string, code: string) => `achievement:${memberId}:${code}`,
   weeklyReview: (memberId: string, weekStart: string) => `weekly_review:${memberId}:${weekStart}`,

@@ -111,9 +111,28 @@ const NO_CUSTOM_TOPIC = {
 
 /* ------------------------------------------------------------- attendance */
 
+/**
+ * Records attendance by hand — an admin override, not an ordinary source of XP.
+ *
+ * The study room writes its own attendance when a student joins, corroborated by a
+ * `study_room_presence` row their client heartbeats. That is the verified path, and it is
+ * what `showedUpForDay` will accept on its own.
+ *
+ * This is the other path, and it is now labelled as such. Every row it writes is stamped
+ * `source = 'admin'` and carries the reason the admin gave, which is stored on the row, put
+ * in the audit log, and shown back on the sheet. The points are still paid — a cohort lead
+ * who was in the room knows something the software does not — but a mark made here can no
+ * longer, by itself, assert that a student turned up. That distinction is the whole of what
+ * makes the leaderboard defensible: the audit found a register reading 26 present on a
+ * morning when one person was in the room, and nothing in the data could tell the difference.
+ */
 export async function markAttendanceAction(
   cohortId: string,
-  input: { date: string; entries: { memberId: string; status: 'present' | 'late' | 'absent' }[] },
+  input: {
+    date: string;
+    reason: string;
+    entries: { memberId: string; status: 'present' | 'late' | 'absent' }[];
+  },
 ): Promise<Result<{ marked: number }>> {
   return guarded(async () => {
     const { user, ctx } = await adminContext(cohortId);
@@ -121,7 +140,7 @@ export async function markAttendanceAction(
     if (!parsed.success)
       return fail('That attendance data was not valid.', fieldErrors(parsed.error));
 
-    const { date, entries } = parsed.data;
+    const { date, reason, entries } = parsed.data;
 
     // Every member must belong to this cohort — never trust the ids from the client.
     const valid = await db
@@ -157,6 +176,8 @@ export async function markAttendanceAction(
           memberId: entry.memberId,
           date,
           status: entry.status,
+          source: 'admin' as const,
+          overrideReason: reason,
           markedBy: user.id,
           markedAt,
         })),
@@ -165,6 +186,10 @@ export async function markAttendanceAction(
         target: [attendance.memberId, attendance.date],
         set: {
           status: sql`excluded.status`,
+          // An overrule of a verified join is still an overrule: the row's provenance
+          // changes with it, so the mark never keeps a credibility it no longer has.
+          source: sql`excluded.source`,
+          overrideReason: sql`excluded.override_reason`,
           markedBy: sql`excluded.marked_by`,
           markedAt: sql`excluded.marked_at`,
         },
@@ -192,7 +217,16 @@ export async function markAttendanceAction(
               points: ctx.rules[event],
               occurredOn: date,
               idempotencyKey: ledgerKey.attendance(entry.memberId, date),
-              reason: entry.status === 'present' ? 'Attended the study room' : 'Joined late',
+              /*
+               * The ledger entry says where the award came from and why, so the student's
+               * own points page can explain it without anyone having to guess. An admin
+               * mark reads as an admin mark on the screen the student is judged by.
+               */
+              reason:
+                entry.status === 'present'
+                  ? `Marked present by a cohort lead — ${reason}`
+                  : `Marked late by a cohort lead — ${reason}`,
+              metadata: { source: 'admin', overrideReason: reason },
               createdBy: user.id,
             });
           }
@@ -213,7 +247,13 @@ export async function markAttendanceAction(
       action: 'attendance.mark',
       entity: 'attendance',
       entityId: date,
-      payload: { count: accepted.length, date },
+      payload: {
+        count: accepted.length,
+        date,
+        reason,
+        // Recorded per student, so the audit answers "who was marked what, and why".
+        marks: accepted.map((e) => ({ memberId: e.memberId, status: e.status })),
+      },
     });
 
     revalidatePath('/admin');

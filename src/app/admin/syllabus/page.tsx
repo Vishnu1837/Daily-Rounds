@@ -10,7 +10,6 @@ export const metadata: Metadata = { title: 'Syllabus' };
 // so there is no static shell to hand over first.
 export const instant = false;
 
-
 /**
  * The syllabus, inside the admin console.
  *

@@ -11,6 +11,7 @@ import {
   isNotNull,
   isNull,
   like,
+  lt,
   lte,
   ne,
   or,
@@ -31,6 +32,7 @@ import {
   dailyActivity,
   dailyAssignments,
   events,
+  focusTrees,
   materials,
   pointsLedger,
   quizAttempts,
@@ -49,6 +51,7 @@ import {
 } from '@/db/schema';
 import { ancestorRefs, bestRefMatch, isSameBranch, resolveRef } from '@/lib/curriculum';
 import { ACHIEVEMENTS_BY_CODE } from '@/lib/domain/achievements';
+import { type CheckInPrefill, buildCheckInPrefill } from '@/lib/domain/check-in';
 import {
   type ISODate,
   activeStudyDaysBetween,
@@ -58,6 +61,7 @@ import {
   isActiveStudyDay,
   isHoliday,
   minDate,
+  previousActiveStudyDay,
   timeInTimezone,
   weekStart,
 } from '@/lib/domain/calendar';
@@ -274,6 +278,25 @@ export type HomeData = {
   }[];
   announcement: { id: string; title: string; body: string } | null;
   unseenAchievements: { code: string; name: string; description: string; emoji: string }[];
+  /**
+   * What the student said, at their last check-in, they would do next.
+   *
+   * `check_ins.tomorrow_target` has been collected since the product launched, paid 10 XP,
+   * and shown back to the student *nowhere* — only to admins. Asking someone to make a
+   * commitment and then never mentioning it again is the fastest way to teach them the
+   * commitment does not matter.
+   *
+   * Null when there is no previous check-in with a target, or when the student has already
+   * checked in today — at that point yesterday's plan is finished business and the day's own
+   * commitment has replaced it.
+   */
+  yesterdayCommitment: {
+    /** The date the commitment was made on, in the student's own timezone. */
+    madeOn: ISODate;
+    text: string;
+    /** True when it was written on the immediately preceding active study day. */
+    fromYesterday: boolean;
+  } | null;
 };
 
 export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
@@ -311,6 +334,7 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
     points,
     presenceRows,
     standing,
+    commitmentRows,
   ] = await Promise.all([
     readActivity(memberId, calendar.startDate, upTo),
     readDailyFocus(memberId, today),
@@ -395,6 +419,29 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
      * round trips to every dashboard render.
      */
     getRankFor(ctx),
+    /*
+     * The most recent check-in *before today* that carried a plan for the next day.
+     *
+     * Deliberately "the most recent one with a target" rather than "yesterday's": a student
+     * who checked in on Friday and opens the app on Monday should still be shown what they
+     * said they would do, and one who has missed a week is better served by their own last
+     * words than by silence. Whether it was in fact the previous active study day is
+     * reported separately, so the card can say "Yesterday" honestly or fall back to naming
+     * the day.
+     */
+    db
+      .select({ date: checkIns.date, tomorrowTarget: checkIns.tomorrowTarget })
+      .from(checkIns)
+      .where(
+        and(
+          eq(checkIns.memberId, memberId),
+          lt(checkIns.date, today),
+          isNotNull(checkIns.tomorrowTarget),
+          ne(checkIns.tomorrowTarget, ''),
+        ),
+      )
+      .orderBy(desc(checkIns.date))
+      .limit(1),
   ]);
 
   const streak = calculateCurrentStreak(calendar, activity.showedUp, today);
@@ -447,6 +494,23 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
       href: '/check-in',
     },
   ];
+
+  /*
+   * Suppressed once today's check-in is in. At that point yesterday's plan is finished
+   * business and the student has made a new commitment; leading the screen with the old one
+   * would be asking them to answer a question they have already answered.
+   */
+  const commitmentRow = checkInRows.length > 0 ? undefined : commitmentRows[0];
+  const previousActive = previousActiveStudyDay(calendar, today);
+
+  const yesterdayCommitment =
+    commitmentRow && commitmentRow.tomorrowTarget
+      ? {
+          madeOn: commitmentRow.date,
+          text: commitmentRow.tomorrowTarget,
+          fromYesterday: commitmentRow.date === previousActive,
+        }
+      : null;
 
   const weekly = calculateCurrentWeekConsistency(calendar, activity.lookup, upTo);
   const topics = topicCounts[0] ?? { total: 0, completed: 0 };
@@ -508,6 +572,7 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
       startTime: formatTimeInZone(e.startTime, e.date, cohort.timezone, viewerZone),
     })),
     announcement: announcementRows[0] ?? null,
+    yesterdayCommitment,
     unseenAchievements: unseenRows
       .map((r) => ACHIEVEMENTS_BY_CODE.get(r.code))
       .filter((a): a is NonNullable<typeof a> => Boolean(a))
@@ -1368,50 +1433,96 @@ export type CheckInContext = {
   comeback: { isComeback: boolean; missedDays: ISODate[] };
   sessionMinutes: number;
   isActiveDay: boolean;
+  /**
+   * Answers derived from what the student already did today, for the form to open with.
+   *
+   * Suggestions, never submissions — see `src/lib/domain/check-in.ts` for the rules,
+   * including why `completion` is never pre-filled as `none`.
+   */
+  prefill: CheckInPrefill;
 };
 
 export async function getCheckInContext(ctx: MemberContext): Promise<CheckInContext> {
   const { memberId, calendar, today } = ctx;
 
-  const [existingRows, assignmentRows, nextAssignmentRows, sessionRows, activity] =
-    await Promise.all([
-      db
-        .select()
-        .from(checkIns)
-        .where(and(eq(checkIns.memberId, memberId), eq(checkIns.date, today)))
-        .limit(1),
-      // Both of today's subjects: the check-in asks what the student studied, and it has
-      // to name everything that was on the plan.
-      db
-        .select({
-          plannedMinutes: dailyAssignments.plannedMinutes,
-          topicTitle: roadmapTopics.title,
-        })
-        .from(dailyAssignments)
-        .leftJoin(roadmapTopics, eq(roadmapTopics.id, dailyAssignments.topicId))
-        .where(and(eq(dailyAssignments.memberId, memberId), eq(dailyAssignments.date, today)))
-        .orderBy(asc(dailyAssignments.slot)),
-      db
-        .select({ topicTitle: roadmapTopics.title })
-        .from(dailyAssignments)
-        .leftJoin(roadmapTopics, eq(roadmapTopics.id, dailyAssignments.topicId))
-        .where(
-          and(
-            eq(dailyAssignments.memberId, memberId),
-            gte(dailyAssignments.date, addDays(today, 1)),
-          ),
-        )
-        .orderBy(asc(dailyAssignments.date), asc(dailyAssignments.slot))
-        .limit(1),
-      db
-        .select({ elapsedSeconds: studySessions.elapsedSeconds })
-        .from(studySessions)
-        .where(and(eq(studySessions.memberId, memberId), eq(studySessions.date, today))),
-      readActivity(memberId, calendar.startDate, minDate(today, calendar.endDate)),
-    ]);
+  const [
+    existingRows,
+    assignmentRows,
+    nextAssignmentRows,
+    sessionRows,
+    activity,
+    groveRows,
+    targetRows,
+  ] = await Promise.all([
+    db
+      .select()
+      .from(checkIns)
+      .where(and(eq(checkIns.memberId, memberId), eq(checkIns.date, today)))
+      .limit(1),
+    // Both of today's subjects: the check-in asks what the student studied, and it has
+    // to name everything that was on the plan.
+    db
+      .select({
+        plannedMinutes: dailyAssignments.plannedMinutes,
+        topicTitle: roadmapTopics.title,
+      })
+      .from(dailyAssignments)
+      .leftJoin(roadmapTopics, eq(roadmapTopics.id, dailyAssignments.topicId))
+      .where(and(eq(dailyAssignments.memberId, memberId), eq(dailyAssignments.date, today)))
+      .orderBy(asc(dailyAssignments.slot)),
+    db
+      .select({ topicTitle: roadmapTopics.title })
+      .from(dailyAssignments)
+      .leftJoin(roadmapTopics, eq(roadmapTopics.id, dailyAssignments.topicId))
+      .where(
+        and(eq(dailyAssignments.memberId, memberId), gte(dailyAssignments.date, addDays(today, 1))),
+      )
+      .orderBy(asc(dailyAssignments.date), asc(dailyAssignments.slot))
+      .limit(1),
+    db
+      .select({ elapsedSeconds: studySessions.elapsedSeconds })
+      .from(studySessions)
+      .where(and(eq(studySessions.memberId, memberId), eq(studySessions.date, today))),
+    readActivity(memberId, calendar.startDate, minDate(today, calendar.endDate)),
+    // Rounds that actually grew today, and what they were worth. A withered round bought
+    // the student nothing and must not appear in a suggestion about their day.
+    db
+      .select({
+        rounds: sql<number>`count(*)::int`,
+        minutes: sql<number>`coalesce(sum(${focusTrees.focusMinutes}), 0)::int`,
+      })
+      .from(focusTrees)
+      .where(
+        and(
+          eq(focusTrees.memberId, memberId),
+          eq(focusTrees.date, today),
+          eq(focusTrees.status, 'grown'),
+        ),
+      ),
+    db
+      .select({ id: pointsLedger.id })
+      .from(pointsLedger)
+      .where(
+        and(
+          eq(pointsLedger.memberId, memberId),
+          eq(pointsLedger.occurredOn, today),
+          eq(pointsLedger.event, 'daily_target_completed'),
+        ),
+      )
+      .limit(1),
+  ]);
 
   const comeback = calculateComebackState(calendar, activity.showedUp, today);
   const existing = existingRows[0];
+
+  const assignedTopics = assignmentRows.map((r) => r.topicTitle).filter((t): t is string => !!t);
+  const prefill = buildCheckInPrefill({
+    assignedTopics,
+    sessionMinutes: Math.round(sessionRows.reduce((s, r) => s + r.elapsedSeconds, 0) / 60),
+    grownRounds: groveRows[0]?.rounds ?? 0,
+    groveMinutes: groveRows[0]?.minutes ?? 0,
+    targetCompleted: targetRows.length > 0,
+  });
 
   return {
     existing: existing
@@ -1433,6 +1544,7 @@ export async function getCheckInContext(ctx: MemberContext): Promise<CheckInCont
     comeback: { isComeback: comeback.isComeback, missedDays: comeback.missedDays },
     sessionMinutes: Math.round(sessionRows.reduce((s, r) => s + r.elapsedSeconds, 0) / 60),
     isActiveDay: isActiveStudyDay(calendar, today),
+    prefill,
   };
 }
 

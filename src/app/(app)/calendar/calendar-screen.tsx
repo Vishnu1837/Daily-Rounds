@@ -145,19 +145,23 @@ export function CalendarScreen({
             <Card padding="lg">
               <p className="eyebrow">Legend</p>
               <ul className="mt-3.5 space-y-2">
-                {(['perfect', 'strong', 'active', 'weak', 'missed', 'off'] as const).map((band) => (
-                  <li key={band} className="flex items-center gap-2.5">
-                    <span
-                      className={cn('size-4 rounded-md', BAND_STYLE[band].className)}
-                      aria-hidden
-                    />
-                    <span className="text-fg-muted text-sm">{BAND_STYLE[band].label}</span>
-                  </li>
-                ))}
+                {(['perfect', 'strong', 'active', 'weak', 'missed', 'bonus', 'off'] as const).map(
+                  (band) => (
+                    <li key={band} className="flex items-center gap-2.5">
+                      <span
+                        className={cn('size-4 rounded-md', BAND_STYLE[band].className)}
+                        aria-hidden
+                      />
+                      <span className="text-fg-muted text-sm">{BAND_STYLE[band].label}</span>
+                    </li>
+                  ),
+                )}
               </ul>
               <p className="border-border text-fg-subtle mt-4 border-t pt-3 text-xs leading-relaxed">
                 The cohort runs {cohortStart} to {cohortEnd}. Weekends and holidays are rest days
-                and never break your streak.
+                and never break your streak. Work one anyway and it becomes a bonus day: the XP and
+                the minutes count, and your consistency is still measured over study days only — so
+                a weekend can lift your total but never be expected of you.
               </p>
             </Card>
           </Reveal>

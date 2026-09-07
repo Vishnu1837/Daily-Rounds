@@ -12,3 +12,5 @@ next-env.d.ts
 coverage/
 .vercel
 .scratch/
+
+.env*

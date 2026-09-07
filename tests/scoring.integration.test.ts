@@ -9,8 +9,17 @@ import {
   migrateTestDb,
   schema,
 } from './helpers/db';
+import { calculateConsistency } from '@/lib/domain/consistency';
 import { ledgerKey } from '@/lib/domain/points';
-import { awardPoints, loadActivity, recomputeDay, settleDay, totalPoints } from '@/server/scoring';
+import { calculateCurrentStreak } from '@/lib/domain/streak';
+import {
+  awardPoints,
+  loadActivity,
+  recomputeDay,
+  recomputeRange,
+  settleDay,
+  totalPoints,
+} from '@/server/scoring';
 
 let ctx: TestCohort;
 
@@ -260,8 +269,71 @@ describe('daily activity derivation', () => {
       rules: ctx.rules,
     });
 
-    expect(record.showedUp).toBe(false); // not an active day, so it cannot count toward the streak
-    expect(record.points).toBe(20); // but the points are still banked
+    // Credited as a bonus day: the work happened, so the record says so.
+    expect(record.showedUp).toBe(true);
+    expect(record.points).toBe(20);
+
+    const [row] = await db
+      .select({ band: schema.dailyActivity.band, isActiveDay: schema.dailyActivity.isActiveDay })
+      .from(schema.dailyActivity)
+      .where(
+        and(
+          eq(schema.dailyActivity.memberId, memberId),
+          eq(schema.dailyActivity.date, '2025-09-06'),
+        ),
+      );
+    expect(row!.band).toBe('bonus');
+    expect(row!.isActiveDay).toBe(false);
+  });
+
+  it('a bonus day lifts nothing it should not: the denominator is still study days', async () => {
+    const memberId = await member();
+    // A single perfect Saturday and nothing else. If weekends leaked into the denominator
+    // this would read as a student with a record; if they leaked into the numerator it would
+    // read as a perfect one. Neither is true — the week was empty.
+    await completeDay(memberId, '2025-09-06');
+    await recomputeRange({
+      memberId,
+      cohortId: ctx.cohort.id,
+      from: '2025-09-01',
+      to: '2025-09-07',
+      calendar: ctx.calendar,
+      rules: ctx.rules,
+    });
+
+    const activity = await loadActivity(memberId, '2025-09-01', '2025-09-07');
+    const consistency = calculateConsistency(
+      ctx.calendar,
+      activity.lookup,
+      '2025-09-01',
+      '2025-09-07',
+    );
+
+    expect(consistency.activeDays).toBe(5); // Mon–Fri only
+    expect(consistency.completedDays).toBe(0);
+    expect(consistency.consistencyPct).toBe(0);
+
+    // …and the Saturday itself is still on the record, with its points.
+    expect(activity.lookup('2025-09-06')?.showedUp).toBe(true);
+    expect(activity.lookup('2025-09-06')?.points).toBeGreaterThan(0);
+  });
+
+  it('a bonus day cannot extend a streak, because the streak walks study days', async () => {
+    const memberId = await member();
+    await completeDay(memberId, '2025-09-05'); // Friday
+    await completeDay(memberId, '2025-09-06'); // Saturday — bonus
+    await recomputeRange({
+      memberId,
+      cohortId: ctx.cohort.id,
+      from: '2025-09-01',
+      to: '2025-09-08',
+      calendar: ctx.calendar,
+      rules: ctx.rules,
+    });
+
+    const activity = await loadActivity(memberId, '2025-09-01', '2025-09-08');
+    // Friday counted; the weekend is skipped rather than counted, exactly as before.
+    expect(calculateCurrentStreak(ctx.calendar, activity.showedUp, '2025-09-06').length).toBe(1);
   });
 
   it('is idempotent — recomputing changes nothing', async () => {

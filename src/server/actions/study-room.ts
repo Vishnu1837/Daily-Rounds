@@ -8,7 +8,12 @@ import { attendance, cohortMembers, studyRoomPresence, users } from '@/db/schema
 import { requireUserAction } from '@/lib/auth/guards';
 import { timeInTimezone } from '@/lib/domain/calendar';
 import { ledgerKey } from '@/lib/domain/points';
-import { PRESENCE_STALE_SECONDS, parseHm, roomState } from '@/lib/domain/study-room';
+import {
+  PRESENCE_STALE_SECONDS,
+  parseHm,
+  roomState,
+  suspendsAwayTimer,
+} from '@/lib/domain/study-room';
 import { getMemberContext } from '@/server/context';
 import { awardPoints, settleDay } from '@/server/scoring';
 
@@ -123,10 +128,17 @@ export async function joinStudyRoomAction(): Promise<Result<JoinResult>> {
     const attendanceRecorded = existing.length === 0;
 
     if (attendanceRecorded) {
+      /*
+       * `source: 'verified'` is what separates this row from a hand-marked one. It is only
+       * reachable by the student's own client, alongside the `study_room_presence` row
+       * written a few lines above, and `showedUpForDay` accepts it on its own where an
+       * admin mark needs corroboration. See `attendanceSourceEnum`.
+       */
       await db.insert(attendance).values({
         memberId,
         date: today,
         status,
+        source: 'verified',
         note: 'Joined the study room',
         markedBy: ctx.user.id,
         markedAt: now,
@@ -224,4 +236,41 @@ export async function leaveStudyRoomAction(): Promise<Result<RoomPulse>> {
       nowMinutes: parseHm(timeInTimezone(ctx.cohort.timezone)) ?? 0,
     });
   }, 'We could not sign you out of the study room.');
+}
+
+/**
+ * Whether the grove's away timer should stand down for this student right now.
+ *
+ * Called from the study screen at the moment the timer would fire — not when it is armed —
+ * so the answer is always fresh and the round trip is only spent when a round is genuinely
+ * about to be killed.
+ *
+ * The decision is `suspendsAwayTimer`'s and is made entirely from server-side facts: a
+ * presence row this student opened by joining, and the cohort clock. Nothing the caller
+ * sends is consulted.
+ */
+export async function studyRoomHoldAction(): Promise<Result<{ suspended: boolean }>> {
+  return guarded(async () => {
+    const ctx = await context();
+
+    const [presence] = await db
+      .select({ id: studyRoomPresence.id })
+      .from(studyRoomPresence)
+      .where(
+        and(
+          eq(studyRoomPresence.memberId, ctx.memberId),
+          eq(studyRoomPresence.date, ctx.today),
+          isNull(studyRoomPresence.leftAt),
+        ),
+      )
+      .limit(1);
+
+    const { phase } = roomState({
+      startTime: ctx.cohort.meetStartTime,
+      endTime: ctx.cohort.meetEndTime,
+      nowMinutes: parseHm(timeInTimezone(ctx.cohort.timezone)) ?? 0,
+    });
+
+    return ok({ suspended: suspendsAwayTimer({ hasOpenPresence: Boolean(presence), phase }) });
+  }, 'We could not check the study room.');
 }

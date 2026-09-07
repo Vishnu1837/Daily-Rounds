@@ -153,3 +153,32 @@ export function roomState(input: {
 export function isPresenceLive(lastSeenAt: Date, now: Date = new Date()): boolean {
   return now.getTime() - lastSeenAt.getTime() <= PRESENCE_STALE_SECONDS * 1000;
 }
+
+/**
+ * Is this student sitting in the study room right now, for the purpose of the grove's
+ * away timer?
+ *
+ * The grove kills a focus round when the tab is hidden and something else has taken focus,
+ * which is the correct reading of "went somewhere else" — except for the one place the
+ * student is *supposed* to go. Joining the room opens the meeting in another tab, and that
+ * tab taking focus is indistinguishable from opening Instagram. Students were losing rounds
+ * for doing exactly what the product told them to do.
+ *
+ * So the away timer asks this before it fires, and the answer is decided from two facts the
+ * browser cannot manufacture:
+ *
+ *   - a `study_room_presence` row exists for today and has not been closed by pressing
+ *     Leave, which is a record of the student having *deliberately* joined;
+ *   - the room's own window is still open on the cohort clock.
+ *
+ * The second is what keeps this from being a loophole. Joining at 06:00 does not buy an
+ * exemption for the rest of the day: once the room closes, the away timer arms again for
+ * everybody, whether or not anyone remembered to press Leave.
+ */
+export function suspendsAwayTimer(input: {
+  /** True when today's presence row exists and `left_at` is still null. */
+  hasOpenPresence: boolean;
+  phase: RoomPhase;
+}): boolean {
+  return input.hasOpenPresence && input.phase === 'open';
+}

@@ -11,11 +11,12 @@ import {
   type TreeSpecies,
   type WitherReason,
   hasRunFullRound,
+  isBriefAbort,
   presetByKey,
   speciesFor,
 } from '@/lib/domain/grove';
 import { getMemberContext } from '@/server/context';
-import { sweepAbandonedTrees } from '@/server/grove';
+import { settleOverdueTrees } from '@/server/grove';
 import { todaysAssignment } from '@/server/roadmap';
 
 import { type Result, fail, guarded, ok } from './shared';
@@ -53,7 +54,7 @@ export async function plantTreeAction(input: {
 }): Promise<Result<PlantedTree>> {
   return guarded(async () => {
     const ctx = await context();
-    await sweepAbandonedTrees(ctx.memberId);
+    await settleOverdueTrees(ctx.memberId);
 
     const [live] = await db
       .select()
@@ -118,6 +119,11 @@ export async function growTreeAction(treeId: string): Promise<Result<GrowOutcome
     if (!tree) return fail('That round could not be found.');
     if (tree.status === 'withered') return fail('That tree has already withered.');
 
+    /*
+     * `status === 'grown'` falls straight through, which is what makes this safe to call
+     * after the scheduled sweep has already settled the round: the student's browser wakes
+     * up, claims its tree, and is handed the one the server grew rather than an error.
+     */
     if (tree.status === 'growing') {
       if (!hasRunFullRound({ plantedAt: tree.plantedAt, focusMinutes: tree.focusMinutes })) {
         return fail('That round has not finished yet. Stay with it a little longer.');
@@ -125,7 +131,7 @@ export async function growTreeAction(treeId: string): Promise<Result<GrowOutcome
       await db
         .update(focusTrees)
         .set({ status: 'grown', settledAt: new Date() })
-        .where(eq(focusTrees.id, tree.id));
+        .where(and(eq(focusTrees.id, tree.id), eq(focusTrees.status, 'growing')));
     }
 
     const grownToday = await db
@@ -156,34 +162,79 @@ export async function growTreeAction(treeId: string): Promise<Result<GrowOutcome
   }, 'We could not save that round. Please try again — your tree is still in the ground.');
 }
 
+export type WitherOutcome = {
+  /** False when the round was too young to record and the sapling was pulled up instead. */
+  recorded: boolean;
+};
+
 /**
- * Kills a round early, and records why.
+ * Ends a round early.
  *
- * There is no soft option here on purpose. The reason is written down and the stump stays in
- * the grove, because the only thing that makes "do not leave" mean anything is that leaving
- * leaves a mark.
+ * There is still no soft option for a real walk-away: the reason is written down and the
+ * stump stays in the grove, because the only thing that makes "do not leave" mean anything
+ * is that leaving leaves a mark.
+ *
+ * The one exception is a round abandoned inside `MIN_COMMITMENT_SECONDS`. Picking the wrong
+ * preset and stopping fifteen seconds later is not a broken promise, and recording it as one
+ * filled groves with stumps for commitments that had not started yet — which then dragged
+ * down a survival percentage students were being shown as a measure of their discipline. So
+ * the row is deleted and nothing happened.
+ *
+ * That deletion is deliberately the *only* one in the grove, and it is bounded by a server
+ * timestamp the client cannot influence: `planted_at`, set when the round began. There is no
+ * way to reach it for a round that has been running long enough to matter.
  */
-export async function witherTreeAction(treeId: string, reason: WitherReason): Promise<Result> {
+export async function witherTreeAction(
+  treeId: string,
+  reason: WitherReason,
+): Promise<Result<WitherOutcome>> {
   return guarded(async () => {
     const ctx = await context();
 
     const [tree] = await db
-      .select({ id: focusTrees.id, status: focusTrees.status })
+      .select({
+        id: focusTrees.id,
+        status: focusTrees.status,
+        plantedAt: focusTrees.plantedAt,
+        focusMinutes: focusTrees.focusMinutes,
+      })
       .from(focusTrees)
       .where(and(eq(focusTrees.id, treeId), eq(focusTrees.memberId, ctx.memberId)))
       .limit(1);
 
     if (!tree) return fail('That round could not be found.');
     // Withering twice — two tabs both reporting the same walk-away — is a no-op, not an error.
-    if (tree.status !== 'growing') return ok();
+    if (tree.status !== 'growing') return ok({ recorded: tree.status === 'withered' });
+
+    /*
+     * A round whose full length has already elapsed is owed to the student, whatever the
+     * browser thinks it is reporting. A tab that wakes from sleep and fires its "I left"
+     * handler must not be able to destroy a round the server can prove was sat through.
+     */
+    if (hasRunFullRound({ plantedAt: tree.plantedAt, focusMinutes: tree.focusMinutes })) {
+      await db
+        .update(focusTrees)
+        .set({ status: 'grown', settledAt: new Date() })
+        .where(and(eq(focusTrees.id, tree.id), eq(focusTrees.status, 'growing')));
+      revalidatePath('/grove');
+      return ok({ recorded: false });
+    }
+
+    if (isBriefAbort({ plantedAt: tree.plantedAt })) {
+      await db
+        .delete(focusTrees)
+        .where(and(eq(focusTrees.id, tree.id), eq(focusTrees.status, 'growing')));
+      revalidatePath('/grove');
+      return ok({ recorded: false });
+    }
 
     await db
       .update(focusTrees)
       .set({ status: 'withered', witherReason: reason, settledAt: new Date() })
-      .where(eq(focusTrees.id, tree.id));
+      .where(and(eq(focusTrees.id, tree.id), eq(focusTrees.status, 'growing')));
 
     revalidatePath('/grove');
-    return ok();
+    return ok({ recorded: true });
   }, 'We could not record that. Please try again.');
 }
 

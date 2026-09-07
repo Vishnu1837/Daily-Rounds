@@ -14,7 +14,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Sheet } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/toast';
 import { saveAssessmentAction } from '@/server/actions/assessments';
-import type { AdminAssessmentRow } from '@/server/queries/assessments';
+import type { AdminAssessmentRow, ReviewQueueRow } from '@/server/queries/assessments';
 
 type StatusFilter = 'all' | 'draft' | 'published' | 'archived';
 
@@ -45,9 +45,12 @@ function describeLength(row: AdminAssessmentRow): string {
 export function AssessmentsScreen({
   cohortId,
   rows,
+  queue,
 }: {
   cohortId: string;
   rows: AdminAssessmentRow[];
+  /** Every attempt across the cohort still waiting to be marked, oldest first. */
+  queue: ReviewQueueRow[];
 }) {
   const [status, setStatus] = useState<StatusFilter>('all');
   const [createOpen, setCreateOpen] = useState(false);
@@ -76,6 +79,8 @@ export function AssessmentsScreen({
           </Button>
         }
       />
+
+      <ReviewQueue queue={queue} />
 
       <Select
         value={status}
@@ -245,5 +250,66 @@ function CreateAssessmentForm({ cohortId }: { cohortId: string }) {
         Create draft
       </Button>
     </form>
+  );
+}
+
+/**
+ * The marking backlog, across every assessment, oldest first.
+ *
+ * Each assessment already showed its own pending count, but nothing showed the whole queue —
+ * so a paper set weeks ago and never marked was invisible unless somebody opened that
+ * assessment. The audit counted 107 ungraded answers behind that gap, and each one is a
+ * student looking at "Pending review" on a paper they sat and cannot see the result of.
+ *
+ * Ordered by how long the student has waited rather than by assessment, because that is the
+ * order the work should actually be done in, and the wait is what the student experiences.
+ */
+function ReviewQueue({ queue }: { queue: ReviewQueueRow[] }) {
+  if (queue.length === 0) return null;
+
+  const answers = queue.reduce((sum, r) => sum + r.unmarked, 0);
+  const longest = queue[0]?.waitingDays ?? 0;
+
+  return (
+    <Card className="border-warning/30 p-0">
+      <div className="border-border flex flex-wrap items-center justify-between gap-2 border-b p-4">
+        <div>
+          <p className="text-fg text-sm font-bold">
+            {queue.length} {queue.length === 1 ? 'attempt' : 'attempts'} waiting to be marked
+          </p>
+          <p className="text-fg-subtle mt-0.5 text-xs">
+            {answers} written {answers === 1 ? 'answer' : 'answers'} with no mark yet
+            {longest > 0 && ` · longest wait ${longest} ${longest === 1 ? 'day' : 'days'}`}. Each
+            student sees &ldquo;Pending review&rdquo; until you get to theirs.
+          </p>
+        </div>
+        <Badge tone="warning">Oldest first</Badge>
+      </div>
+
+      <div className="divide-border divide-y">
+        {queue.map((row) => (
+          <Link
+            key={row.attemptId}
+            href={`/admin/assessments/${row.assessmentId}/attempts/${row.attemptId}`}
+            className="hover:bg-bg-sunken flex items-center gap-3 p-4 transition-colors"
+          >
+            <span className="bg-warning/15 text-fg-subtle grid size-9 shrink-0 place-items-center rounded-full">
+              <ClipboardList className="size-4" aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-fg truncate text-sm font-bold">{row.studentName}</p>
+              <p className="text-fg-subtle truncate text-xs">
+                {row.assessmentTitle} · {row.unmarked} to mark
+              </p>
+            </div>
+            <span className="text-fg-muted shrink-0 text-xs tabular-nums">
+              {row.waitingDays === 0
+                ? 'today'
+                : `${row.waitingDays} ${row.waitingDays === 1 ? 'day' : 'days'}`}
+            </span>
+          </Link>
+        ))}
+      </div>
+    </Card>
   );
 }

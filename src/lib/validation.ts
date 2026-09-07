@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { resolveRef } from './curriculum';
+import { EDITABLE_POINT_EVENTS } from './domain/points';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -334,13 +335,43 @@ export const holidaySchema = z.object({
   kind: z.enum(['holiday', 'extra_study_day']),
 });
 
+/**
+ * Scoring values an admin may set.
+ *
+ * The key is constrained to `EDITABLE_POINT_EVENTS` rather than to the whole enum, so an
+ * attempt to set `achievement` or `streak_bonus` is refused by the schema. Those are
+ * computed at award time and their stored value has never been read — accepting a write for
+ * one would persist a number the ledger then contradicts, which is exactly the drift between
+ * `point_rules` and reality that the audit reported. See `COMPUTED_POINT_EVENTS`.
+ */
 export const pointRuleSchema = z.object({
   cohortId: z.string().uuid(),
-  rules: z.record(z.string(), z.coerce.number().int().min(0).max(500)),
+  rules: z.record(
+    z.enum(EDITABLE_POINT_EVENTS as [string, ...string[]]),
+    z.coerce.number().int().min(0).max(500),
+  ),
 });
 
+/**
+ * A hand-marked attendance sheet.
+ *
+ * `reason` is mandatory, and that is the substantive change. A mark made here overrules what
+ * the study room recorded, and a bulk mark overrules it for the whole cohort in one click —
+ * the audit found a register saying 26 present on a morning one student was in the room. An
+ * override with no stated reason is indistinguishable from a mistake, and the leaderboard it
+ * feeds is not defensible to the students on it.
+ *
+ * The floor is deliberately low. This is not a hurdle designed to stop anyone; it is there so
+ * that every admin mark carries an answer to "why am I down as absent?" that is better than
+ * "someone clicked something".
+ */
 export const attendanceMarkSchema = z.object({
   date: isoDateSchema,
+  reason: z
+    .string()
+    .trim()
+    .min(3, 'Give a short reason — it is shown with the mark')
+    .max(500, 'Keep the reason under 500 characters'),
   entries: z
     .array(
       z.object({

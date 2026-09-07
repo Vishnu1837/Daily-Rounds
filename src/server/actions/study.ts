@@ -15,9 +15,11 @@ import {
 } from '@/db/schema';
 import { requireUserAction } from '@/lib/auth/guards';
 import { ledgerKey } from '@/lib/domain/points';
+import { accruedSeconds, cappedTotal } from '@/lib/domain/study-session';
 import { getMemberContext } from '@/server/context';
 import { replaceActiveSubject, syncRoadmapCompletion, todaysAssignment } from '@/server/roadmap';
 import { awardPoints, settleDay } from '@/server/scoring';
+import { closeStaleSessions } from '@/server/sweep';
 
 import { type Result, fail, guarded, ok } from './shared';
 
@@ -75,6 +77,14 @@ function summarise(outcome: Awaited<ReturnType<typeof settleDay>>): SettleSummar
 export async function startSessionAction(slot?: RoadmapSlot): Promise<Result<StudySessionState>> {
   return guarded(async () => {
     const ctx = await context();
+
+    /*
+     * Tidy up this student's own abandoned blocks before opening a new one, the same way a
+     * grove read settles their overdue rounds. The scheduled sweep is the guarantee; this is
+     * what makes the common case self-healing without waiting for it, and it is scoped to
+     * the caller so it can never touch anyone else's rows.
+     */
+    await closeStaleSessions(ctx.memberId);
 
     const existing = await db
       .select()
@@ -135,16 +145,17 @@ export async function pauseSessionAction(sessionId: string): Promise<Result<Stud
     if (!session) return fail('That study session could not be found.');
     if (session.status !== 'running') return ok(toState(session));
 
-    const accrued = session.resumedAt
-      ? Math.floor((Date.now() - session.resumedAt.getTime()) / 1000)
-      : 0;
-
+    /*
+     * The running segment is capped before it is banked. A tab left open overnight used to
+     * bank every second of it, which is how a student ended up with 1,173 study minutes and
+     * no completed rounds — see `MAX_SEGMENT_SECONDS`.
+     */
     const [updated] = await db
       .update(studySessions)
       .set({
         status: 'paused',
         resumedAt: null,
-        elapsedSeconds: session.elapsedSeconds + Math.max(0, accrued),
+        elapsedSeconds: cappedTotal(session),
       })
       .where(eq(studySessions.id, session.id))
       .returning();
@@ -169,10 +180,16 @@ export async function finishSessionAction(sessionId: string): Promise<Result<Fin
     const session = rows[0];
     if (!session) return fail('That study session could not be found.');
 
-    const accrued = session.resumedAt
-      ? Math.floor((Date.now() - session.resumedAt.getTime()) / 1000)
-      : 0;
-    const elapsed = Math.min(24 * 3600, session.elapsedSeconds + Math.max(0, accrued));
+    /*
+     * Recomputed from the server timestamps and capped twice: once on the running segment,
+     * once on the total. The client's own counter has never been trusted for scoring; the
+     * caps are what stop the *server's* own arithmetic being wrong when a browser vanishes
+     * mid-block and comes back a day later.
+     */
+    const now = new Date();
+    const elapsed = cappedTotal(session, now);
+    const wasCapped =
+      elapsed !== Math.max(0, session.elapsedSeconds) + accruedSeconds(session, now);
 
     if (session.status !== 'completed') {
       await db
@@ -181,7 +198,9 @@ export async function finishSessionAction(sessionId: string): Promise<Result<Fin
           status: 'completed',
           resumedAt: null,
           elapsedSeconds: elapsed,
-          endedAt: new Date(),
+          // Kept only when the cap actually bit, so the correction stays inspectable.
+          rawElapsedSeconds: wasCapped ? session.elapsedSeconds : null,
+          endedAt: now,
         })
         .where(eq(studySessions.id, session.id));
     }

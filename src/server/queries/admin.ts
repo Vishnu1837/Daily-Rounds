@@ -22,6 +22,7 @@ import {
   roadmapTopics,
   roadmapWeeks,
   roadmaps,
+  studyRoomPresence,
   studentAchievements,
   studentGoals,
   subjects,
@@ -326,6 +327,14 @@ export async function getCohortOverview(ctx: CohortCtx): Promise<CohortOverview>
 
 /* -------------------------------------------------------- attendance sheet */
 
+/**
+ * The sheet for one day, with each mark's provenance.
+ *
+ * `source` and `overrideReason` are selected so the sheet can show a cohort lead which rows
+ * the study room recorded for itself and which ones a human has already overruled — and why.
+ * Marking over a verified join is a legitimate thing to do; doing it without being told that
+ * is what it is is not.
+ */
 export async function getAttendanceSheet(ctx: CohortCtx, date: ISODate) {
   const rows = await db
     .select({
@@ -335,6 +344,13 @@ export async function getAttendanceSheet(ctx: CohortCtx, date: ISODate) {
       mbbsYear: users.mbbsYear,
       status: attendance.status,
       note: attendance.note,
+      source: attendance.source,
+      overrideReason: attendance.overrideReason,
+      /** True when the student's own client registered them in the room that day. */
+      verifiedPresence: sql<boolean>`EXISTS (
+        SELECT 1 FROM ${studyRoomPresence} p
+        WHERE p.member_id = ${cohortMembers.id} AND p.date = ${date}
+      )`,
     })
     .from(cohortMembers)
     .innerJoin(users, eq(users.id, cohortMembers.userId))

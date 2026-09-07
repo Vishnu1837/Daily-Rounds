@@ -9,7 +9,7 @@ import {
   ledgerKey,
   maxDailyBehaviourPoints,
   quizPoints,
-  showedUpFromScore,
+  showedUpForDay,
 } from '@/lib/domain/points';
 
 const rules = DEFAULT_POINT_RULES;
@@ -95,14 +95,71 @@ describe('day bands', () => {
     expect(bandForDay(0, true)).toBe('missed');
   });
 
-  it('marks non-active days as rest days regardless of score', () => {
+  it('marks an untouched non-active day as a rest day', () => {
     expect(bandForDay(0, false)).toBe('off');
-    expect(bandForDay(1, false)).toBe('off');
   });
 
-  it('counts any activity as showing up', () => {
-    expect(showedUpFromScore(0)).toBe(false);
-    expect(showedUpFromScore(0.05)).toBe(true);
+  it('marks a non-active day the student worked as a bonus day', () => {
+    // The audit's 18 uncredited student-days: the points were banked all along, and the
+    // calendar drew the same empty square as for a weekend spent asleep.
+    expect(bandForDay(0.1, false)).toBe('bonus');
+    expect(bandForDay(1, false)).toBe('bonus');
+  });
+
+  it('never promotes a bonus day into a scoring band', () => {
+    // A perfect Sunday is a bonus day, not a perfect day. The distinction is what keeps the
+    // consistency denominator from silently growing to include weekends.
+    expect(bandForDay(1, false)).not.toBe('perfect');
+    expect(bandForDay(1, true)).toBe('perfect');
+  });
+
+  it('counts an empty day as not showing up', () => {
+    expect(showedUpForDay({ entries: [], verifiedPresence: false })).toBe(false);
+  });
+
+  it('counts any student-driven behaviour as showing up', () => {
+    expect(
+      showedUpForDay({
+        entries: [{ event: 'daily_check_in', points: rules.daily_check_in }],
+        verifiedPresence: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('does not let an admin attendance mark stand in for showing up', () => {
+    const marked = [{ event: 'live_session_present', points: rules.live_session_present }] as const;
+    expect(showedUpForDay({ entries: marked, verifiedPresence: false })).toBe(false);
+    expect(showedUpForDay({ entries: marked, verifiedPresence: true })).toBe(true);
+  });
+
+  it('treats a late mark the same way as a present one', () => {
+    const late = [{ event: 'live_session_late', points: rules.live_session_late }] as const;
+    expect(showedUpForDay({ entries: late, verifiedPresence: false })).toBe(false);
+    expect(showedUpForDay({ entries: late, verifiedPresence: true })).toBe(true);
+  });
+
+  it('ignores points that are not behaviour, however large', () => {
+    expect(
+      showedUpForDay({
+        entries: [
+          { event: 'achievement', points: 100 },
+          { event: 'quiz_attempt', points: 25 },
+        ],
+        verifiedPresence: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('still shows up when attendance is joined by real work', () => {
+    expect(
+      showedUpForDay({
+        entries: [
+          { event: 'live_session_present', points: rules.live_session_present },
+          { event: 'study_block_completed', points: rules.study_block_completed },
+        ],
+        verifiedPresence: false,
+      }),
+    ).toBe(true);
   });
 });
 

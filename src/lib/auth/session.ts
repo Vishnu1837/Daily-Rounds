@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 
-import { and, eq, gt, lt } from 'drizzle-orm';
+import { and, eq, gt, isNull, lt, or } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import { cache } from 'react';
 
@@ -32,6 +32,21 @@ export type SessionUser = {
   whatsapp: string | null;
   onboardingCompletedAt: Date | null;
 };
+
+/**
+ * How stale `users.last_login_at` may get before an authenticated request refreshes it.
+ *
+ * The column was written in exactly one place — the password login form — and sessions last
+ * thirty days, so a student who signs in once in August and uses the app every day since has
+ * a `last_login_at` frozen in August. Every admin screen that asks "when was this student
+ * last here?" was reading that, and answering wrongly by weeks.
+ *
+ * An hour is the trade. It is short enough that "last seen" is a useful answer on an admin
+ * screen, and long enough that a cohort of thirty costs at most thirty writes an hour no
+ * matter how many pages each of them opens — where refreshing on every request would put an
+ * UPDATE behind every render in the product.
+ */
+const LAST_SEEN_REFRESH_MS = 60 * 60 * 1000;
 
 /** A session cookie, ready to be written to whichever response is about to be sent. */
 export type SessionCookie = {
@@ -121,6 +136,7 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
       university: users.university,
       whatsapp: users.whatsapp,
       onboardingCompletedAt: users.onboardingCompletedAt,
+      lastLoginAt: users.lastLoginAt,
     })
     .from(authSessions)
     .innerJoin(users, eq(users.id, authSessions.userId))
@@ -132,5 +148,48 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
     )
     .limit(1);
 
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (!row) return null;
+
+  await touchLastSeen(row.id, row.lastLoginAt);
+
+  const { lastLoginAt: _lastLoginAt, ...user } = row;
+  return user;
 });
+
+/**
+ * Records that this account was here, at most once an hour.
+ *
+ * The throttle is applied against the value already loaded above, so the common case costs
+ * no extra read and no write at all — it is a comparison on a field the session lookup was
+ * fetching anyway.
+ *
+ * A failure here is swallowed. "When were you last seen" is reporting metadata; it must
+ * never be the reason a student cannot open a page, and the next request an hour later will
+ * write it anyway.
+ */
+async function touchLastSeen(userId: string, lastLoginAt: Date | null): Promise<void> {
+  const now = Date.now();
+  if (lastLoginAt && now - lastLoginAt.getTime() < LAST_SEEN_REFRESH_MS) return;
+
+  try {
+    /*
+     * The predicate repeats the staleness test in SQL, so two concurrent requests from the
+     * same student write once between them rather than racing to overwrite each other.
+     */
+    await db
+      .update(users)
+      .set({ lastLoginAt: new Date(now) })
+      .where(
+        and(
+          eq(users.id, userId),
+          or(
+            isNull(users.lastLoginAt),
+            lt(users.lastLoginAt, new Date(now - LAST_SEEN_REFRESH_MS)),
+          ),
+        ),
+      );
+  } catch {
+    // Reporting metadata. Never worth failing a request over.
+  }
+}
