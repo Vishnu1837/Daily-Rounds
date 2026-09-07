@@ -12,9 +12,16 @@ import type { SessionUser } from '@/lib/auth/session';
 
 const state: { user: SessionUser | null } = { user: null };
 
+/** The student an admin is "viewing as", if any. Set per-test. */
+const viewAs: { target: SessionUser | null } = { target: null };
+
 vi.mock('@/lib/auth/session', () => ({
   getCurrentUser: async () => state.user,
   SESSION_COOKIE: 'dr_session',
+}));
+
+vi.mock('@/lib/auth/impersonation', () => ({
+  readViewAsTarget: async () => viewAs.target,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -42,6 +49,7 @@ const student: SessionUser = {
 
 const admin: SessionUser = { ...student, id: 'user-admin', role: 'admin' };
 const notOnboarded: SessionUser = { ...student, id: 'user-new', onboardingCompletedAt: null };
+const otherStudent: SessionUser = { ...student, id: 'user-other', fullName: 'Someone Else' };
 
 async function guards() {
   return import('@/lib/auth/guards');
@@ -49,6 +57,7 @@ async function guards() {
 
 beforeEach(() => {
   state.user = null;
+  viewAs.target = null;
 });
 
 describe('page guards', () => {
@@ -119,6 +128,31 @@ describe('server action guards', () => {
     const { requireUserAction } = await guards();
     const resolved = await requireUserAction();
     expect(resolved.role).toBe('student');
+  });
+});
+
+describe('view as student', () => {
+  it('swaps an admin for the student they are viewing as', async () => {
+    state.user = admin;
+    viewAs.target = otherStudent;
+    const { requireUser, requireUserAction } = await guards();
+    await expect(requireUser()).resolves.toMatchObject({ id: 'user-other', role: 'student' });
+    await expect(requireUserAction()).resolves.toMatchObject({ id: 'user-other' });
+  });
+
+  it('ignores the cookie for a non-admin — a student cannot become someone else', async () => {
+    state.user = student;
+    viewAs.target = otherStudent;
+    const { requireUser } = await guards();
+    await expect(requireUser()).resolves.toMatchObject({ id: 'user-student' });
+  });
+
+  it('keeps the admin console working as the real admin during a view-as session', async () => {
+    state.user = admin;
+    viewAs.target = otherStudent;
+    const { requireAdmin, requireAdminAction } = await guards();
+    await expect(requireAdmin()).resolves.toMatchObject({ id: 'user-admin', role: 'admin' });
+    await expect(requireAdminAction()).resolves.toMatchObject({ id: 'user-admin' });
   });
 });
 

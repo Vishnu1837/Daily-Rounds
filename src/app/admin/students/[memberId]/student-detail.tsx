@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, ClipboardList, Trash2 } from 'lucide-react';
 
+import { OpenStudentViewButton } from '@/components/auth/open-student-view-button';
 import { ActivityHeatmap } from '@/components/charts/heatmap';
 import { WeekBars } from '@/components/charts/week-bars';
 import { StreakFlame } from '@/components/gamification/streak-flame';
@@ -86,7 +87,8 @@ export function StudentDetailScreen({
               {member.role === 'admin' && <Badge tone="pulse">Admin</Badge>}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <OpenStudentViewButton userId={member.userId} name={member.name} />
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
               Edit
             </Button>

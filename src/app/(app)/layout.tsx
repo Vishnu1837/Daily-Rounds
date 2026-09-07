@@ -25,6 +25,7 @@ import {
   RailStanding,
   RailStandingSkeleton,
   ShellSlot,
+  ViewingAsBanner,
 } from './shell';
 import { SITE } from '@/lib/site';
 
@@ -42,91 +43,102 @@ import { SITE } from '@/lib/site';
  */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-dvh lg:flex">
-      {/* ------------------------------------------------------ desktop rail */}
-      <aside className="border-border bg-bg-elevated sticky top-0 hidden h-dvh w-[17rem] shrink-0 flex-col border-r px-4 py-6 lg:flex">
-        <Link href={STUDENT_HOME} className="mb-8 px-2" aria-label={`${SITE.name} home`}>
-          <Logo />
-        </Link>
-
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <Suspense fallback={<SideNavFallback items={STUDENT_NAV} />}>
-            <SideNav items={STUDENT_NAV} />
-          </Suspense>
-        </div>
-
-        {/*
-          The rail closes with the student's own standing rather than a settings link. It is
-          the last thing in their eyeline on every screen, and it is a reason to keep going.
-        */}
-        <div className="rounded-panel border-border bg-bg-sunken mt-6 border p-4">
-          <Suspense fallback={<RailStandingSkeleton />}>
-            <RailStanding />
-          </Suspense>
-          <Suspense fallback={<RailIdentitySkeleton />}>
-            <RailIdentity />
-          </Suspense>
-        </div>
-      </aside>
-
-      <div className="min-w-0 flex-1">
-        <TopBar
-          identity={
-            <Suspense fallback={<AvatarSkeleton />}>
-              <HeaderIdentity />
-            </Suspense>
-          }
-          stats={
-            <Suspense fallback={<HeaderStatsSkeleton />}>
-              <HeaderStanding />
-            </Suspense>
-          }
-          subtitle={
-            <ShellSlot>
-              <HeaderSubtitle />
-            </ShellSlot>
-          }
-          left={
-            <Suspense fallback={<MobileMenuFallback items={STUDENT_NAV} />}>
-              <MobileMenu
-                items={STUDENT_NAV}
-                footer={
-                  <ShellSlot>
-                    <AdminShortcutInline />
-                  </ShellSlot>
-                }
-              />
-            </Suspense>
-          }
-          right={
-            <ShellSlot>
-              <AdminShortcutCompact />
-            </ShellSlot>
-          }
-        />
-
-        {/*
-          Wide enough for a real dashboard composition on desktop, and still a single
-          comfortable column on a phone. The bottom padding clears the floating nav bar.
-        */}
-        <main
-          id="main"
-          className="mx-auto w-full max-w-2xl px-4 pt-5 pb-32 lg:max-w-6xl lg:px-8 lg:pt-7 lg:pb-14"
-        >
-          {children}
-        </main>
-      </div>
-
-      <Suspense fallback={<BottomNavFallback items={STUDENT_NAV} />}>
-        <BottomNav items={STUDENT_NAV} />
-      </Suspense>
-
+    <>
       {/*
-        The "open on your phone" prompt. A client component with no props, so it costs the
-        static shell nothing — the rule at the top of this file still holds, and the code it
-        offers is only minted once a student actually asks for one.
+        Admin "view as student" bar. Full width, above the rail and the main column, and
+        outside the `lg:flex` row so it never becomes a flex column. Renders nothing for an
+        ordinary student. See `./shell`.
       */}
-      <LinkDeviceLauncher />
-    </div>
+      <ShellSlot>
+        <ViewingAsBanner />
+      </ShellSlot>
+
+      <div className="min-h-dvh lg:flex">
+        {/* ---------------------------------------------------- desktop rail */}
+        <aside className="border-border bg-bg-elevated sticky top-0 hidden h-dvh w-[17rem] shrink-0 flex-col border-r px-4 py-6 lg:flex">
+          <Link href={STUDENT_HOME} className="mb-8 px-2" aria-label={`${SITE.name} home`}>
+            <Logo />
+          </Link>
+
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <Suspense fallback={<SideNavFallback items={STUDENT_NAV} />}>
+              <SideNav items={STUDENT_NAV} />
+            </Suspense>
+          </div>
+
+          {/*
+            The rail closes with the student's own standing rather than a settings link. It
+            is the last thing in their eyeline on every screen, and a reason to keep going.
+          */}
+          <div className="rounded-panel border-border bg-bg-sunken mt-6 border p-4">
+            <Suspense fallback={<RailStandingSkeleton />}>
+              <RailStanding />
+            </Suspense>
+            <Suspense fallback={<RailIdentitySkeleton />}>
+              <RailIdentity />
+            </Suspense>
+          </div>
+        </aside>
+
+        <div className="min-w-0 flex-1">
+          <TopBar
+            identity={
+              <Suspense fallback={<AvatarSkeleton />}>
+                <HeaderIdentity />
+              </Suspense>
+            }
+            stats={
+              <Suspense fallback={<HeaderStatsSkeleton />}>
+                <HeaderStanding />
+              </Suspense>
+            }
+            subtitle={
+              <ShellSlot>
+                <HeaderSubtitle />
+              </ShellSlot>
+            }
+            left={
+              <Suspense fallback={<MobileMenuFallback items={STUDENT_NAV} />}>
+                <MobileMenu
+                  items={STUDENT_NAV}
+                  footer={
+                    <ShellSlot>
+                      <AdminShortcutInline />
+                    </ShellSlot>
+                  }
+                />
+              </Suspense>
+            }
+            right={
+              <ShellSlot>
+                <AdminShortcutCompact />
+              </ShellSlot>
+            }
+          />
+
+          {/*
+            Wide enough for a real dashboard composition on desktop, and still a single
+            comfortable column on a phone. The bottom padding clears the floating nav bar.
+          */}
+          <main
+            id="main"
+            className="mx-auto w-full max-w-2xl px-4 pt-5 pb-32 lg:max-w-6xl lg:px-8 lg:pt-7 lg:pb-14"
+          >
+            {children}
+          </main>
+        </div>
+
+        <Suspense fallback={<BottomNavFallback items={STUDENT_NAV} />}>
+          <BottomNav items={STUDENT_NAV} />
+        </Suspense>
+
+        {/*
+          The "open on your phone" prompt. A client component with no props, so it costs the
+          static shell nothing — the rule at the top of this file still holds, and the code
+          it offers is only minted once a student actually asks for one.
+        */}
+        <LinkDeviceLauncher />
+      </div>
+    </>
   );
 }

@@ -5,10 +5,12 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ArrowUpRight } from 'lucide-react';
 
+import { ViewingAsBanner as ViewingAsBar } from '@/components/auth/viewing-as-banner';
 import { LevelBadge, XPBar } from '@/components/gamification/level';
 import { HeaderStats } from '@/components/nav/top-bar';
 import { Avatar } from '@/components/ui/avatar';
 import { requireUser } from '@/lib/auth/guards';
+import { getViewingAs } from '@/lib/auth/impersonation';
 import { minDate } from '@/lib/domain/calendar';
 import { HOW_XP_WORKS } from '@/lib/routes';
 import { levelFromPoints } from '@/lib/domain/level';
@@ -182,4 +184,17 @@ export async function AdminShortcutCompact() {
 /** Wraps a shell slot that may resolve to nothing, so an empty one costs no placeholder. */
 export function ShellSlot({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={null}>{children}</Suspense>;
+}
+
+/**
+ * The "viewing as student" bar, or nothing.
+ *
+ * Its own async component so it streams in behind the prerendered shell like every other
+ * personal slot — the layout stays synchronous. Resolves to `null` for an ordinary student
+ * and for an admin who has not opened a view-as session.
+ */
+export async function ViewingAsBanner() {
+  const viewing = await getViewingAs();
+  if (!viewing) return null;
+  return <ViewingAsBar studentName={viewing.studentName} adminName={viewing.adminName} />;
 }

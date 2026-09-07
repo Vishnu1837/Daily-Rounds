@@ -60,7 +60,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </span>
           </Link>
           <Link
-            href="/"
+            href="/admin/students"
             className="text-pulse-700 hover:text-pulse-500 dark:text-pulse-300 mt-3 inline-flex items-center gap-1.5 text-sm font-semibold transition-colors"
           >
             <ArrowLeft className="size-3.5" aria-hidden />
@@ -78,7 +78,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           left={<MobileMenu items={ADMIN_NAV} footer={<SignOutButton size="sm" />} />}
           right={
             <Link
-              href="/"
+              href="/admin/students"
               className="tap rounded-field text-fg-muted hover:bg-bg-sunken hover:text-fg mr-1 px-3 py-1.5 text-sm font-semibold whitespace-nowrap lg:hidden"
             >
               Student

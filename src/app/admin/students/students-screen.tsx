@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Search, UserPlus } from 'lucide-react';
 
+import { OpenStudentViewButton } from '@/components/auth/open-student-view-button';
 import { StreakFlame } from '@/components/gamification/streak-flame';
 import { Avatar } from '@/components/ui/avatar';
 import { StatusPill } from '@/components/ui/badge';
@@ -174,6 +175,9 @@ export function StudentsScreen({
                 <th scope="col" className="px-5 py-3 font-bold">
                   Status
                 </th>
+                <th scope="col" className="px-3 py-3">
+                  <span className="sr-only">Student view</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-border divide-y">
@@ -222,6 +226,14 @@ export function StudentsScreen({
                       }
                       label={RISK_LABELS[s.risk]}
                       title={riskReason(s)}
+                    />
+                  </td>
+                  <td className="px-3 py-3 text-right whitespace-nowrap">
+                    <OpenStudentViewButton
+                      userId={s.userId}
+                      name={s.name}
+                      variant="outline"
+                      label="View as"
                     />
                   </td>
                 </tr>

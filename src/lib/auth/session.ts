@@ -114,6 +114,43 @@ export async function destroySession(): Promise<void> {
   store.delete(SESSION_COOKIE);
 }
 
+/** The `users` columns that make up a `SessionUser`, plus `lastLoginAt` for the touch check. */
+const SESSION_USER_COLUMNS = {
+  id: users.id,
+  email: users.email,
+  fullName: users.fullName,
+  role: users.role,
+  timezone: users.timezone,
+  avatarSeed: users.avatarSeed,
+  avatarUrl: users.avatarUrl,
+  mbbsYear: users.mbbsYear,
+  university: users.university,
+  whatsapp: users.whatsapp,
+  onboardingCompletedAt: users.onboardingCompletedAt,
+  lastLoginAt: users.lastLoginAt,
+} as const;
+
+/**
+ * Loads a user by id in the exact shape a session carries.
+ *
+ * Used by the "view as student" flow (`@/lib/auth/impersonation`), which needs a
+ * `SessionUser` for someone who is not the holder of the current session. Kept here so it
+ * stays column-for-column identical to what `getCurrentUser` returns.
+ */
+export const getSessionUserById = cache(async (userId: string): Promise<SessionUser | null> => {
+  const rows = await db
+    .select(SESSION_USER_COLUMNS)
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) return null;
+
+  const { lastLoginAt: _lastLoginAt, ...user } = row;
+  return user;
+});
+
 /**
  * The signed-in user, or null. Memoised per request so that a page rendering a dozen
  * server components still performs exactly one session lookup.
@@ -124,20 +161,7 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   if (!token) return null;
 
   const rows = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      fullName: users.fullName,
-      role: users.role,
-      timezone: users.timezone,
-      avatarSeed: users.avatarSeed,
-      avatarUrl: users.avatarUrl,
-      mbbsYear: users.mbbsYear,
-      university: users.university,
-      whatsapp: users.whatsapp,
-      onboardingCompletedAt: users.onboardingCompletedAt,
-      lastLoginAt: users.lastLoginAt,
-    })
+    .select(SESSION_USER_COLUMNS)
     .from(authSessions)
     .innerJoin(users, eq(users.id, authSessions.userId))
     .where(
