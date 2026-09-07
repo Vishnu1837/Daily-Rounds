@@ -859,7 +859,15 @@ export const loadCohortStandings = async (
     // Today is still being lived; it joins these numbers when it ends. See ConsistencyOptions.
     const overall = calculateOverallConsistency(calendar, lookup, upTo, { inProgress: today });
     const weeks = calculateWeeklyProgress(calendar, lookup, upTo, { inProgress: today });
-    const improvement = calculateImprovement(weeks.filter((w) => isSettledWeek(w, today)));
+    /*
+     * No settled-week filter here, unlike `perfectWeeks` below. `calculateImprovement`
+     * already requires three *settled* days from each week it compares, which is the fair
+     * sample this needs — and filtering to finished weeks on top of that would mean the
+     * number never reflected the week the student is actually in, lagging a full week behind
+     * their own effort. A week can be judged partway through; it just cannot be called
+     * perfect partway through.
+     */
+    const improvement = calculateImprovement(weeks);
 
     return {
       memberId: m.memberId,

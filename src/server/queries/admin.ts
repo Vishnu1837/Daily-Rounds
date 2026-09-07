@@ -41,7 +41,6 @@ import {
   calculateImprovement,
   calculateOverallConsistency,
   calculateWeeklyProgress,
-  isSettledWeek,
 } from '@/lib/domain/consistency';
 import { displayBand } from '@/lib/domain/points';
 import { ACHIEVEMENTS } from '@/lib/domain/achievements';
@@ -239,10 +238,9 @@ export const getCohortStudents = cache(async function getCohortStudents(
       riskReasons: risk.reasons,
       missedActiveDays: risk.missedActiveDays,
       ...(() => {
+        // No settled-week filter — see the note in `loadCohortStandings`.
         const improvement = calculateImprovement(
-          calculateWeeklyProgress(calendar, lookup, upTo, inProgress).filter((w) =>
-            isSettledWeek(w, today),
-          ),
+          calculateWeeklyProgress(calendar, lookup, upTo, inProgress),
         );
         return {
           improvementPct: improvement.deltaPct,

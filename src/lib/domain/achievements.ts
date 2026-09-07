@@ -72,6 +72,17 @@ const settledWeeks = (ctx: AchievementContext) =>
     (w) => isSettledWeek(w, ctx.today),
   );
 
+/**
+ * Every week including the one in progress, with today left out of each.
+ *
+ * What the improvement number on screen is computed from. `Climbing` reads the same set, so
+ * a student shown "+15 points since week one" is a student who has the badge — the badge
+ * engine and the screen disagreeing about the same question is a bug this codebase has had
+ * once already, in the assessment pass mark.
+ */
+const improvementWeeks = (ctx: AchievementContext) =>
+  calculateWeeklyProgress(ctx.calendar, ctx.lookup, ctx.today, { inProgress: ctx.today });
+
 const anyPerfectWeek = (ctx: AchievementContext) =>
   settledWeeks(ctx).some((w) => w.activeDays > 0 && w.completedDays === w.activeDays);
 
@@ -162,7 +173,7 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     description: 'Improve your weekly consistency by 15 points or more.',
     emoji: '📈',
     tier: 'silver',
-    earned: (ctx) => calculateImprovement(settledWeeks(ctx)).deltaPct >= 15,
+    earned: (ctx) => calculateImprovement(improvementWeeks(ctx)).deltaPct >= 15,
   },
   {
     code: 'ten_check_ins',

@@ -132,6 +132,22 @@ describe('the admin "improvement" column reading -89% for everyone', () => {
     );
   });
 
+  it('appears partway through week two, not a week later', () => {
+    // The number must reflect the week the student is actually in. Requiring both weeks to
+    // have *finished* would lag a full week behind their own effort.
+    const records: Record<string, number> = {};
+    for (const d of ['2026-09-02', '2026-09-03', '2026-09-04']) records[d] = 0.5;
+    for (const d of ['2026-09-07', '2026-09-08', '2026-09-09']) records[d] = 0.9;
+
+    // Thursday of week two: Mon-Wed have settled, so week two is a fair sample at last.
+    const thursday = calculateImprovement(weeksOn('2026-09-10', records));
+    expect(thursday.comparable).toBe(true);
+    expect(thursday.deltaPct).toBe(40);
+
+    // Wednesday, with only two settled days, is still too little to compare.
+    expect(calculateImprovement(weeksOn('2026-09-09', records)).comparable).toBe(false);
+  });
+
   it('compares once two finished weeks exist', () => {
     const records: Record<string, number> = {};
     for (const d of ['2026-09-02', '2026-09-03', '2026-09-04']) records[d] = 0.5;
