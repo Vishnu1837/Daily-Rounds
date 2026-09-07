@@ -442,6 +442,23 @@ failed on the untouched tree at baseline. They are left alone deliberately: refo
 config files nobody asked about is unrelated churn in an already large diff. `npx prettier
 --write .` clears them whenever you want.
 
+### A limitation of the test harness, learned the hard way
+
+`ADR-002` says the embedded PGlite database is "not a compatibility trade" because PGlite
+_is_ Postgres. That is true of SQL semantics and it is not true of the **drivers**. The
+integration suite runs through PGlite's driver; production runs through postgres.js, and they
+do not agree on parameter encoding.
+
+The sweep shipped with `lt(sql\`coalesce(a, b)\`, someDate)`. With a raw SQL fragment on the
+left there is no column for Drizzle to take an encoder from, so the `Date`reached the driver
+untouched — PGlite accepted it, postgres.js threw`"must be of type string... Received an
+instance of Date"`. Twelve integration tests passed and the first real run returned a 500.
+
+The rule that follows: **when a comparison has a raw `sql` fragment on one side, put the
+literal and its cast inside the template** (`… < ${d.toISOString()}::timestamptz`) rather than
+passing a JS value to `lt`/`gt`. A green suite is not evidence that a query runs in
+production, and the only thing that caught this was calling the deployed endpoint.
+
 ### How the build and preview were run
 
 Another dev server was already running in this directory (from a different session), and Next

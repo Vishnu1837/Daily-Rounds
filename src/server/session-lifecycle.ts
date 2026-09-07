@@ -11,7 +11,7 @@
  * pure functions from `@/lib/domain/study-session`. It would fail to bundle into a client
  * component regardless, because it imports the database driver.
  */
-import { and, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { studySessions } from '@/db/schema';
@@ -52,6 +52,13 @@ export async function closeStaleSessions(memberId?: string): Promise<number> {
    * has been paused — a pause writes no timestamp of its own. `coalesce` picks whichever
    * applies, which makes the test conservative for a long-paused block: it waits longer
    * before closing one, which is the right direction to be wrong in.
+   *
+   * The comparison and its cast live inside the template on purpose. Written as
+   * `lt(sql\`coalesce(...)\`, cutoff)` there is no column on the left for Drizzle to take an
+   * encoder from, so the `Date` is handed to the driver raw — which PGlite accepts and
+   * postgres.js rejects outright ("must be of type string... Received an instance of Date").
+   * Every test passed against the embedded database and the sweep failed on the first run in
+   * production. An ISO string with an explicit `::timestamptz` is unambiguous to both.
    */
   const stale = await db
     .select({
@@ -64,7 +71,7 @@ export async function closeStaleSessions(memberId?: string): Promise<number> {
     .where(
       and(
         inArray(studySessions.status, ['running', 'paused']),
-        lt(sql`coalesce(${studySessions.resumedAt}, ${studySessions.startedAt})`, cutoff),
+        sql`coalesce(${studySessions.resumedAt}, ${studySessions.startedAt}) < ${cutoff.toISOString()}::timestamptz`,
         memberId ? eq(studySessions.memberId, memberId) : undefined,
       ),
     );
