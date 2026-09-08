@@ -6,6 +6,8 @@ import { redirect } from 'next/navigation';
 import { ArrowUpRight } from 'lucide-react';
 
 import { ViewingAsBanner as ViewingAsBar } from '@/components/auth/viewing-as-banner';
+import { FeedbackPromptPopup } from '@/components/feedback/feedback-survey';
+import { NotificationBell } from '@/components/notifications/notification-bell';
 import { LevelBadge, XPBar } from '@/components/gamification/level';
 import { HeaderStats } from '@/components/nav/top-bar';
 import { Avatar } from '@/components/ui/avatar';
@@ -16,6 +18,8 @@ import { HOW_XP_WORKS } from '@/lib/routes';
 import { levelFromPoints } from '@/lib/domain/level';
 import { calculateCurrentStreak } from '@/lib/domain/streak';
 import { getMemberContext } from '@/server/context';
+import { getFeedbackPromptState, getNotifications } from '@/server/queries/feedback';
+import { getPopupAnnouncements } from '@/server/queries/student';
 import { readActivity, readTotalPoints } from '@/server/scoring';
 
 /**
@@ -86,6 +90,55 @@ export async function HeaderSubtitle() {
     timeZone: 'UTC',
   });
   return `${todayLabel} · ${ctx.cohort.name}`;
+}
+
+/* ------------------------------------------------------------- notifications */
+
+/**
+ * The bell, and everything behind it.
+ *
+ * Its own async component in a `ShellSlot`, like the streak and the avatar, so the two reads
+ * it needs stream in behind the prerendered header instead of holding the frame back. The
+ * bell is on every screen in the app, which is what makes that the difference between a
+ * feature and a tax.
+ */
+export async function HeaderNotifications() {
+  const { ctx } = await requireMember();
+  const inbox = await getNotifications(ctx);
+  return <NotificationBell inbox={inbox} />;
+}
+
+/**
+ * The feedback request, the one time it interrupts.
+ *
+ * Rendered from the shell rather than from a page, so it reaches a student wherever they
+ * land — someone who opens the app on a deep link to their roadmap is as much a part of "every
+ * student" as someone who lands on the dashboard.
+ *
+ * The two conditions are the whole rule. `answered` means there is nothing left to ask.
+ * `dismissed` means they have already been asked once, and the bell is holding the request
+ * from here on — which is what keeps this from becoming the modal that greets them every
+ * morning.
+ */
+export async function FeedbackPrompt() {
+  const { ctx } = await requireMember();
+  const [prompt, pendingNotices] = await Promise.all([
+    getFeedbackPromptState(ctx),
+    getPopupAnnouncements(ctx),
+  ]);
+
+  if (prompt.answered || prompt.dismissed) return null;
+
+  /*
+   * One modal at a time. A cohort lead's popup announcement is time-sensitive in a way this
+   * is not — "the session moved to 7am" is worth reading today, a survey is worth reading
+   * this week — so an unacknowledged notice wins the screen and the request waits for the
+   * next visit. Stacking two sheets would put a survey on top of the notice and get the
+   * notice dismissed unread, which is the outcome neither of them wants.
+   */
+  if (pendingNotices.length > 0) return null;
+
+  return <FeedbackPromptPopup />;
 }
 
 /* ---------------------------------------------------------------------- rail */

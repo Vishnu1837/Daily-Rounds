@@ -7,6 +7,7 @@ import {
   Inbox,
   Library,
   Map,
+  MessageSquareText,
   Settings,
   Sparkles,
   Timer,
@@ -35,6 +36,7 @@ const ICONS = {
   timer: Timer,
   tree: TreeDeciduous,
   inbox: Inbox,
+  message: MessageSquareText,
   clipboard: ClipboardList,
 } as const satisfies Record<NavIconName, unknown>;
 

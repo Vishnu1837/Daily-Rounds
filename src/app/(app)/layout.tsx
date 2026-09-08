@@ -12,12 +12,15 @@ import {
 import { MobileMenu, MobileMenuFallback } from '@/components/nav/mobile-menu';
 import { STUDENT_NAV } from '@/components/nav/nav-items';
 import { AvatarSkeleton, HeaderStatsSkeleton, TopBar } from '@/components/nav/top-bar';
+import { NotificationBellSkeleton } from '@/components/notifications/notification-bell';
 import { STUDENT_HOME } from '@/lib/routes';
 
 import {
   AdminShortcutCompact,
   AdminShortcutInline,
+  FeedbackPrompt,
   HeaderIdentity,
+  HeaderNotifications,
   HeaderStanding,
   HeaderSubtitle,
   RailIdentity,
@@ -110,9 +113,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </Suspense>
             }
             right={
-              <ShellSlot>
-                <AdminShortcutCompact />
-              </ShellSlot>
+              <>
+                <ShellSlot>
+                  <AdminShortcutCompact />
+                </ShellSlot>
+                {/*
+                  The bell sits left of the stats rather than beside the avatar, so the two
+                  numbers a student checks constantly keep the position they have always had.
+                  A notification count is the one thing in a header allowed to *change* while
+                  you are looking at it, and moving the streak to make room for it would
+                  charge every student for a message most of them have already read.
+                */}
+                <Suspense fallback={<NotificationBellSkeleton />}>
+                  <HeaderNotifications />
+                </Suspense>
+              </>
             }
           />
 
@@ -138,6 +153,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           it offers is only minted once a student actually asks for one.
         */}
         <LinkDeviceLauncher />
+
+        {/*
+          The feedback round's one interruption. Resolves to nothing for a student who has
+          already answered it or already closed it once, which is almost everybody almost
+          all of the time — so it is a `ShellSlot` and never delays a page. See `./shell`.
+        */}
+        <ShellSlot>
+          <FeedbackPrompt />
+        </ShellSlot>
       </div>
     </>
   );

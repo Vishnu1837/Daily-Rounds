@@ -96,10 +96,16 @@ export function TopBar({
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--nav-border)] bg-[var(--nav-bg)] backdrop-blur-xl">
       <div className="mx-auto flex h-15 max-w-7xl items-center justify-between gap-3 px-4 lg:px-8">
-        <div className="flex items-center gap-1 lg:hidden">
+        <div className="flex min-w-0 items-center gap-1 lg:hidden">
           {left}
           <Link href={STUDENT_HOME} aria-label={`${SITE.name} home`}>
-            <Logo size={30} />
+            {/*
+              The mark alone on a phone. The right-hand cluster — notifications, streak, XP,
+              theme, avatar — is all live state a student taps, and it is what has to fit; the
+              wordmark is the one thing here that only says where you already are. Below `sm`
+              it was pushing the avatar off the edge of a 375px screen.
+            */}
+            <Logo size={30} wordmarkClassName="hidden sm:inline" />
           </Link>
         </div>
 
@@ -107,7 +113,7 @@ export function TopBar({
           {subtitle && <p className="text-fg-muted truncate text-sm font-medium">{subtitle}</p>}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
           {right}
 
           {stats}

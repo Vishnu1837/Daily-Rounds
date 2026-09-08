@@ -23,6 +23,19 @@ const nextConfig: NextConfig = {
      * instant, while anything the student actually changes still re-renders at once.
      */
     staleTimes: { dynamic: 30, static: 180 },
+    /*
+     * How large a server action's payload may be.
+     *
+     * Next defaults this to 1 MB, which is fine for every action in the app except one: a
+     * feedback report carries up to three screenshots. They are re-encoded in the browser
+     * before they are sent (see `components/feedback/feedback-survey.tsx`) and the action
+     * refuses anything over 2 MB each, so 8 MB is that ceiling plus the multipart overhead
+     * and the text — not an invitation to send more.
+     *
+     * Raising it is not a licence for other actions to get fat. It is the transport limit;
+     * the limits that matter are in `lib/domain/feedback.ts` and enforced server-side.
+     */
+    serverActions: { bodySizeLimit: '8mb' },
   },
   async headers() {
     return [

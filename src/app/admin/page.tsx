@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Inbox,
   Map as MapIcon,
+  MessageSquareText,
   Settings,
   TrendingUp,
   Users,
@@ -25,6 +26,7 @@ import { isActiveStudyDay, isHoliday } from '@/lib/domain/calendar';
 import { RISK_LABELS } from '@/lib/domain/risk';
 import { getCohortContext, getPrimaryCohort } from '@/server/context';
 import { getCohortOverview, getCohortStudents } from '@/server/queries/admin';
+import { getUnresolvedFeedbackCount } from '@/server/queries/feedback';
 import { getWaitlistCounts } from '@/server/queries/waitlist';
 
 import { RecalculateButton } from './recalculate-button';
@@ -47,11 +49,13 @@ export default async function AdminOverviewPage() {
    * in the same tick. `getCohortStudents` is request-memoised, so the roster is still read
    * exactly once even though both of these ask for it.
    */
-  const [students, overview, waitlist] = await Promise.all([
+  const [students, overview, waitlist, openFeedback] = await Promise.all([
     getCohortStudents(ctx),
     getCohortOverview(ctx),
-    // Not cohort-scoped, and joined to nothing above — it just rides along on the same tick.
+    // Neither of these is cohort-scoped, and neither joins to anything above — they just
+    // ride along on the same tick.
     getWaitlistCounts(),
+    getUnresolvedFeedbackCount(),
   ]);
 
   const turnout =
@@ -343,6 +347,22 @@ export default async function AdminOverviewPage() {
                 : waitlist.new > 0
                   ? `${waitlist.new} new of ${waitlist.total} not yet contacted`
                   : `${waitlist.total} enquiries, all followed up`
+            }
+          />
+          {/*
+            Bug reports surface here rather than only in the sidebar, because a feedback
+            inbox nobody is reminded of is a feedback inbox nobody opens — and the students
+            who filled one in were told we would get on it.
+          */}
+          <QuickAction
+            href="/admin/feedback"
+            icon={<MessageSquareText className="size-5" aria-hidden />}
+            tone="pulse"
+            title="User feedback"
+            description={
+              openFeedback === 0
+                ? 'Nothing new from students right now'
+                : `${openFeedback} report${openFeedback === 1 ? '' : 's'} still to read`
             }
           />
           <QuickAction

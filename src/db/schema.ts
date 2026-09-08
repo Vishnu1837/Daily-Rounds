@@ -13,6 +13,7 @@
 import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
+  customType,
   date,
   index,
   integer,
@@ -1210,6 +1211,115 @@ export const announcementReads = pgTable(
   ],
 );
 
+/* ------------------------------------------------------------ user feedback */
+
+/**
+ * Raw image bytes, in the column rather than in an object store.
+ *
+ * The deployment has no blob storage and adding one for this would mean a new vendor, a new
+ * secret and a second delete path that can silently fall out of step with the row it belongs
+ * to. Screenshots here are small, few, and — this is the part that decides it — meant to be
+ * thrown away: a bug report is read once and the picture stops earning its space the moment
+ * the bug is fixed. A `bytea` column deletes with its parent row and needs nothing to be
+ * true about a bucket somewhere.
+ *
+ * The cost is that a careless `SELECT *` drags megabytes through the connection, so the
+ * admin queries in `server/queries/feedback.ts` never name this column; only the route that
+ * actually serves a picture reads it. If screenshots ever become a first-class feature
+ * rather than a debugging aid, this is the thing to move.
+ */
+const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
+  dataType: () => 'bytea',
+  toDriver: (value) => Buffer.from(value),
+  fromDriver: (value) => new Uint8Array(value),
+});
+
+/**
+ * What a student told us is broken, and what they wish existed.
+ *
+ * `prompt_key` names the campaign that asked, rather than this being one unnamed survey
+ * whose "have you answered it" state is a boolean somewhere. It means a second round of the
+ * same question next term is a new constant in `lib/domain/feedback.ts` and nothing else —
+ * no migration, and no student who answered in September being told they already replied to
+ * a question nobody had asked them yet.
+ *
+ * `member_id` and `user_id` are both kept and both `set null`: the report is worth reading
+ * after a student leaves the cohort, and losing the account it came from should cost the
+ * attribution, not the bug.
+ */
+export const feedbackSubmissions = pgTable(
+  'feedback_submissions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    cohortId: uuid('cohort_id').references(() => cohorts.id, { onDelete: 'set null' }),
+    memberId: uuid('member_id').references(() => cohortMembers.id, { onDelete: 'set null' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    /** Which round of the survey this answers. See `FEEDBACK_PROMPT` in lib/domain/feedback. */
+    promptKey: varchar('prompt_key', { length: 60 }).notNull(),
+    /** Bugs, glitches, anything not working. Empty when the student only had suggestions. */
+    issues: text('issues').notNull().default(''),
+    /** Features and changes they would like. Empty when they only reported a problem. */
+    suggestions: text('suggestions').notNull().default(''),
+    /**
+     * Set when a cohort lead has dealt with the report.
+     *
+     * Not a status enum: the only two states anyone acts on are "still to look at" and
+     * "done", and the screen's real job is to make the first list short. Resolving is also
+     * the moment the screenshots stop being worth their storage, which is why the console
+     * offers to drop the images from a resolved report without deleting what it says.
+     */
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    resolvedBy: uuid('resolved_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('feedback_submissions_cohort_idx').on(t.cohortId, t.createdAt),
+    /*
+     * The student-side read: "has this person already answered this round?" It runs on every
+     * page of the student app, because the bell in the header is on every page.
+     */
+    index('feedback_submissions_member_prompt_idx').on(t.memberId, t.promptKey),
+  ],
+);
+
+/** A screenshot attached to one report. Deleted with it, or on its own to reclaim the space. */
+export const feedbackAttachments = pgTable(
+  'feedback_attachments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    submissionId: uuid('submission_id')
+      .notNull()
+      .references(() => feedbackSubmissions.id, { onDelete: 'cascade' }),
+    mimeType: varchar('mime_type', { length: 60 }).notNull(),
+    /** Stored rather than derived from `data`, so a listing can show a size without reading it. */
+    byteSize: integer('byte_size').notNull(),
+    data: bytea('data').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('feedback_attachments_submission_idx').on(t.submissionId)],
+);
+
+/**
+ * "I have seen this prompt and closed it."
+ *
+ * Separate from having answered, because the two mean different things to the student: a
+ * dismissal takes the modal off their screen, an answer takes the whole thing out of their
+ * notification bell. Without this row the popup would either reappear on every page load
+ * until they filled the form in, or vanish for good the first time they closed it — and the
+ * first is nagging, the second loses the request.
+ */
+export const feedbackPromptDismissals = pgTable(
+  'feedback_prompt_dismissals',
+  {
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => cohortMembers.id, { onDelete: 'cascade' }),
+    promptKey: varchar('prompt_key', { length: 60 }).notNull(),
+    dismissedAt: timestamp('dismissed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.memberId, t.promptKey] })],
+);
+
 /* --------------------------------------------------------------- waitlist */
 
 /**
@@ -1442,6 +1552,8 @@ export type CohortEvent = typeof events.$inferSelect;
 export type Announcement = typeof announcements.$inferSelect;
 export type AnnouncementRead = typeof announcementReads.$inferSelect;
 export type WaitlistEntry = typeof waitlistEntries.$inferSelect;
+export type FeedbackSubmission = typeof feedbackSubmissions.$inferSelect;
+export type FeedbackAttachment = typeof feedbackAttachments.$inferSelect;
 export type RoadmapSlot = (typeof roadmapSlotEnum.enumValues)[number];
 export type WaitlistStatus = (typeof waitlistStatusEnum.enumValues)[number];
 export type WeeklyReview = typeof weeklyReviews.$inferSelect;

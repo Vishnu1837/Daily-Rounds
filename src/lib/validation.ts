@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { resolveRef } from './curriculum';
+import { FEEDBACK_TEXT_MAX } from './domain/feedback';
 import { EDITABLE_POINT_EVENTS } from './domain/points';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -538,6 +539,36 @@ export const announcementSchema = z.object({
   /** Keep showing the modal even after a student acknowledges it. Use sparingly. */
   isPersistent: z.coerce.boolean().default(false),
 });
+
+/**
+ * A student's answer to the feedback round.
+ *
+ * The refinement is the whole rule: a report has to *say* something. Both fields are
+ * optional individually — plenty of students only have a bug, or only have an idea — but a
+ * submission with neither is a stray click on the submit button, and storing it would put an
+ * empty row in front of a cohort lead who has to open it to find that out.
+ *
+ * Screenshots are validated separately in the action, because a `File` cannot be described
+ * usefully here and the size check has to read the bytes anyway.
+ */
+export const feedbackSubmissionSchema = z
+  .object({
+    promptKey: z.string().trim().min(1).max(60),
+    issues: z
+      .string()
+      .trim()
+      .max(FEEDBACK_TEXT_MAX, 'That is longer than we can store')
+      .default(''),
+    suggestions: z
+      .string()
+      .trim()
+      .max(FEEDBACK_TEXT_MAX, 'That is longer than we can store')
+      .default(''),
+  })
+  .refine((v) => v.issues.length > 0 || v.suggestions.length > 0, {
+    message: 'Tell us about an issue or share a suggestion — either one is enough.',
+    path: ['issues'],
+  });
 
 export const pointAdjustmentSchema = z.object({
   memberId: z.string().uuid(),

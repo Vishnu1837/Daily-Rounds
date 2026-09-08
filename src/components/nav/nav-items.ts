@@ -13,6 +13,7 @@ export type NavIconName =
   | 'timer'
   | 'tree'
   | 'inbox'
+  | 'message'
   | 'clipboard'
   | 'users';
 
@@ -209,6 +210,14 @@ export const ADMIN_NAV: NavItem[] = [
     icon: 'tree',
     primary: false,
     group: 'Content',
+  },
+  {
+    href: '/admin/feedback',
+    label: 'User feedback',
+    short: 'Feedback',
+    icon: 'message',
+    primary: false,
+    group: 'Cohort admin',
   },
   {
     href: '/admin/waitlist',

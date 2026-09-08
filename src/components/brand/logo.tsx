@@ -47,16 +47,28 @@ export function Logo({
   size = 32,
   className,
   showWordmark = true,
+  wordmarkClassName,
 }: {
   size?: number;
   className?: string;
   showWordmark?: boolean;
+  /**
+   * Classes on the wordmark alone, so a caller can drop it at some widths and keep it at
+   * others. The header needs that: `showWordmark={false}` is a decision taken once at render
+   * time, and the width that decides it is the viewport's, not the server's.
+   */
+  wordmarkClassName?: string;
 }) {
   return (
     <span className={cn('inline-flex items-center gap-2.5', className)}>
       <LogoMark size={size} />
       {showWordmark && (
-        <span className="font-display text-fg text-lg leading-none font-extrabold tracking-[-0.03em]">
+        <span
+          className={cn(
+            'font-display text-fg text-lg leading-none font-extrabold tracking-[-0.03em]',
+            wordmarkClassName,
+          )}
+        >
           Daily
           <span className="from-pulse-600 to-iris-500 dark:from-pulse-300 dark:to-iris-300 bg-linear-to-r bg-clip-text text-transparent">
             Rounds
