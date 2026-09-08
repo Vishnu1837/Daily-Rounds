@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 
 import { cn } from '@/lib/cn';
+import { haptic } from '@/lib/haptics';
 
 /**
  * A short, self-contained confetti burst. Deliberately hand-rolled rather than pulling in a
@@ -144,6 +145,17 @@ export function CelebrationModal({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [payload, onClose]);
+
+  /*
+   * Every celebration in the product is raised through this component, so the buzz is wired
+   * here once rather than at each of the dozen call sites that can trigger one. Keyed on the
+   * title as well as the kind: two achievements unlocking back to back are two events, and
+   * the hand should be told twice.
+   */
+  const beat = payload ? `${payload.kind}:${payload.title}` : null;
+  useEffect(() => {
+    if (beat) haptic('celebrate');
+  }, [beat]);
 
   const style = payload ? KIND_STYLE[payload.kind] : KIND_STYLE.day_complete;
 

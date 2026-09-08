@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ProgressBar } from '@/components/ui/progress';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/cn';
+import { haptic } from '@/lib/haptics';
 import { OBSTACLE_LABELS, obstacleValues } from '@/lib/validation';
 import { submitCheckInAction } from '@/server/actions/check-in';
 import type { CheckInContext } from '@/server/queries/student';
@@ -481,7 +482,15 @@ export function CheckInScreen({
             className="flex-1"
             disabled={!canAdvance}
             loading={pending}
-            onClick={() => (isLast ? submit() : setStep((s) => s + 1))}
+            onClick={() => {
+              if (isLast) {
+                haptic('commit');
+                submit();
+              } else {
+                haptic('advance');
+                setStep((s) => s + 1);
+              }
+            }}
           >
             {isLast ? 'Submit check-in' : 'Continue'}
           </Button>

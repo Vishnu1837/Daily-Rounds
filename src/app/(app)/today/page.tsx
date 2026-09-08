@@ -4,6 +4,7 @@ import { AnnouncementPopup } from '@/components/announcements/announcement-popup
 import { requireOnboardedUser } from '@/lib/auth/guards';
 import { ADMIN_HOME } from '@/lib/routes';
 import { getMemberContext } from '@/server/context';
+import { getTodayPlot } from '@/server/queries/grove';
 import { getCohortPulse, getHomeData, getPopupAnnouncements } from '@/server/queries/student';
 import { redirect } from 'next/navigation';
 
@@ -15,10 +16,11 @@ export default async function HomePage() {
   const ctx = await getMemberContext(user);
   if (!ctx) redirect(ADMIN_HOME);
 
-  const [home, pulse, popups] = await Promise.all([
+  const [home, pulse, popups, plot] = await Promise.all([
     getHomeData(ctx),
     getCohortPulse(ctx),
     getPopupAnnouncements(ctx),
+    getTodayPlot(ctx),
   ]);
 
   return (
@@ -34,6 +36,7 @@ export default async function HomePage() {
         cohortName={ctx.cohort.name}
         home={home}
         pulse={pulse}
+        plot={plot}
       />
     </>
   );

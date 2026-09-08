@@ -34,6 +34,8 @@ export default function TodayLoading() {
         <div className="flex flex-col gap-4 lg:col-span-5 lg:gap-5">
           <SkeletonCard lines={3} />
           <SkeletonCard lines={2} />
+          {/* Today's plot. A fixed height rather than lines: the card is mostly a drawing. */}
+          <Skeleton className="rounded-card h-60 w-full" />
         </div>
       </div>
 

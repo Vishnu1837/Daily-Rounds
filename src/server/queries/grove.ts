@@ -11,6 +11,7 @@ import {
   groveStats,
   plantingStreak,
   presetByKey,
+  resolveOverdueRound,
 } from '@/lib/domain/grove';
 import type { MemberContext } from '@/server/context';
 import { settleOverdueTrees } from '@/server/grove';
@@ -475,4 +476,96 @@ export async function getPeerGrove(
       .map((t) => ({ id: t.id, species: t.species, focusMinutes: t.focusMinutes })),
     lastPlantedOn,
   };
+}
+
+/* ------------------------------------------------------------- the plot */
+
+export type TodayPlot = {
+  /** Today's settled rounds, oldest first. Grown and withered both — the plot hides nothing. */
+  trees: { id: string; species: TreeRecord['species']; status: TreeRecord['status'] }[];
+  /**
+   * A round in the ground right now. The dashboard draws it growing from these two
+   * timestamps alone, so it needs no tick from the server to stay honest.
+   */
+  live: { species: TreeRecord['species']; plantedAt: string; dueAt: string } | null;
+  /** Consecutive days ending today on which something was grown. */
+  streak: number;
+};
+
+/**
+ * Today's plot, for the dashboard.
+ *
+ * A deliberately smaller thing than `getStudyGrove`, in one specific way: it does **not**
+ * settle overdue rounds. Settling is a write, Today is the screen every student lands on and
+ * refreshes most, and paying for a write on every dashboard render to correct a row that the
+ * study screen, the grove and the cron sweep all already settle would be three redundancies
+ * deep.
+ *
+ * Not settling has one visible consequence, and it is handled rather than ignored: a round
+ * whose length has elapsed but whose row still reads `growing` must not be drawn as a live
+ * timer counting into the past. `resolveOverdueRound` decides what such a row is *worth* from
+ * the server's own clock — the identical rule the sweep will apply when it gets there — so
+ * the dashboard shows the same answer the write would have produced, just without writing it.
+ */
+export async function getTodayPlot(ctx: MemberContext): Promise<TodayPlot> {
+  const since = addDays(ctx.today, -(HISTORY_DAYS - 1));
+
+  const [todayRows, historyRows] = await Promise.all([
+    db
+      .select({
+        id: focusTrees.id,
+        species: focusTrees.species,
+        status: focusTrees.status,
+        plantedAt: focusTrees.plantedAt,
+        dueAt: focusTrees.dueAt,
+        focusMinutes: focusTrees.focusMinutes,
+      })
+      .from(focusTrees)
+      .where(and(eq(focusTrees.memberId, ctx.memberId), eq(focusTrees.date, ctx.today)))
+      .orderBy(focusTrees.plantedAt),
+    db
+      .select({ date: focusTrees.date })
+      .from(focusTrees)
+      .where(
+        and(
+          eq(focusTrees.memberId, ctx.memberId),
+          eq(focusTrees.status, 'grown'),
+          gte(focusTrees.date, since),
+        ),
+      ),
+  ]);
+
+  const now = new Date();
+  const settled: TodayPlot['trees'] = [];
+  let live: TodayPlot['live'] = null;
+
+  for (const row of todayRows) {
+    if (row.status !== 'growing') {
+      settled.push({ id: row.id, species: row.species, status: row.status });
+      continue;
+    }
+    // Past its promised length: the sweep will call this grown, so the plot does too.
+    if (
+      resolveOverdueRound({ plantedAt: row.plantedAt, focusMinutes: row.focusMinutes, now }) ===
+      'grown'
+    ) {
+      settled.push({ id: row.id, species: row.species, status: 'grown' });
+      continue;
+    }
+    // Genuinely still running. Only ever one, but the last one wins if a stale row survives.
+    live = {
+      species: row.species,
+      plantedAt: row.plantedAt.toISOString(),
+      dueAt: row.dueAt.toISOString(),
+    };
+  }
+
+  const grownDates = historyRows.map((r) => r.date);
+  // A round settled above but not yet written back still counts toward the streak — the
+  // dashboard must not tell a student their streak broke on a day they visibly planted.
+  if (settled.some((t) => t.status === 'grown') && !grownDates.includes(ctx.today)) {
+    grownDates.push(ctx.today);
+  }
+
+  return { trees: settled, live, streak: plantingStreak(grownDates, ctx.today) };
 }

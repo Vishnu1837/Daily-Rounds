@@ -18,6 +18,7 @@ import { LiveRegion } from '@/components/ui/feedback';
 import { Segmented } from '@/components/ui/segmented';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/cn';
+import { haptic } from '@/lib/haptics';
 import {
   AWAY_GRACE_SECONDS,
   DEFAULT_PRESET,
@@ -244,6 +245,7 @@ export function StudySessionScreen({
     setTree(null);
     setTrees((prev) => [...prev, { id: current.id, species: current.species, status: 'grown' }]);
     setLost(null);
+    haptic('celebrate');
 
     // The break is not a commitment, so it is client-side only: nothing is written down and
     // skipping it costs nothing.
@@ -282,6 +284,12 @@ export function StudySessionScreen({
       ]);
       setLost({ species: current.species, minutes: current.focusMinutes });
       setPhase('lost');
+      /*
+       * The one buzz in the product that is not a reward. It fires on the optimistic path
+       * with the stump, not after the server answers: a round that ended forty seconds ago
+       * and is only now felt would read as a different round entirely.
+       */
+      haptic('wither');
       setBreakEndsAt(null);
 
       const result = await witherTreeAction(current.id, reason);
@@ -424,6 +432,7 @@ export function StudySessionScreen({
 
       setTree(planted.data);
       setPresetKey(planted.data.preset);
+      haptic('commit');
       setLost(null);
       setBreakEndsAt(null);
       setNow(Date.now());
@@ -723,7 +732,7 @@ export function StudySessionScreen({
             >
               {trees.length === 0 ? (
                 <p className={cn('py-3 text-xs', dark ? 'text-white/55' : 'text-fg-subtle')}>
-                  Nothing planted today yet.
+                  No rounds today yet.
                 </p>
               ) : (
                 trees.map((t) => (
@@ -776,22 +785,35 @@ export function StudySessionScreen({
               </>
             ) : view === 'break' ? (
               <>
-                <Button size="lg" fullWidth onClick={skipBreak}>
-                  Skip the break
-                </Button>
                 {/*
-                  Offered here because this is the moment the work is freshest and the student
-                  is already stopped. The check-in opens pre-filled from the round that just
-                  grew (see `buildCheckInPrefill`), so taking it up is a read-and-confirm
-                  rather than a form — which is the whole point of asking now instead of at
-                  eleven at night.
+                  The break is the end of a round, and the end of a round is the moment the
+                  block is worth logging: the student is already stopped and the work is
+                  freshest. It leads because a grown tree is not the thing that ticks the day
+                  off — a logged block is, and students were closing the tab on an unlogged
+                  one because the only button in front of them was about the next round.
+                */}
+                {session && !finished && (
+                  <Button size="xl" fullWidth loading={pending} onClick={finishBlock}>
+                    <Square className="size-4 fill-current" aria-hidden />
+                    Finish the block and log it
+                  </Button>
+                )}
+                {/*
+                  Offered here for the same reason. The check-in opens pre-filled from the
+                  round that just grew (see `buildCheckInPrefill`), so taking it up is a
+                  read-and-confirm rather than a form — which is the whole point of asking now
+                  instead of at eleven at night.
                 */}
                 <LinkButton href="/check-in" variant="outline" size="lg" fullWidth>
                   Log this in your check-in
                 </LinkButton>
+                <Button variant="outline" size="lg" fullWidth onClick={skipBreak}>
+                  Skip the break
+                </Button>
                 <p className="text-fg-subtle text-xs">
-                  The next round starts when you say so — a break that starts a round for you is
-                  just a round you did not choose.
+                  Logging the block is what ticks it off today&apos;s checklist. Your tree is
+                  already safe — and the next round starts when you say so, because a break that
+                  starts a round for you is just a round you did not choose.
                 </p>
               </>
             ) : finished && shortBlock ? (
@@ -831,12 +853,12 @@ export function StudySessionScreen({
 
                 <Button size="xl" fullWidth loading={pending} onClick={startRound}>
                   <Sprout className="size-5" aria-hidden />
-                  {grown > 0 || withered > 0 ? 'Plant another tree' : 'Plant a tree and start'}
+                  {grown > 0 || withered > 0 ? 'Start another round' : 'Start your study block'}
                 </Button>
               </>
             )}
 
-            {view !== 'focus' && session && !finished && (
+            {view !== 'focus' && view !== 'break' && session && !finished && (
               <Button variant="outline" size="lg" fullWidth loading={pending} onClick={finishBlock}>
                 <Square className="size-4 fill-current" aria-hidden />
                 Finish the block and log it

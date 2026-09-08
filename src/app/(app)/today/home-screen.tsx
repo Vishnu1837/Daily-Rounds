@@ -31,11 +31,13 @@ import { ProgressBar, ProgressRing, ProgressSegments } from '@/components/ui/pro
 import { Reveal } from '@/components/ui/reveal';
 import { StatTile } from '@/components/ui/stat';
 import { useToast } from '@/components/ui/toast';
+import { DayPlotCard } from './day-plot-card';
 import { StudyRoomCard } from './study-room-card';
 import { cn } from '@/lib/cn';
 import { levelFromPoints } from '@/lib/domain/level';
 import { HOW_XP_WORKS } from '@/lib/routes';
 import { markAchievementsSeenAction } from '@/server/actions/study';
+import type { TodayPlot } from '@/server/queries/grove';
 import type { HomeData } from '@/server/queries/student';
 
 type Pulse = {
@@ -80,11 +82,13 @@ export function HomeScreen({
   cohortName,
   home,
   pulse,
+  plot,
 }: {
   firstName: string;
   cohortName: string;
   home: HomeData;
   pulse: Pulse;
+  plot: TodayPlot;
 }) {
   // Celebrations raised by an action on this screen (completing today's target).
   const [actionCelebration, setActionCelebration] = useState<CelebrationPayload | null>(null);
@@ -215,11 +219,14 @@ export function HomeScreen({
           <Reveal delay={5}>
             <StudyRoomCard room={home.studyRoom} />
           </Reveal>
+          <Reveal delay={6}>
+            <DayPlotCard plot={plot} />
+          </Reveal>
         </div>
       </div>
 
       {/* -------------------------------------------------------- quick stats */}
-      <Reveal delay={6}>
+      <Reveal delay={7}>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
           <StatTile
             label="Weekly consistency"
@@ -262,18 +269,18 @@ export function HomeScreen({
 
       {/* --------------------------------------------------- cohort + upcoming */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
-        <Reveal delay={7} className="lg:col-span-7">
+        <Reveal delay={8} className="lg:col-span-7">
           <CohortPulseCard pulse={pulse} cohortName={cohortName} />
         </Reveal>
 
-        <Reveal delay={8} className="lg:col-span-5">
+        <Reveal delay={9} className="lg:col-span-5">
           <UpcomingCard events={home.upcoming} />
         </Reveal>
       </div>
 
       {/* ------------------------------------------------------ announcement */}
       {home.announcement && (
-        <Reveal delay={9}>
+        <Reveal delay={10}>
           <Card variant="wash" tone="iris" padding="md" className="flex items-start gap-4">
             <span
               className="bg-iris-500/15 text-iris-600 dark:text-iris-300 grid size-10 shrink-0 place-items-center rounded-xl"
