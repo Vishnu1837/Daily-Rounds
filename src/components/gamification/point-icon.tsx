@@ -5,6 +5,7 @@ import {
   CalendarPlus,
   ClipboardCheck,
   Flame,
+  Layers,
   PenLine,
   Scale,
   Sparkles,
@@ -21,7 +22,7 @@ import { cn } from '@/lib/cn';
 /**
  * One glyph per way of earning XP.
  *
- * The ledger is a list of thirteen near-identical sentences, and a student reading back
+ * The ledger is a list of fourteen near-identical sentences, and a student reading back
  * their own day should be able to tell "attended the study room" from "completed the study
  * block" without reading either. The icon carries that difference; the label confirms it.
  *
@@ -42,6 +43,7 @@ const ICONS: Record<PointEvent, LucideIcon> = {
   reflection: PenLine,
   quiz_attempt: Brain,
   quiz_bonus: Sparkles,
+  flashcard_session: Layers,
   streak_bonus: Flame,
   achievement: Trophy,
   weekly_review: CalendarCheck,
@@ -58,6 +60,7 @@ const TONES: Record<PointEvent, PointEventTone> = {
   reflection: 'pulse',
   quiz_attempt: 'iris',
   quiz_bonus: 'iris',
+  flashcard_session: 'iris',
   streak_bonus: 'flame',
   achievement: 'citrus',
   weekly_review: 'iris',

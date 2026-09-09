@@ -24,6 +24,7 @@ export const DEFAULT_POINT_RULES: PointRules = {
   reflection: 10,
   quiz_attempt: 5,
   quiz_bonus: 5,
+  flashcard_session: 5,
   // The three below are placeholders, not settings. See `COMPUTED_POINT_EVENTS`.
   streak_bonus: 0,
   achievement: 0,
@@ -365,6 +366,16 @@ export const ledgerKey = {
     `quiz_attempt:assessment:${memberId}:${attemptId}`,
   assessmentBonus: (memberId: string, attemptId: string) =>
     `quiz_bonus:assessment:${memberId}:${attemptId}`,
+  /*
+   * Keyed on the session, not on the deck and the date.
+   *
+   * A deck is meant to be run again — that is the entire premise of spaced recall — so a
+   * deck-and-date key would refuse to pay for the second run of the evening while happily
+   * recording the reviews it produced. The per-session cap in `sessionPoints` is what stops
+   * that being farmable; the idempotency key only has to stop a double submit.
+   */
+  flashcardSession: (memberId: string, sessionId: string) =>
+    `flashcard_session:${memberId}:${sessionId}`,
   streakMilestone: (memberId: string, milestone: number) => `streak_bonus:${memberId}:${milestone}`,
   achievement: (memberId: string, code: string) => `achievement:${memberId}:${code}`,
   weeklyReview: (memberId: string, weekStart: string) => `weekly_review:${memberId}:${weekStart}`,
@@ -383,6 +394,7 @@ export const POINT_EVENT_LABELS: Record<PointEvent, string> = {
   reflection: 'Wrote a reflection',
   quiz_attempt: 'Attempted a knowledge check',
   quiz_bonus: 'Knowledge check accuracy',
+  flashcard_session: 'Finished a flashcard deck',
   streak_bonus: 'Streak milestone',
   achievement: 'Achievement unlocked',
   weekly_review: 'Weekly review',

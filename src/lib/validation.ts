@@ -291,6 +291,29 @@ export const quizSubmissionSchema = z.object({
   answers: z.array(z.coerce.number().int().min(-1).max(10)).min(1).max(20),
 });
 
+/* ------------------------------------------------------------ flashcards */
+
+/**
+ * A finished (or abandoned) run through a deck.
+ *
+ * The cap is generous rather than tight: a student may legitimately meet the same card
+ * several times in one sitting once the scheduler starts putting `again` cards back into
+ * the run, so the ceiling is on reviews, not on the deck's size.
+ */
+export const flashcardSessionSchema = z.object({
+  deckId: z.string().uuid(),
+  completed: z.boolean(),
+  outcomes: z
+    .array(
+      z.object({
+        cardId: z.string().uuid(),
+        grade: z.enum(['again', 'hard', 'good', 'easy']),
+      }),
+    )
+    .min(1, 'A session with no reviews in it is not a session')
+    .max(400),
+});
+
 /* ----------------------------------------------------------------- admin */
 
 export const cohortSettingsSchema = z

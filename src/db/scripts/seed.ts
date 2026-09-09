@@ -26,6 +26,7 @@ import { hashPassword } from '@/lib/auth/password';
 import { generateRoadmapForSubject } from '@/lib/roadmap/generate';
 import { type Challenge } from '@/lib/validation';
 
+import { FLASHCARD_DECKS } from './flashcard-seed';
 import {
   ANNOUNCEMENTS,
   MATERIALS,
@@ -212,7 +213,8 @@ async function main() {
   await dbExecute(`
     TRUNCATE TABLE
       audit_log, weekly_reviews, announcements, materials, quiz_attempts, quiz_questions,
-      quizzes, student_achievements, daily_activity, points_ledger, point_rules, check_ins,
+      quizzes, flashcard_reviews, flashcard_progress, flashcard_sessions, flashcards,
+      flashcard_decks, student_achievements, daily_activity, points_ledger, point_rules, check_ins,
       attendance, events, study_sessions, daily_assignments, roadmap_topics, roadmap_weeks,
       roadmaps, student_goals, cohort_members, cohort_extra_study_days, cohort_holidays,
       cohorts, subjects, password_reset_tokens, auth_sessions, users
@@ -577,6 +579,34 @@ async function main() {
     seededQuizzes.push({ id: row!.id, curriculumRef: quiz.curriculumRef });
   }
   console.log(`  ✓ ${QUIZ_BANK.length} quizzes`);
+
+  // ------------------------------------------------------------ flashcards
+  let seededCards = 0;
+  for (const deck of FLASHCARD_DECKS) {
+    const [row] = await db
+      .insert(schema.flashcardDecks)
+      .values({
+        subjectId: subjectBySlug.get(deck.subject)?.id ?? null,
+        curriculumRef: deck.curriculumRef,
+        title: deck.title,
+        description: deck.description,
+      })
+      .returning();
+    await db.insert(schema.flashcards).values(
+      deck.cards.map((card, i) => ({
+        deckId: row!.id,
+        type: card.type,
+        position: i,
+        front: card.front,
+        back: card.back,
+        explanation: card.explanation ?? null,
+        options: card.options ?? [],
+        correctOption: card.correctOption ?? null,
+      })),
+    );
+    seededCards += deck.cards.length;
+  }
+  console.log(`  ✓ ${FLASHCARD_DECKS.length} flashcard decks, ${seededCards} cards`);
 
   // ------------------------------------------------- behaviour generation
   const rules = DEFAULT_POINT_RULES;

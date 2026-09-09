@@ -482,6 +482,23 @@
   }
 }
 
+/*
+ * A flashcard breathing while it waits to be answered.
+ *
+ * Four pixels over six seconds, which is under the threshold at which the eye reads it as
+ * movement — it reads as the card being a physical object rather than a painted rectangle.
+ * Anything larger competes with the question printed on it, and the question is the point.
+ */
+@keyframes dr-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -4px, 0);
+  }
+}
+
 @keyframes dr-sheen {
   0% {
     transform: translateX(-120%) skewX(-18deg);
@@ -530,6 +547,10 @@
 
 .animate-sway {
   animation: dr-sway 7s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: dr-float 6s ease-in-out infinite;
 }
 
 /* The slow-moving colour blobs behind hero surfaces. */

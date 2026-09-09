@@ -96,6 +96,29 @@ export const materialTypeEnum = pgEnum('material_type', [
   'recording',
 ]);
 export const riskLevelEnum = pgEnum('risk_level', ['on_track', 'at_risk', 'needs_intervention']);
+
+/*
+ * Flashcards. The three enums below are the database's copy of the unions in
+ * `src/lib/domain/flashcards.ts`; the domain owns what they *mean*, this owns what may be
+ * stored. They are spelled out rather than derived because a generated enum cannot be
+ * diffed in a migration review.
+ */
+export const flashcardTypeEnum = pgEnum('flashcard_type', [
+  'definition',
+  'question',
+  'cloze',
+  'multiple_choice',
+  'true_false',
+  'image',
+  'concept',
+]);
+export const flashcardGradeEnum = pgEnum('flashcard_grade', ['again', 'hard', 'good', 'easy']);
+export const flashcardMasteryEnum = pgEnum('flashcard_mastery', [
+  'new',
+  'learning',
+  'difficult',
+  'mastered',
+]);
 /**
  * Which of a student's two active roadmaps this is.
  *
@@ -156,6 +179,7 @@ export const pointEventEnum = pgEnum('point_event', [
   'reflection',
   'quiz_attempt',
   'quiz_bonus',
+  'flashcard_session',
   'streak_bonus',
   'achievement',
   'weekly_review',
@@ -904,6 +928,144 @@ export const quizAttempts = pgTable(
   (t) => [index('quiz_attempts_member_idx').on(t.memberId)],
 );
 
+/* ------------------------------------------------------------- flashcards */
+
+/**
+ * A deck of recall cards, filed against the curriculum exactly as a quiz is.
+ *
+ * Decks are *cohort content*, not personal collections: one deck written for
+ * `pathology/general-pathology/inflammation` reaches every student whose roadmap touches
+ * that branch, which is the same reach rule `quizzes` uses and the reason the two tables
+ * look alike. What is personal lives in `flashcard_progress`, one row per student per card.
+ */
+export const flashcardDecks = pgTable(
+  'flashcard_decks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    subjectId: uuid('subject_id').references(() => subjects.id, { onDelete: 'set null' }),
+    curriculumRef: varchar('curriculum_ref', { length: 200 }),
+    title: varchar('title', { length: 160 }).notNull(),
+    description: text('description'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('flashcard_decks_curriculum_ref_idx').on(t.curriculumRef)],
+);
+
+export const flashcards = pgTable(
+  'flashcards',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    deckId: uuid('deck_id')
+      .notNull()
+      .references(() => flashcardDecks.id, { onDelete: 'cascade' }),
+    type: flashcardTypeEnum('type').notNull().default('definition'),
+    /** Author's order within the deck. The session shuffles around this, never destroys it. */
+    position: smallint('position').notNull().default(0),
+    /**
+     * The prompt side. For `cloze` this is the sentence with `___` marking the gap, and
+     * the blank is rendered from that marker rather than stored as a second column — one
+     * string cannot disagree with itself about where the gap is.
+     */
+    front: text('front').notNull(),
+    /** The answer side. For a choice card this is the correct option's own text. */
+    back: text('back').notNull(),
+    /** The optional "why", shown under the answer. Never required to understand the card. */
+    explanation: text('explanation'),
+    /** Absolute URL for an `image` card. Ignored by every other type. */
+    imageUrl: text('image_url'),
+    /** Choices for `multiple_choice` and `true_false`; empty for every other type. */
+    options: jsonb('options')
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /**
+     * Index into `options`.
+     *
+     * Nullable rather than defaulted to 0, because a default would silently make the first
+     * option correct on a card whose author forgot to mark one — a card that is wrong in a
+     * way nobody can see. Null means "this card has no correct choice", which the loader
+     * treats as a self-assessed card rather than as a scored one.
+     */
+    correctOption: smallint('correct_option'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('flashcards_deck_idx').on(t.deckId, t.position)],
+);
+
+/**
+ * One student's standing on one card — the scheduler's entire memory.
+ *
+ * Every column here is recomputable from `flashcard_reviews` below, which keeps this on the
+ * right side of the architectural rule: it is a cache of derived state, and the review log
+ * is the source. Storing it separately is what lets the deck list render a mastery mix from
+ * one indexed read instead of folding a history per card.
+ */
+export const flashcardProgress = pgTable(
+  'flashcard_progress',
+  {
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => cohortMembers.id, { onDelete: 'cascade' }),
+    cardId: uuid('card_id')
+      .notNull()
+      .references(() => flashcards.id, { onDelete: 'cascade' }),
+    mastery: flashcardMasteryEnum('mastery').notNull().default('new'),
+    /** Consecutive non-`again` reviews. */
+    streak: smallint('streak').notNull().default(0),
+    reps: smallint('reps').notNull().default(0),
+    lapses: smallint('lapses').notNull().default(0),
+    intervalDays: smallint('interval_days').notNull().default(0),
+    lastGrade: flashcardGradeEnum('last_grade'),
+    lastReviewedAt: timestamp('last_reviewed_at', { withTimezone: true }),
+    nextReviewAt: timestamp('next_review_at', { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.memberId, t.cardId] }),
+    index('flashcard_progress_due_idx').on(t.memberId, t.nextReviewAt),
+  ],
+);
+
+export const flashcardSessions = pgTable(
+  'flashcard_sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => cohortMembers.id, { onDelete: 'cascade' }),
+    deckId: uuid('deck_id')
+      .notNull()
+      .references(() => flashcardDecks.id, { onDelete: 'cascade' }),
+    date: date('date').notNull(),
+    reviewed: smallint('reviewed').notNull(),
+    correct: smallint('correct').notNull(),
+    bestStreak: smallint('best_streak').notNull().default(0),
+    /** False when the student left part-way. Their reviews still count; the run does not. */
+    completed: boolean('completed').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('flashcard_sessions_member_idx').on(t.memberId, t.date)],
+);
+
+/** The append-only record of every judgement, and the source `flashcard_progress` caches. */
+export const flashcardReviews = pgTable(
+  'flashcard_reviews',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => cohortMembers.id, { onDelete: 'cascade' }),
+    cardId: uuid('card_id')
+      .notNull()
+      .references(() => flashcards.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => flashcardSessions.id, { onDelete: 'cascade' }),
+    grade: flashcardGradeEnum('grade').notNull(),
+    /** The study day this review belongs to, in the student's own timezone. */
+    occurredOn: date('occurred_on').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('flashcard_reviews_member_idx').on(t.memberId, t.occurredOn)],
+);
+
 /* ------------------------------------------------------------ assessments */
 
 /**
@@ -1488,6 +1650,25 @@ export const quizzesRelations = relations(quizzes, ({ many }) => ({
   questions: many(quizQuestions),
 }));
 
+export const flashcardDecksRelations = relations(flashcardDecks, ({ many }) => ({
+  cards: many(flashcards),
+}));
+
+export const flashcardsRelations = relations(flashcards, ({ one, many }) => ({
+  deck: one(flashcardDecks, {
+    fields: [flashcards.deckId],
+    references: [flashcardDecks.id],
+  }),
+  progress: many(flashcardProgress),
+}));
+
+export const flashcardProgressRelations = relations(flashcardProgress, ({ one }) => ({
+  card: one(flashcards, {
+    fields: [flashcardProgress.cardId],
+    references: [flashcards.id],
+  }),
+}));
+
 export const quizQuestionsRelations = relations(quizQuestions, ({ one }) => ({
   quiz: one(quizzes, { fields: [quizQuestions.quizId], references: [quizzes.id] }),
 }));
@@ -1571,6 +1752,11 @@ export type WeeklyReview = typeof weeklyReviews.$inferSelect;
 export type Quiz = typeof quizzes.$inferSelect;
 export type QuizQuestion = typeof quizQuestions.$inferSelect;
 export type QuizAttempt = typeof quizAttempts.$inferSelect;
+export type FlashcardDeck = typeof flashcardDecks.$inferSelect;
+export type Flashcard = typeof flashcards.$inferSelect;
+export type FlashcardProgress = typeof flashcardProgress.$inferSelect;
+export type FlashcardSession = typeof flashcardSessions.$inferSelect;
+export type FlashcardReview = typeof flashcardReviews.$inferSelect;
 export type PointEvent = (typeof pointEventEnum.enumValues)[number];
 export type RiskLevel = (typeof riskLevelEnum.enumValues)[number];
 export type DayBand = (typeof dayBandEnum.enumValues)[number];

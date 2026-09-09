@@ -105,6 +105,14 @@ export const STUDENT_NAV: NavItem[] = [
     group: 'Library',
   },
   {
+    href: '/flashcards',
+    label: 'Flashcards',
+    short: 'Cards',
+    icon: 'sparkles',
+    primary: false,
+    group: 'Library',
+  },
+  {
     href: '/materials',
     label: 'Materials',
     short: 'Materials',
