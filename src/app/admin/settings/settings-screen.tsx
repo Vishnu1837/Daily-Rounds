@@ -302,7 +302,17 @@ export function SettingsScreen({
               max={100}
               defaultValue={thresholds.minConsistencyPct}
               required
-              hint="Measured over the recent window, not all time."
+              hint="Measured over the recent window, not all time. On its own this is a warning."
+            />
+            <TextInput
+              label="Intervention below (%)"
+              name="interventionConsistencyPct"
+              type="number"
+              min={0}
+              max={100}
+              defaultValue={thresholds.interventionConsistencyPct}
+              required
+              hint="Between the two, low participation is amber unless days were missed too."
             />
           </div>
           <div className="px-5 pb-5">

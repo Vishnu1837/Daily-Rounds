@@ -161,6 +161,7 @@ export async function joinStudyRoomAction(): Promise<Result<JoinResult>> {
         date: today,
         calendar: ctx.calendar,
         rules: ctx.rules,
+        expected: ctx.expected,
       });
       revalidatePath('/today');
       revalidatePath('/admin/attendance');

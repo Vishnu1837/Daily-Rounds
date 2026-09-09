@@ -29,6 +29,10 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 
+// Type-only, so it is erased at compile time and the schema ↔ domain cycle never exists at
+// runtime. The domain owns what a behaviour is; the settings column only names them.
+import type { BehaviourEvent } from '@/lib/domain/points';
+
 /* ------------------------------------------------------------------ enums */
 
 export const userRoleEnum = pgEnum('user_role', ['student', 'admin']);
@@ -264,6 +268,13 @@ export type CohortSettings = {
   interventionMissedDays?: number;
   atRiskConsistencyDropPct?: number;
   minConsistencyPct?: number;
+  interventionConsistencyPct?: number;
+  /**
+   * The behaviours this cohort is scored out of, when the derived set is not what the
+   * cohort lead means. Unset or empty falls back to what the cohort demonstrably offers —
+   * see `expectedBehaviours` in src/lib/domain/points.ts.
+   */
+  expectedBehaviours?: BehaviourEvent[];
 };
 
 export const cohorts = pgTable(

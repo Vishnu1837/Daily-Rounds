@@ -105,6 +105,7 @@ export async function submitQuizAction(input: {
       date: ctx.today,
       calendar: ctx.calendar,
       rules: ctx.rules,
+      expected: ctx.expected,
     });
 
     revalidatePath('/today');

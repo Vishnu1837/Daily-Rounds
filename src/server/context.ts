@@ -21,7 +21,12 @@ import {
   formatInTimezone,
   todayInTimezone,
 } from '@/lib/domain/calendar';
-import { DEFAULT_POINT_RULES, type PointRules } from '@/lib/domain/points';
+import {
+  type BehaviourEvent,
+  DEFAULT_POINT_RULES,
+  type PointRules,
+  expectedBehaviours,
+} from '@/lib/domain/points';
 import { DEFAULT_RISK_THRESHOLDS, type RiskThresholds } from '@/lib/domain/risk';
 import { cohortTag } from '@/server/cache';
 
@@ -31,6 +36,8 @@ export type MemberContext = {
   cohort: Cohort;
   calendar: CohortCalendar;
   rules: PointRules;
+  /** The behaviours this cohort asks for — the denominator of every day score. */
+  expected: BehaviourEvent[];
   thresholds: RiskThresholds;
   /**
    * The zone this student's own day is measured in.
@@ -130,6 +137,21 @@ export const loadPointRules = cache(async (cohortId: string): Promise<PointRules
   return rules;
 });
 
+/**
+ * The behaviours this cohort's students are actually scored out of.
+ *
+ * Sits next to `thresholdsFor` because it is the same kind of thing: a cohort-shaped input
+ * to scoring, derived from the cohort row with an admin override on top. Resolving it here
+ * rather than inside `recomputeDay` keeps that function free of a cohort lookup it would
+ * otherwise repeat once per student-day.
+ */
+export function expectedBehavioursFor(cohort: Cohort): BehaviourEvent[] {
+  return expectedBehaviours({
+    hasStudyRoom: Boolean(cohort.meetUrl),
+    override: cohort.settings?.expectedBehaviours ?? null,
+  });
+}
+
 export function thresholdsFor(cohort: Cohort): RiskThresholds {
   const s = cohort.settings ?? {};
   return {
@@ -139,6 +161,8 @@ export function thresholdsFor(cohort: Cohort): RiskThresholds {
     atRiskConsistencyDropPct:
       s.atRiskConsistencyDropPct ?? DEFAULT_RISK_THRESHOLDS.atRiskConsistencyDropPct,
     minConsistencyPct: s.minConsistencyPct ?? DEFAULT_RISK_THRESHOLDS.minConsistencyPct,
+    interventionConsistencyPct:
+      s.interventionConsistencyPct ?? DEFAULT_RISK_THRESHOLDS.interventionConsistencyPct,
     participationWindowDays: DEFAULT_RISK_THRESHOLDS.participationWindowDays,
   };
 }
@@ -168,6 +192,7 @@ export const getMemberContext = cache(async (user: SessionUser): Promise<MemberC
     cohort: row.cohort,
     calendar,
     rules,
+    expected: expectedBehavioursFor(row.cohort),
     thresholds: thresholdsFor(row.cohort),
     timezone,
     today: todayInTimezone(timezone),
@@ -183,6 +208,7 @@ const cohortContextFor = cache(async (cohort: Cohort) => {
     cohort,
     calendar,
     rules,
+    expected: expectedBehavioursFor(cohort),
     thresholds: thresholdsFor(cohort),
     today: todayInTimezone(cohort.timezone),
   };

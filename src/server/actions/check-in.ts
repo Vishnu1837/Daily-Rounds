@@ -130,6 +130,7 @@ export async function submitCheckInAction(
       date: ctx.today,
       calendar: ctx.calendar,
       rules: ctx.rules,
+      expected: ctx.expected,
     });
 
     revalidatePath('/today');
@@ -200,6 +201,7 @@ export async function submitWeeklyReviewAction(
       date: ctx.today,
       calendar: ctx.calendar,
       rules: ctx.rules,
+      expected: ctx.expected,
     });
 
     revalidatePath('/progress');

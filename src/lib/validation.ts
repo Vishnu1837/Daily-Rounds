@@ -323,10 +323,21 @@ export const cohortSettingsSchema = z
     interventionMissedDays: z.coerce.number().int().min(1).max(30),
     atRiskConsistencyDropPct: z.coerce.number().int().min(1).max(100),
     minConsistencyPct: z.coerce.number().int().min(0).max(100),
+    interventionConsistencyPct: z.coerce.number().int().min(0).max(100),
   })
   .refine((v) => v.endDate >= v.startDate, {
     message: 'End date must be after the start date',
     path: ['endDate'],
+  })
+  // An intervention floor above the warning floor would collapse the amber band back into
+  // red, which is the bug the two-tier check exists to fix.
+  .refine((v) => v.interventionConsistencyPct <= v.minConsistencyPct, {
+    message: 'Must not be above the low-participation threshold',
+    path: ['interventionConsistencyPct'],
+  })
+  .refine((v) => v.atRiskMissedDays <= v.interventionMissedDays, {
+    message: 'Must not be above the intervention threshold',
+    path: ['atRiskMissedDays'],
   });
 
 export const holidaySchema = z.object({

@@ -189,3 +189,80 @@ describe('calculateRiskStatus', () => {
     expect(r.level).toBe('on_track');
   });
 });
+
+describe('low participation is a warning before it is an intervention', () => {
+  /*
+   * The 2026-09-09 members list. A student attending every session but recording only the
+   * study room and a check-in scored 37% every day — under the 40% floor, which escalated
+   * straight to red. Nine of ten active students carried the same badge as the one who had
+   * genuinely stopped coming.
+   */
+  const thin = {
+    '2025-09-01': 0.37,
+    '2025-09-02': 0.37,
+    '2025-09-03': 0.37,
+    '2025-09-04': 0.37,
+    '2025-09-05': 0.37,
+    '2025-09-08': 0.37,
+  };
+
+  it('flags a thin but unbroken record as at risk, not intervention', () => {
+    const { lookup, showedUp } = ctx(thin);
+    const r = calculateRiskStatus({ calendar: cal, lookup, showedUp, today: '2025-09-09' });
+    expect(r.missedActiveDays).toBe(0);
+    expect(r.recentConsistencyPct).toBeLessThan(40);
+    expect(r.level).toBe('at_risk');
+    expect(r.reasons.some((x) => x.includes('Recent consistency'))).toBe(true);
+  });
+
+  it('still escalates when the thin record comes with missed days', () => {
+    // Same participation, but the student has since stopped turning up.
+    const { lookup, showedUp } = ctx({ ...thin, '2025-09-09': 0, '2025-09-10': 0 });
+    const r = calculateRiskStatus({ calendar: cal, lookup, showedUp, today: '2025-09-11' });
+    expect(r.missedActiveDays).toBe(2);
+    expect(r.level).toBe('needs_intervention');
+  });
+
+  it('still escalates when participation is negligible rather than merely low', () => {
+    const { lookup, showedUp } = ctx({
+      '2025-09-01': 0.1,
+      '2025-09-02': 0.1,
+      '2025-09-03': 0.15,
+      '2025-09-04': 0.1,
+      '2025-09-05': 0.1,
+      '2025-09-08': 0.1,
+    });
+    const r = calculateRiskStatus({ calendar: cal, lookup, showedUp, today: '2025-09-09' });
+    expect(r.missedActiveDays).toBe(0);
+    expect(r.recentConsistencyPct).toBeLessThan(20);
+    expect(r.level).toBe('needs_intervention');
+  });
+
+  it('keeps the two populations apart', () => {
+    // The whole point of the amber band: the student who is logging less than the model
+    // asks for must not be indistinguishable from the student who has gone.
+    const present = ctx(thin);
+    const absent = ctx({
+      '2025-09-01': 1,
+      '2025-09-02': 1,
+      '2025-09-03': 1,
+    });
+    const a = calculateRiskStatus({ ...present, calendar: cal, today: '2025-09-09' });
+    const b = calculateRiskStatus({ ...absent, calendar: cal, today: '2025-09-09' });
+    expect(b.missedActiveDays).toBeGreaterThanOrEqual(3);
+    expect(a.level).not.toBe(b.level);
+    expect(b.level).toBe('needs_intervention');
+  });
+
+  it('lets a cohort lead put the intervention floor back where it was', () => {
+    const { lookup, showedUp } = ctx(thin);
+    const r = calculateRiskStatus({
+      calendar: cal,
+      lookup,
+      showedUp,
+      today: '2025-09-09',
+      thresholds: { interventionConsistencyPct: 40 },
+    });
+    expect(r.level).toBe('needs_intervention');
+  });
+});

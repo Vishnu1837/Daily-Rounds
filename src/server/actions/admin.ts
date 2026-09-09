@@ -237,6 +237,7 @@ export async function markAttendanceAction(
             date,
             calendar: ctx.calendar,
             rules: ctx.rules,
+            expected: ctx.expected,
           });
         }),
       );
@@ -279,6 +280,20 @@ export async function updateCohortSettingsAction(
     if (!parsed.success) return fail('Check the highlighted fields.', fieldErrors(parsed.error));
 
     const input = parsed.data;
+
+    /*
+     * The settings blob is rebuilt from the form, so anything not on the form has to be
+     * carried across explicitly or saving the risk thresholds silently discards it.
+     * `expectedBehaviours` has no control on this screen yet — it is set deliberately, per
+     * cohort — and losing it would put every student back on a denominator their cohort
+     * does not run, which is the exact failure this field exists to prevent.
+     */
+    const [current] = await db
+      .select({ settings: cohorts.settings })
+      .from(cohorts)
+      .where(eq(cohorts.id, input.cohortId))
+      .limit(1);
+
     await db
       .update(cohorts)
       .set({
@@ -293,10 +308,12 @@ export async function updateCohortSettingsAction(
         meetStartTime: input.meetStartTime,
         meetEndTime: input.meetEndTime,
         settings: {
+          ...(current?.settings ?? {}),
           atRiskMissedDays: input.atRiskMissedDays,
           interventionMissedDays: input.interventionMissedDays,
           atRiskConsistencyDropPct: input.atRiskConsistencyDropPct,
           minConsistencyPct: input.minConsistencyPct,
+          interventionConsistencyPct: input.interventionConsistencyPct,
         },
       })
       .where(eq(cohorts.id, input.cohortId));
@@ -430,6 +447,7 @@ export async function recomputeCohort(cohortId: string): Promise<Result<{ member
         to: ctx.today,
         calendar: ctx.calendar,
         rules: ctx.rules,
+        expected: ctx.expected,
       });
     }
 
@@ -847,6 +865,7 @@ export async function adjustPointsAction(
       date: input.date,
       calendar: ctx.calendar,
       rules: ctx.rules,
+      expected: ctx.expected,
     });
 
     await recordAudit({

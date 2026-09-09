@@ -40,10 +40,10 @@ export default async function HowPointsWorkPage() {
   const ctx = await getMemberContext(user);
   if (!ctx) redirect('/admin');
 
-  const { rules, cohort } = ctx;
+  const { rules, expected, cohort } = ctx;
   const data = await getPointsExplainer(ctx);
   const level = levelFromPoints(data.totalPoints);
-  const max = maxDailyBehaviourPoints(rules);
+  const max = maxDailyBehaviourPoints(rules, expected);
   const behaviourPct = max === 0 ? 0 : Math.round((data.behaviourToday / max) * 100);
 
   const dayLabel = new Date(`${data.today}T12:00:00Z`).toLocaleDateString('en-GB', {
@@ -54,7 +54,7 @@ export default async function HowPointsWorkPage() {
   });
 
   const bonusToday = data.todayPoints - data.behaviourToday;
-  const heaviest = Math.max(...BEHAVIOUR_EVENTS.map((e) => rules[e]), 1);
+  const heaviest = Math.max(...expected.map((e) => rules[e]), 1);
   const peakDay = Math.max(...data.recentDays.map((d) => d.points), 1);
 
   return (
@@ -265,10 +265,10 @@ export default async function HowPointsWorkPage() {
         <Card>
           <CardHeader
             title="Your day"
-            description={`${max} XP are available every study day from behaviour alone. These six are the only things consistency is measured from.`}
+            description={`${max} XP are available every study day from behaviour alone. These ${expected.length} are the only things your consistency is measured from.`}
           />
           <ul className="mt-3">
-            {BEHAVIOUR_EVENTS.map((event, i) => (
+            {expected.map((event, i) => (
               <li key={event} className="border-border flex items-center gap-3 border-t px-5 py-3">
                 <PointEventIcon event={event} />
                 <span className="min-w-0 flex-1">
@@ -289,20 +289,23 @@ export default async function HowPointsWorkPage() {
                 <span className="sr-only">{i + 1}</span>
               </li>
             ))}
-            <li className="border-border flex items-center gap-3 border-t px-5 py-3">
-              <PointEventIcon event="live_session_late" />
-              <span className="min-w-0 flex-1">
-                <span className="text-fg block text-sm font-semibold">
-                  {POINT_EVENT_LABELS.live_session_late}
+            {/* Only meaningful where there is a room to arrive late to. */}
+            {expected.includes('live_session_present') && (
+              <li className="border-border flex items-center gap-3 border-t px-5 py-3">
+                <PointEventIcon event="live_session_late" />
+                <span className="min-w-0 flex-1">
+                  <span className="text-fg block text-sm font-semibold">
+                    {POINT_EVENT_LABELS.live_session_late}
+                  </span>
+                  <span className="text-fg-subtle block text-xs font-medium">
+                    Partial credit — it fills the same slot as arriving on time, for less.
+                  </span>
                 </span>
-                <span className="text-fg-subtle block text-xs font-medium">
-                  Partial credit — it fills the same slot as arriving on time, for less.
+                <span className="text-flame-700 dark:text-flame-300 text-sm font-extrabold tabular-nums">
+                  +{rules.live_session_late}
                 </span>
-              </span>
-              <span className="text-flame-700 dark:text-flame-300 text-sm font-extrabold tabular-nums">
-                +{rules.live_session_late}
-              </span>
-            </li>
+              </li>
+            )}
           </ul>
         </Card>
       </Reveal>

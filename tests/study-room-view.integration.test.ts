@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { buildCalendar } from '@/lib/domain/calendar';
 import { DEFAULT_POINT_RULES } from '@/lib/domain/points';
 import { DEFAULT_RISK_THRESHOLDS } from '@/lib/domain/risk';
-import type { MemberContext } from '@/server/context';
+import { type MemberContext, expectedBehavioursFor } from '@/server/context';
 import { getHomeData } from '@/server/queries/student';
 
 import { createTestCohort, createTestMember, db, schema } from './helpers/db';
@@ -56,6 +56,7 @@ function contextFor(cohort: Cohort, memberId: string, timezone: string): MemberC
       holidays: [],
     }),
     rules: DEFAULT_POINT_RULES,
+    expected: expectedBehavioursFor(cohort),
     thresholds: DEFAULT_RISK_THRESHOLDS,
     timezone: timezone,
     today: TODAY,

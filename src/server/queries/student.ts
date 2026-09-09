@@ -306,7 +306,7 @@ export type HomeData = {
 };
 
 export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
-  const { memberId, calendar, today, rules, cohort } = ctx;
+  const { memberId, calendar, today, rules, expected, cohort } = ctx;
   const upTo = minDate(today, calendar.endDate);
 
   /*
@@ -568,7 +568,7 @@ export async function getHomeData(ctx: MemberContext): Promise<HomeData> {
     },
     tasks,
     todayPoints: ledgerRows.reduce((s, r) => s + r.points, 0),
-    maxDailyPoints: maxDailyBehaviourPoints(rules),
+    maxDailyPoints: maxDailyBehaviourPoints(rules, expected),
     totalPoints: points,
     weeklyConsistency: weekly.consistencyPct,
     roadmapPct: topics.total === 0 ? 0 : Math.round((topics.completed / topics.total) * 100),
@@ -1899,7 +1899,7 @@ export type PointsExplainer = {
  * never disagree with the number in the header.
  */
 export async function getPointsExplainer(ctx: MemberContext): Promise<PointsExplainer> {
-  const { memberId, calendar, today, rules, timezone } = ctx;
+  const { memberId, calendar, today, rules, expected, timezone } = ctx;
   const from = addDays(today, -13);
 
   const [todayRows, lifetimeRows, recentRows, totalPoints, activity] = await Promise.all([
@@ -1963,11 +1963,12 @@ export async function getPointsExplainer(ctx: MemberContext): Promise<PointsExpl
       (sum, e) => (behaviourSlot(e.event) ? sum + Math.max(0, e.points) : sum),
       0,
     ),
-    maxDailyPoints: maxDailyBehaviourPoints(rules),
-    remainingToday: BEHAVIOUR_EVENTS.filter((e) => !filled.has(e)).map((event) => ({
-      event,
-      points: rules[event],
-    })),
+    maxDailyPoints: maxDailyBehaviourPoints(rules, expected),
+    // Only what this cohort actually asks for is still outstanding. A behaviour the cohort
+    // does not run is not work the student still owes.
+    remainingToday: expected
+      .filter((e) => !filled.has(e))
+      .map((event) => ({ event, points: rules[event] })),
     isActiveDay: isActiveStudyDay(calendar, today),
     isHolidayToday: isHoliday(calendar, today),
     totalPoints,

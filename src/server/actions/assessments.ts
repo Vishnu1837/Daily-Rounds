@@ -977,6 +977,7 @@ export async function submitAttemptAction(
       date: ctx.today,
       calendar: ctx.calendar,
       rules: ctx.rules,
+      expected: ctx.expected,
     });
 
     revalidatePath('/assessments');

@@ -18,6 +18,7 @@ import { bestRefMatch } from '@/lib/curriculum';
 import {
   DEFAULT_POINT_RULES,
   EDITABLE_POINT_EVENTS,
+  expectedBehaviours,
   ledgerKey,
   quizPoints,
 } from '@/lib/domain/points';
@@ -579,6 +580,8 @@ async function main() {
 
   // ------------------------------------------------- behaviour generation
   const rules = DEFAULT_POINT_RULES;
+  // The seed cohort runs a study room, so it is scored out of all six behaviours.
+  const expected = expectedBehaviours({ hasStudyRoom: true });
   const assignments: (typeof schema.dailyAssignments.$inferInsert)[] = [];
   const sessions: (typeof schema.studySessions.$inferInsert)[] = [];
   const attendanceRows: (typeof schema.attendance.$inferInsert)[] = [];
@@ -872,11 +875,12 @@ async function main() {
       to: today,
       calendar,
       rules,
+      expected,
     });
     // settleDay on each elapsed active day so streak milestones and achievements land on
     // the day they were actually earned.
     for (const date of elapsedDays) {
-      await settleDay({ memberId, cohortId: cohort.id, date, calendar, rules });
+      await settleDay({ memberId, cohortId: cohort.id, date, calendar, rules, expected });
     }
   }
   // Seeded history is not "news" — mark it seen so students are not greeted by a

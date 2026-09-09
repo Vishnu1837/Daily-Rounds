@@ -6,6 +6,7 @@ import {
   bandForDay,
   behaviourSlot,
   dayScore,
+  expectedBehaviours,
   ledgerKey,
   maxDailyBehaviourPoints,
   quizPoints,
@@ -190,5 +191,101 @@ describe('idempotency keys', () => {
     expect(ledgerKey.quizAttempt('m1', 'q1', '2025-09-01')).not.toBe(
       ledgerKey.quizAttempt('m1', 'q2', '2025-09-01'),
     );
+  });
+});
+
+describe('the denominator is what the cohort actually asks for', () => {
+  it('drops the study-room slot for a cohort that has no room', () => {
+    const expected = expectedBehaviours({ hasStudyRoom: false });
+    expect(expected).not.toContain('live_session_present');
+    expect(maxDailyBehaviourPoints(rules, expected)).toBe(60);
+  });
+
+  it('keeps all six for a cohort that runs a room', () => {
+    const expected = expectedBehaviours({ hasStudyRoom: true });
+    expect(expected).toEqual([...BEHAVIOUR_EVENTS]);
+    expect(maxDailyBehaviourPoints(rules, expected)).toBe(80);
+  });
+
+  it('lets a student of a roomless cohort still reach a perfect day', () => {
+    // The bug this fixes: marked out of 80 with only 60 obtainable, a student who did
+    // everything asked of them scored 75% — and 40% intervention was 35 points away.
+    const expected = expectedBehaviours({ hasStudyRoom: false });
+    const entries = expected.map((event) => ({ event, points: rules[event] }));
+    expect(dayScore(entries, rules)).toBeCloseTo(60 / 80, 5);
+    expect(dayScore(entries, rules, { expected })).toBe(1);
+  });
+
+  it('honours a cohort lead narrowing the set', () => {
+    const expected = expectedBehaviours({
+      hasStudyRoom: true,
+      override: ['live_session_present', 'daily_check_in'],
+    });
+    expect(expected).toEqual(['live_session_present', 'daily_check_in']);
+    expect(maxDailyBehaviourPoints(rules, expected)).toBe(25);
+  });
+
+  it('never lets an override add back a behaviour the cohort cannot run', () => {
+    const expected = expectedBehaviours({
+      hasStudyRoom: false,
+      override: ['live_session_present', 'daily_check_in'],
+    });
+    expect(expected).toEqual(['daily_check_in']);
+  });
+
+  it('falls back to the derived set when the override is empty', () => {
+    expect(expectedBehaviours({ hasStudyRoom: true, override: [] })).toEqual([...BEHAVIOUR_EVENTS]);
+  });
+
+  it('still caps at 1 when a student does more than was asked', () => {
+    const expected = expectedBehaviours({
+      hasStudyRoom: true,
+      override: ['daily_check_in'],
+    });
+    const entries = BEHAVIOUR_EVENTS.map((event) => ({ event, points: rules[event] }));
+    expect(dayScore(entries, rules, { expected })).toBe(1);
+  });
+});
+
+describe('verified study-room presence fills the attendance slot', () => {
+  it('scores a presence-only day as attendance, not as nothing', () => {
+    // `showedUpForDay` has always accepted presence on its own. The score did not, so the
+    // same day read as "showed up" and "0%" at once.
+    expect(showedUpForDay({ entries: [], verifiedPresence: true })).toBe(true);
+    expect(dayScore([], rules)).toBe(0);
+    expect(dayScore([], rules, { verifiedPresence: true })).toBeCloseTo(20 / 80, 5);
+  });
+
+  it('does not pay the slot twice when the join was already scored', () => {
+    const scored = [{ event: 'live_session_present' as const, points: 20 }];
+    expect(dayScore(scored, rules, { verifiedPresence: true })).toBeCloseTo(20 / 80, 5);
+  });
+
+  it('leaves a late arrival at its reduced value', () => {
+    const late = [{ event: 'live_session_late' as const, points: 10 }];
+    expect(dayScore(late, rules, { verifiedPresence: true })).toBeCloseTo(10 / 80, 5);
+  });
+
+  it('credits nothing where the cohort has no room to attend', () => {
+    const expected = expectedBehaviours({ hasStudyRoom: false });
+    expect(dayScore([], rules, { expected, verifiedPresence: true })).toBe(0);
+  });
+
+  it('lifts a study-room-plus-check-in day off the intervention floor', () => {
+    /*
+     * The 2026-09-09 members list: students doing the study room and the check-in and
+     * nothing else scored 25/80 = 31%, under the 40% floor, every single day — so the
+     * whole cohort read `needs_intervention` while attending daily.
+     */
+    const checkInOnly = [{ event: 'daily_check_in' as const, points: 5 }];
+    expect(dayScore(checkInOnly, rules)).toBeCloseTo(5 / 80, 5);
+
+    const expected = expectedBehaviours({
+      hasStudyRoom: true,
+      override: ['live_session_present', 'daily_check_in', 'study_block_completed'],
+    });
+    const score = dayScore(checkInOnly, rules, { expected, verifiedPresence: true });
+    expect(score).toBeCloseTo(25 / 45, 5);
+    expect(score).toBeGreaterThan(0.4);
   });
 });

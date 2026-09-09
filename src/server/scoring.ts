@@ -7,6 +7,7 @@ import type { PointEvent } from '@/db/schema';
 import {
   assessmentAttempts,
   assessments,
+  attendance,
   checkIns,
   dailyActivity,
   pointsLedger,
@@ -24,6 +25,7 @@ import {
 } from '@/lib/domain/achievements';
 import type { DayLookup, DayRecord } from '@/lib/domain/consistency';
 import {
+  type BehaviourEvent,
   type PointRules,
   bandForDay,
   dayScore,
@@ -137,10 +139,16 @@ export async function recomputeDay(args: {
   date: ISODate;
   calendar: CohortCalendar;
   rules: PointRules;
+  /**
+   * The behaviours this cohort asks for — the day score's denominator. Omitted means the
+   * full catalogue, which is right for a caller with no cohort in hand and wrong for one
+   * that has it, so every real caller passes it. See `expectedBehavioursFor`.
+   */
+  expected?: readonly BehaviourEvent[];
 }): Promise<DayRecord> {
-  const { memberId, date, calendar, rules } = args;
+  const { memberId, date, calendar, rules, expected } = args;
 
-  const [entries, sessionRows, checkInRows, presenceRows] = await Promise.all([
+  const [entries, sessionRows, checkInRows, presenceRows, attendanceRows] = await Promise.all([
     db
       .select({ event: pointsLedger.event, points: pointsLedger.points })
       .from(pointsLedger)
@@ -164,10 +172,20 @@ export async function recomputeDay(args: {
       .from(studyRoomPresence)
       .where(and(eq(studyRoomPresence.memberId, memberId), eq(studyRoomPresence.date, date)))
       .limit(1),
+    /*
+     * Read only to see whether a cohort lead has ruled this day absent. A human call
+     * outranks a self-report everywhere else in this codebase and it does here too: without
+     * this, crediting the attendance slot from a presence row would quietly overturn the
+     * mark, which is the opposite of what an override is for.
+     */
+    db
+      .select({ status: attendance.status })
+      .from(attendance)
+      .where(and(eq(attendance.memberId, memberId), eq(attendance.date, date)))
+      .limit(1),
   ]);
 
   const isActive = isActiveStudyDay(calendar, date);
-  const score = dayScore(entries, rules);
   const points = entries.reduce((sum, e) => sum + e.points, 0);
 
   // Prefer the student's self-reported minutes; fall back to tracked session time.
@@ -188,6 +206,16 @@ export async function recomputeDay(args: {
    */
   const verifiedPresence = presenceRows.length > 0;
   const showedUp = showedUpForDay({ entries, verifiedPresence });
+
+  /*
+   * The room's record, minus any day a cohort lead has ruled absent. This is what fills the
+   * attendance slot in the score when no ledger entry did — see `DayScoreContext`.
+   */
+  const ruledAbsent = attendanceRows[0]?.status === 'absent';
+  const score = dayScore(entries, rules, {
+    expected,
+    verifiedPresence: verifiedPresence && !ruledAbsent,
+  });
 
   /*
    * Reporting only — the day counts in full either way. This records whether the show-up
@@ -246,8 +274,9 @@ export async function recomputeRange(args: {
   to: ISODate;
   calendar: CohortCalendar;
   rules: PointRules;
+  expected?: readonly BehaviourEvent[];
 }): Promise<void> {
-  const { memberId, cohortId, calendar, rules } = args;
+  const { memberId, cohortId, calendar, rules, expected } = args;
   const days = activeStudyDaysBetween(calendar, args.from, args.to);
 
   /*
@@ -297,7 +326,7 @@ export async function recomputeRange(args: {
     await Promise.all(
       all
         .slice(i, i + BATCH)
-        .map((date) => recomputeDay({ memberId, cohortId, date, calendar, rules })),
+        .map((date) => recomputeDay({ memberId, cohortId, date, calendar, rules, expected })),
     );
   }
 }
@@ -371,10 +400,11 @@ export async function settleDay(args: {
   date: ISODate;
   calendar: CohortCalendar;
   rules: PointRules;
+  expected?: readonly BehaviourEvent[];
 }): Promise<ScoringOutcome> {
-  const { memberId, cohortId, date, calendar, rules } = args;
+  const { memberId, cohortId, date, calendar, rules, expected } = args;
 
-  await recomputeDay({ memberId, cohortId, date, calendar, rules });
+  await recomputeDay({ memberId, cohortId, date, calendar, rules, expected });
 
   const to = minDate(date, calendar.endDate);
 
@@ -531,7 +561,7 @@ export async function settleDay(args: {
     return { pointsAwarded, streak: streak.length, milestone, newAchievements };
   }
 
-  await recomputeDay({ memberId, cohortId, date, calendar, rules });
+  await recomputeDay({ memberId, cohortId, date, calendar, rules, expected });
   const settled = await loadActivity(memberId, calendar.startDate, to);
 
   return {

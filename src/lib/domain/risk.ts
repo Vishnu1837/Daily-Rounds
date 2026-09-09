@@ -5,8 +5,21 @@
  * can trust that a red badge reflects what actually happened this week.
  *
  * 🟢 on track            — participating.
- * 🟡 at risk             — N consecutive active days missed, or a meaningful consistency drop.
- * 🔴 needs intervention  — M+ consecutive active days missed, or very low participation.
+ * 🟡 at risk             — N consecutive active days missed, a meaningful consistency drop, or
+ *                          low participation on its own.
+ * 🔴 needs intervention  — M+ consecutive active days missed, or low participation that is
+ *                          either negligible or comes with days actually missed.
+ *
+ * The distinction in those last two lines is the point of the amber band, and it was missing.
+ * Low consistency escalated straight to red, so a student who attended every session but only
+ * recorded two of the six behaviours the cohort was scored out of got the same badge as one
+ * who had not appeared in a week. On 2026-09-09 that read as nine of ten active students
+ * needing intervention, none of them for missing a day — a list that says everything is
+ * urgent says nothing, and the student who really had stopped coming was invisible in it.
+ *
+ * So a thin record is now a warning. It becomes an intervention when the record is not merely
+ * thin but negligible, or when the thinness is corroborated by absence — the two cases where
+ * "we have lost this student" is a fair reading of the data rather than a guess about it.
  */
 import type { RiskLevel } from '@/db/schema';
 
@@ -26,6 +39,15 @@ export type RiskThresholds = {
    * had a rough first week is not permanently red once they turn things around.
    */
   minConsistencyPct: number;
+  /**
+   * Consistency below this is negligible rather than merely low, and is an intervention on
+   * its own — no missed days needed.
+   *
+   * Kept well under `minConsistencyPct` on purpose. Between the two a student is showing up
+   * and recording *something*, which is a conversation; below it they are enrolled and
+   * absent in all but attendance, which is not.
+   */
+  interventionConsistencyPct: number;
   /** How many recent active study days the participation check looks at. */
   participationWindowDays: number;
 };
@@ -35,6 +57,7 @@ export const DEFAULT_RISK_THRESHOLDS: RiskThresholds = {
   interventionMissedDays: 3,
   atRiskConsistencyDropPct: 15,
   minConsistencyPct: 40,
+  interventionConsistencyPct: 20,
   participationWindowDays: 10,
 };
 
@@ -111,7 +134,16 @@ export function calculateRiskStatus(args: {
 
   if (recent.activeDays >= 5 && recent.consistencyPct < t.minConsistencyPct) {
     reasons.push(`Recent consistency is only ${recent.consistencyPct}%`);
-    escalate('needs_intervention');
+
+    /*
+     * Amber unless the data says more than "thin". Either of these makes it red:
+     *   - negligible participation, which needs no corroboration; or
+     *   - days actually missed alongside it, which is a student pulling away rather than a
+     *     student logging less than the scoring model asks for.
+     */
+    const negligible = recent.consistencyPct < t.interventionConsistencyPct;
+    const alsoAbsent = missed >= t.atRiskMissedDays;
+    escalate(negligible || alsoAbsent ? 'needs_intervention' : 'at_risk');
   }
 
   // Only compare weeks once the current one has enough elapsed days to be a fair sample —

@@ -230,6 +230,7 @@ export async function finishSessionAction(sessionId: string): Promise<Result<Fin
       date: session.date,
       calendar: ctx.calendar,
       rules: ctx.rules,
+      expected: ctx.expected,
     });
 
     revalidatePath('/today');
@@ -312,6 +313,7 @@ export async function completeTargetAction(slot?: RoadmapSlot): Promise<Result<S
       date: ctx.today,
       calendar: ctx.calendar,
       rules: ctx.rules,
+      expected: ctx.expected,
     });
 
     revalidatePath('/today');

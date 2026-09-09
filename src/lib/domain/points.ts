@@ -108,10 +108,72 @@ export function behaviourSlot(event: PointEvent): BehaviourEvent | null {
     : null;
 }
 
-/** Maximum points a student can earn in one day from behaviour alone. */
-export function maxDailyBehaviourPoints(rules: PointRules): number {
-  return BEHAVIOUR_EVENTS.reduce((sum, e) => sum + Math.max(0, rules[e]), 0);
+/**
+ * The behaviours a given cohort actually asks its students for.
+ *
+ * `BEHAVIOUR_EVENTS` is the full catalogue of things this product can score. It was also,
+ * for a long time, the denominator — every cohort was marked out of all six whether or not
+ * it ran all six. A cohort with no study room could not exceed 60/80, so its students
+ * topped out at 75% while doing everything asked of them, and the 40% intervention floor
+ * sat only 15 points below a perfect day. On 2026-09-09 that showed up as a members list
+ * where nine of ten active students were flagged `needs_intervention` for
+ * "recent consistency is only …%" — none of them for missing a day.
+ *
+ * So the denominator is now the behaviours the cohort offers, and nothing else. A behaviour
+ * the cohort does not run is not a behaviour its students are failing to do.
+ *
+ * Derived, not stored, in keeping with the rest of the scoring model: the study-room slot is
+ * expected exactly when the cohort has a room to attend. `override` is the cohort lead's
+ * say-so (`CohortSettings.expectedBehaviours`) for the judgements the data cannot make —
+ * a cohort that does not ask for a written reflection, say. An empty or unset override
+ * means "use the derived set"; an override never adds a behaviour the cohort cannot run.
+ */
+export function expectedBehaviours(args: {
+  /** True when the cohort has a study room for students to attend. */
+  hasStudyRoom: boolean;
+  override?: readonly BehaviourEvent[] | null;
+}): BehaviourEvent[] {
+  const offered = BEHAVIOUR_EVENTS.filter(
+    (event) => event !== 'live_session_present' || args.hasStudyRoom,
+  );
+
+  const override = args.override?.filter((event) => offered.includes(event)) ?? [];
+  return override.length > 0 ? offered.filter((event) => override.includes(event)) : offered;
 }
+
+/**
+ * Maximum points a student can earn in one day from the behaviours actually asked of them.
+ *
+ * Defaults to the full catalogue so a caller with no cohort in hand — the settings screen
+ * explaining the rules, for instance — still gets the headline number.
+ */
+export function maxDailyBehaviourPoints(
+  rules: PointRules,
+  expected: readonly BehaviourEvent[] = BEHAVIOUR_EVENTS,
+): number {
+  return expected.reduce((sum, e) => sum + Math.max(0, rules[e]), 0);
+}
+
+export type DayScoreContext = {
+  /** The behaviours this cohort asks for. Defaults to the full catalogue. */
+  expected?: readonly BehaviourEvent[];
+  /**
+   * True when the study room's own record puts this student in it, and no cohort lead has
+   * ruled otherwise.
+   *
+   * `showedUpForDay` has always accepted this as proof of attendance, but the score did not:
+   * the attendance slot is filled by a ledger entry, and the join only writes one when it is
+   * also the thing that creates the day's attendance row. A student an admin had already
+   * marked, or whose mark was recut, could therefore be present in the room, `showedUp`, and
+   * scored zero for attending — the two derived facts disagreeing about the same day, with
+   * the disagreement landing on the student as a 0% morning.
+   *
+   * Filling the slot from presence closes that. It is credit for the behaviour that actually
+   * happened, not a second payment: an entry already in the slot wins, so this can never
+   * double-count a join that was scored normally, and nothing is written to the ledger.
+   */
+  verifiedPresence?: boolean;
+};
 
 /**
  * A day's completion score in [0, 1]: behaviour points earned over the behaviour maximum.
@@ -120,13 +182,24 @@ export function maxDailyBehaviourPoints(rules: PointRules): number {
 export function dayScore(
   entries: readonly { event: PointEvent; points: number }[],
   rules: PointRules,
+  context?: DayScoreContext,
 ): number {
-  const max = maxDailyBehaviourPoints(rules);
+  const expected = context?.expected ?? BEHAVIOUR_EVENTS;
+  const max = maxDailyBehaviourPoints(rules, expected);
   if (max <= 0) return 0;
-  const earned = entries.reduce(
+
+  let earned = entries.reduce(
     (sum, e) => (behaviourSlot(e.event) ? sum + Math.max(0, e.points) : sum),
     0,
   );
+
+  const attendanceScored = entries.some(
+    (e) => behaviourSlot(e.event) === 'live_session_present' && e.points > 0,
+  );
+  if (context?.verifiedPresence && !attendanceScored && expected.includes('live_session_present')) {
+    earned += Math.max(0, rules.live_session_present);
+  }
+
   return Math.min(1, earned / max);
 }
 
