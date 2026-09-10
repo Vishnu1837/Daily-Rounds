@@ -79,6 +79,13 @@ const TILT = 7;
 /** Drag distance, in px, at which each grade takes over. */
 const THRESHOLD = { soft: 52, hard: 128 } as const;
 
+/**
+ * How far a face-down card must be thrown — in any direction, velocity folded in — before
+ * it counts as a skip and loops to the back of the deck. The card-stack "send to back"
+ * gesture; kept well clear of an accidental nudge.
+ */
+const SKIP_SENSITIVITY = 120;
+
 const TILT_SPRING = { stiffness: 220, damping: 22, mass: 0.35 };
 const FLIP_SPRING = { stiffness: 210, damping: 24, mass: 0.7 };
 
@@ -98,6 +105,35 @@ const EXIT: Record<Grade, { x: number; y: number; scale: number }> = {
   easy: { x: 520, y: -190, scale: 1.02 },
 };
 
+/**
+ * Where a card goes as it leaves, by intent.
+ *
+ * A `Grade` throws it away in that grade's own direction and distance; `'skip'` settles it
+ * straight down and a touch smaller, so it reads as tucking back under the deck rather than
+ * being discarded; anything else is a plain fade. Resolved dynamically from the caller's
+ * `AnimatePresence` `custom`, so the outgoing card uses the intent from the moment it left.
+ */
+export function exitTarget(intent: Grade | 'skip' | null, reduce: boolean) {
+  if (reduce) return { opacity: 0, transition: { duration: 0.12 } };
+  if (intent === 'skip') {
+    return {
+      x: 0,
+      y: 16,
+      scale: 0.95,
+      opacity: 0,
+      transition: { type: 'spring' as const, stiffness: 300, damping: 30 },
+    };
+  }
+  if (intent) {
+    return {
+      ...EXIT[intent],
+      opacity: 0,
+      transition: { duration: 0.34, ease: [0.32, 0, 0.67, 0] as const },
+    };
+  }
+  return { opacity: 0, scale: 0.96, transition: { duration: 0.2 } };
+}
+
 /** The grade a horizontal offset currently means, or null inside the dead zone. */
 export function gradeForOffset(offset: number): Grade | null {
   if (offset <= -THRESHOLD.hard) return 'again';
@@ -115,9 +151,10 @@ export function Flashcard({
   onReveal,
   onGrade,
   onDragGrade,
-  exitGrade,
+  onSkip,
   reduce,
   swipeEnabled,
+  skipEnabled,
 }: {
   card: SessionCard;
   revealed: boolean;
@@ -127,9 +164,12 @@ export function Flashcard({
   onGrade: (grade: Grade) => void;
   /** Fires as the drag crosses zones, so the outcome rail can light up in step. */
   onDragGrade: (grade: Grade | null) => void;
-  exitGrade: Grade | null;
+  /** Fires when a face-down card is thrown far enough to send it to the back of the deck. */
+  onSkip: () => void;
   reduce: boolean;
   swipeEnabled: boolean;
+  /** Whether the face-down skip throw is available (off for the last remaining card). */
+  skipEnabled: boolean;
 }) {
   const [dragging, setDragging] = useState(false);
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -228,12 +268,40 @@ export function Flashcard({
     onDragGrade(zone);
   });
 
-  const canDrag = swipeEnabled && faceUp && !reduce;
+  /*
+   * Two throws share the one draggable element, and which one is live depends only on
+   * whether the card is face up:
+   *   - face up  → drag left/right to grade (`canGrade`), x-axis only so the page can still
+   *     scroll vertically under a thumb.
+   *   - face down → throw in any direction to skip (`canSkip`), the card-stack send-to-back.
+   */
+  const canGrade = swipeEnabled && faceUp && !reduce;
+  const canSkip = skipEnabled && !faceUp && !reduce;
+  const canDrag = canGrade || canSkip;
+
+  // Set the moment a real drag begins; read by the reveal click so a throw never also flips.
+  const didDragRef = useRef(false);
 
   const handleDragEnd = useCallback(
     (_: unknown, info: PanInfo) => {
       draggingRef.current = false;
       setDragging(false);
+
+      if (!faceUp) {
+        /*
+         * Skip: any direction, velocity folded in the same way the grade throw folds it, so
+         * a fast flick counts even if it did not travel the full distance. Under the
+         * threshold, `dragSnapToOrigin` carries the card back on its own.
+         */
+        const projectedX = info.offset.x + info.velocity.x * 0.08;
+        const projectedY = info.offset.y + info.velocity.y * 0.08;
+        if (Math.hypot(projectedX, projectedY) > SKIP_SENSITIVITY) onSkip();
+        window.setTimeout(() => {
+          didDragRef.current = false;
+        }, 0);
+        return;
+      }
+
       /*
        * Velocity is folded into the offset rather than tested separately. A quick flick
        * that only travels 60px is unambiguously a throw, and requiring it to also cross a
@@ -248,13 +316,15 @@ export function Flashcard({
       onDragGrade(null);
       lastZone.current = null;
     },
-    [onGrade, onDragGrade],
+    [faceUp, onGrade, onSkip, onDragGrade],
   );
 
   /* --------------------------------------------------------------- click */
 
   const handleSurfaceClick = useCallback(() => {
     if (faceUp) return;
+    // A throw that fell short still fires a click on release; it must not also flip the card.
+    if (didDragRef.current) return;
     // A choice card is answered by choosing; flipping it early would skip the question.
     if (card.correctOption !== null && chosen === null) return;
     onReveal();
@@ -263,27 +333,32 @@ export function Flashcard({
   return (
     <motion.div
       // `key` lives on the caller's AnimatePresence; this element owns only the throw.
-      drag={canDrag ? 'x' : false}
+      drag={canGrade ? 'x' : canSkip ? true : false}
       dragSnapToOrigin
       dragElastic={0.5}
-      dragConstraints={{ left: 0, right: 0 }}
+      dragConstraints={canSkip ? { top: 0, right: 0, bottom: 0, left: 0 } : { left: 0, right: 0 }}
       onDragStart={() => {
         draggingRef.current = true;
+        didDragRef.current = true;
         setDragging(true);
       }}
       onDragEnd={handleDragEnd}
-      style={{ x, y, rotate, touchAction: canDrag ? 'pan-y' : 'auto' }}
+      style={{
+        x,
+        y,
+        rotate,
+        touchAction: canSkip ? 'none' : canGrade ? 'pan-y' : 'auto',
+      }}
       initial={reduce ? { opacity: 0 } : { opacity: 0, y: 40, scale: 0.93 }}
       animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
-      exit={
-        exitGrade && !reduce
-          ? {
-              ...EXIT[exitGrade],
-              opacity: 0,
-              transition: { duration: 0.34, ease: [0.32, 0, 0.67, 0] },
-            }
-          : { opacity: 0, scale: 0.96, transition: { duration: reduce ? 0.12 : 0.2 } }
-      }
+      /*
+        The exit is a dynamic variant so framer resolves it against the `custom` on the
+        caller's `AnimatePresence`: the card that is leaving reads the intent set at the
+        instant it left — `'skip'` settles it back down toward the deck, a `Grade` throws it
+        away in that grade's direction, anything else is a plain fade.
+      */
+      variants={{ exit: (intent: Grade | 'skip' | null) => exitTarget(intent, reduce) }}
+      exit="exit"
       transition={reduce ? { duration: 0.15 } : { type: 'spring', stiffness: 260, damping: 26 }}
       className={cn('absolute inset-x-0 top-0', canDrag && 'cursor-grab active:cursor-grabbing')}
     >
@@ -355,9 +430,11 @@ export function Flashcard({
       </div>
 
       <span className="sr-only" aria-hidden={!canDrag}>
-        {canDrag
+        {canGrade
           ? 'You can also swipe this card: left to mark it forgotten, right to mark it known.'
-          : ''}
+          : canSkip
+            ? 'You can throw this card away in any direction to skip it for now; it comes back later this session. Or press S.'
+            : ''}
       </span>
     </motion.div>
   );

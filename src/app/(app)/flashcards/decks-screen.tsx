@@ -1,31 +1,113 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { ArrowRight, Clock, Flame, Layers, Sparkles } from 'lucide-react';
+import { ArrowLeft, Clock, Flame, Layers, Sparkles } from 'lucide-react';
 
+import Folder from '@/components/flashcards/folder';
+import { SubjectCarousel, type SubjectCard } from '@/components/flashcards/subject-carousel';
 import { EmptyState } from '@/components/ui/feedback';
 import { PageHeader } from '@/components/ui/page-header';
 import { Reveal } from '@/components/ui/reveal';
 import { cn } from '@/lib/cn';
 import { deckProgress, estimatedMinutes } from '@/lib/domain/flashcards';
 import { haptic } from '@/lib/haptics';
-import { usePrefersReducedMotion } from '@/lib/use-reduced-motion';
+import { SUBJECTS, type SubjectEntry } from '@/lib/subjects';
 import type { DeckSummary } from '@/server/queries/flashcards';
 
 /**
- * The deck shelf.
+ * Accent token → a hex the `<Folder />` can tint itself with. The subject's own accent, so
+ * every folder in a section is the same colour — a drawer of same-coloured folders.
+ */
+const ACCENT_HEX: Record<string, string> = {
+  rose: '#F43F5E',
+  orange: '#F97316',
+  amber: '#F59E0B',
+  lime: '#65A30D',
+  emerald: '#10B981',
+  teal: '#14B8A6',
+  cyan: '#06B6D4',
+  sky: '#0EA5E9',
+  blue: '#3B82F6',
+  indigo: '#6366F1',
+  violet: '#8B5CF6',
+  fuchsia: '#D946EF',
+  slate: '#64748B',
+};
+
+const FALLBACK_HEX = '#6366F1';
+
+/** Accent + course order for a subject slug, from the catalogue. */
+const SUBJECT_META = new Map<string, SubjectEntry>(SUBJECTS.map((s) => [s.slug, s]));
+
+/** The bucket a deck with no subject falls into. */
+const UNFILED_SLUG = '__unfiled__';
+
+type SubjectGroup = {
+  card: SubjectCard;
+  decks: DeckSummary[];
+};
+
+/**
+ * Fold the flat deck list into one group per subject, in course order.
  *
- * A deck is drawn as a deck — a face with two card edges showing behind it — rather than as
- * a rectangle with a title in it. That is not decoration: it is the same object the student
- * is about to open, in the same place, so pressing it reads as picking something up. The
- * session screen's opening animation continues this exact shape, which is what makes the
- * navigation between the two feel like one movement instead of two screens.
+ * Decks arrive already filtered to this student's roadmap and pre-sorted (started, then
+ * untouched, then finished) by `getDecks`; that order is preserved inside each group, so a
+ * subject's shelf still leads with whatever the student had in progress.
+ */
+function groupBySubject(decks: DeckSummary[]): SubjectGroup[] {
+  const groups = new Map<string, SubjectGroup>();
+  const studyStreak = decks[0]?.studyStreak ?? 0;
+
+  for (const deck of decks) {
+    const slug = deck.subjectSlug ?? UNFILED_SLUG;
+    let group = groups.get(slug);
+    if (!group) {
+      const meta = deck.subjectSlug ? SUBJECT_META.get(deck.subjectSlug) : undefined;
+      group = {
+        card: {
+          slug,
+          name: deck.subjectName ?? 'Other topics',
+          accent: meta?.accent ?? 'slate',
+          number: meta?.number ?? null,
+          deckCount: 0,
+          cardCount: 0,
+          dueCount: 0,
+          studyStreak,
+        },
+        decks: [],
+      };
+      groups.set(slug, group);
+    }
+    group.decks.push(deck);
+    group.card.deckCount += 1;
+    group.card.cardCount += deck.cardCount;
+    group.card.dueCount += deck.due;
+  }
+
+  return [...groups.values()].sort((a, b) => {
+    // Course order; the unfiled bucket always sinks to the end.
+    const rank = (n: number | null) => n ?? 999;
+    return rank(a.card.number) - rank(b.card.number) || a.card.name.localeCompare(b.card.name);
+  });
+}
+
+/**
+ * Flashcards opens onto subjects, not the whole deck catalogue.
+ *
+ * The first screen is a carousel of gradient subject cards; choosing one unfolds that
+ * subject's decks — the same deck shelf as before, now scoped. It is one client component
+ * with a `selected` slug rather than a route change: "a section opens" is exactly what an
+ * in-place swap reads as, and Back on the deck shelf returns to the subjects without a
+ * navigation.
  */
 export function DecksScreen({ decks }: { decks: DeckSummary[] }) {
   const studyStreak = decks[0]?.studyStreak ?? 0;
   const dueTotal = decks.reduce((sum, deck) => sum + deck.due, 0);
+
+  const groups = useMemo(() => groupBySubject(decks), [decks]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const activeGroup = groups.find((g) => g.card.slug === selected) ?? null;
 
   if (decks.length === 0) {
     return (
@@ -47,12 +129,54 @@ export function DecksScreen({ decks }: { decks: DeckSummary[] }) {
     );
   }
 
+  if (activeGroup) {
+    return (
+      <div className="space-y-5">
+        <button
+          type="button"
+          onClick={() => {
+            haptic('tap');
+            setSelected(null);
+          }}
+          className="tap text-fg-muted hover:text-fg -mb-1 inline-flex items-center gap-1.5 px-1 text-sm font-bold transition-colors"
+        >
+          <ArrowLeft className="size-4" aria-hidden />
+          All subjects
+        </button>
+
+        <PageHeader
+          eyebrow={`${activeGroup.card.deckCount} ${activeGroup.card.deckCount === 1 ? 'deck' : 'decks'}`}
+          title={activeGroup.card.name}
+          description="Answer it in your head, then turn the card over. The ones you forget come back sooner."
+        >
+          {activeGroup.card.dueCount > 0 && (
+            <span className="rounded-pill bg-pulse-500/12 text-pulse-700 dark:text-pulse-300 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold">
+              <Sparkles className="size-3.5" aria-hidden />
+              {activeGroup.card.dueCount} due today
+            </span>
+          )}
+        </PageHeader>
+
+        <ul className="grid grid-cols-2 gap-x-4 gap-y-7 pt-4 sm:grid-cols-3 lg:grid-cols-4">
+          {activeGroup.decks.map((deck, i) => (
+            <Reveal key={deck.id} delay={i} as="li">
+              <DeckFolder
+                deck={deck}
+                colorHex={ACCENT_HEX[activeGroup.card.accent] ?? FALLBACK_HEX}
+              />
+            </Reveal>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="Library"
         title="Flashcards"
-        description="Answer it in your head, then turn the card over. The ones you forget come back sooner."
+        description="Pick a subject to open its decks. The ones you forget come back sooner."
       >
         <div className="flex flex-wrap items-center gap-2">
           {dueTotal > 0 && (
@@ -70,179 +194,106 @@ export function DecksScreen({ decks }: { decks: DeckSummary[] }) {
         </div>
       </PageHeader>
 
-      <ul className="grid gap-3.5 lg:grid-cols-2">
-        {decks.map((deck, i) => (
-          <Reveal key={deck.id} delay={i} as="li">
-            <DeckCard deck={deck} />
-          </Reveal>
-        ))}
-      </ul>
+      <SubjectCarousel subjects={groups.map((g) => g.card)} onOpen={(slug) => setSelected(slug)} />
     </div>
   );
 }
 
-function DeckCard({ deck }: { deck: DeckSummary }) {
+/**
+ * One deck on a subject's shelf, drawn as a `<Folder />` (React Bits).
+ *
+ * The deck browser is a drawer of folders now, all tinted with the subject's accent. A
+ * folder peeks its papers on hover — a glance at what is inside — and a click navigates
+ * straight into the session; it never toggles open, because "open" here means "study this".
+ * The title and counts live under the folder so the shelf is still readable at rest, and the
+ * folder's own `aria-label` carries the same state for a screen reader.
+ */
+function DeckFolder({ deck, colorHex }: { deck: DeckSummary; colorHex: string }) {
   const router = useRouter();
-  const reduce = usePrefersReducedMotion();
-  const [launching, setLaunching] = useState(false);
 
   const progress = deckProgress(deck.mix);
   const started = progress.done > 0;
   const minutes = deck.estimatedMinutes || estimatedMinutes(deck.cardCount);
 
-  /**
-   * Opening the deck.
-   *
-   * The navigation happens immediately and the lift plays *over* it, rather than the route
-   * change waiting on a timer for the animation to finish.
-   *
-   * It was written the other way round first — animate for 210ms, then push — to guarantee
-   * the lift was seen. That put a timer on the critical path of 'the button works', and a
-   * timer is exactly the thing an environment is allowed to delay or drop: throttled in a
-   * background tab, starved on a slow phone. The failure it produces is the worst kind,
-   * because pressing Continue simply does nothing and there is no way to tell whether the
-   * press registered.
-   *
-   * Nothing is lost by removing it. The session screen opens with this same deck face in
-   * this same position and lifts it away to expose the first card, so the continuity a
-   * student actually perceives is carried by the destination — this end only has to
-   * acknowledge the press, which it does on the frame it happens.
-   */
   function open() {
     haptic('commit');
-    setLaunching(true);
     router.push(`/flashcards/${deck.id}`);
   }
 
+  const label =
+    `${deck.title}. ${deck.cardCount} cards, about ${minutes} minutes. ` +
+    (started ? `${progress.done} of ${progress.total} seen. ` : 'Not started. ') +
+    (deck.due > 0 ? `${deck.due} due. ` : '') +
+    'Press to open.';
+
   return (
-    <motion.div
-      animate={launching && !reduce ? { scale: 1.035, y: -8 } : { scale: 1, y: 0 }}
-      transition={{ type: 'spring', stiffness: 380, damping: 26 }}
-      className="relative h-full"
+    <div
+      className="flex flex-col items-center pt-8"
+      onPointerEnter={() => router.prefetch(`/flashcards/${deck.id}`)}
     >
-      {/* The rest of the deck, showing behind the face. Pure shape; nothing readable. */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-full" aria-hidden>
-        <div className="rounded-card border-border bg-bg-elevated absolute inset-0 translate-y-1.5 scale-[0.985] border opacity-60" />
-        <div className="rounded-card border-border bg-bg-elevated absolute inset-0 translate-y-3 scale-[0.968] border opacity-35" />
-      </div>
+      <Folder
+        color={colorHex}
+        size={1.1}
+        onActivate={open}
+        ariaLabel={label}
+        items={[
+          <span key="a" className="text-[9px] font-bold text-slate-500">
+            {deck.due > 0 ? `${deck.due} due` : started ? 'In progress' : 'New deck'}
+          </span>,
+          <MiniMeter key="b" deck={deck} />,
+          <span key="c" className="text-[9px] font-bold text-slate-700">
+            {started ? 'Continue →' : 'Start →'}
+          </span>,
+        ]}
+      />
 
-      <button
-        type="button"
-        onClick={open}
-        onPointerEnter={() => router.prefetch(`/flashcards/${deck.id}`)}
-        className={cn(
-          'tap rounded-card border-border bg-bg-elevated shadow-soft group relative flex h-full w-full flex-col overflow-hidden border p-5 text-left',
-          'ease-out-soft transition-[transform,box-shadow,border-color] duration-200',
-          'hover:shadow-lift hover:border-pulse-300/70 hover:-translate-y-1',
-          'active:translate-y-0 active:scale-[0.995]',
-          'motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100',
+      <p className="text-fg mt-3 line-clamp-2 text-center text-sm font-bold text-balance">
+        {deck.title}
+      </p>
+      <p className="text-2xs text-fg-muted mt-1 flex items-center gap-1.5 font-semibold tabular-nums">
+        <span>{deck.cardCount} cards</span>
+        <span className="bg-border size-1 rounded-full" aria-hidden />
+        <span className="inline-flex items-center gap-0.5">
+          <Clock className="size-3" aria-hidden />~{minutes} min
+        </span>
+      </p>
+      <p className="text-2xs text-fg-subtle mt-0.5 font-semibold tabular-nums">
+        {started ? `${progress.done}/${progress.total} seen` : 'Not started'}
+        {deck.mix.mastered > 0 && (
+          <span className="text-success-strong dark:text-success">
+            {' '}
+            · {deck.mix.mastered} mastered
+          </span>
         )}
-      >
-        {/*
-          A wash that only appears on hover, anchored to the top-right corner the arrow sits
-          in. It gives the press somewhere to travel toward without putting a gradient on
-          every card in the list at rest.
-        */}
-        <span
-          className="from-pulse-500/10 pointer-events-none absolute -top-16 -right-16 size-40 rounded-full bg-radial to-transparent opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-100"
-          aria-hidden
-        />
-
-        <div className="relative flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="eyebrow truncate">{deck.subjectName ?? deck.topicLabel ?? 'Deck'}</p>
-            <h2 className="text-fg mt-1.5 text-lg font-extrabold tracking-tight text-balance">
-              {deck.title}
-            </h2>
-          </div>
-
-          {deck.due > 0 && (
-            <span className="rounded-pill bg-pulse-500/14 text-pulse-700 dark:text-pulse-300 text-2xs shrink-0 px-2.5 py-1 font-bold tabular-nums">
-              {deck.due} due
-            </span>
-          )}
-        </div>
-
-        <p className="text-fg-muted relative mt-2.5 flex items-center gap-3 text-xs font-semibold">
-          <span className="tabular-nums">{deck.cardCount} cards</span>
-          <span className="bg-border size-1 rounded-full" aria-hidden />
-          <span className="inline-flex items-center gap-1 tabular-nums">
-            <Clock className="size-3.5" aria-hidden />~{minutes} min
-          </span>
-        </p>
-
-        {/*
-          The mastery meter. Four segments in the same colours the grade buttons use, so a
-          glance at the shelf tells you which decks are green and which are still amber —
-          without a single number to read.
-        */}
-        <div className="relative mt-4 flex-1">
-          <MasteryMeter deck={deck} />
-        </div>
-
-        <div className="relative mt-4 flex items-center justify-between gap-3">
-          <p className="text-fg-subtle text-xs font-semibold tabular-nums">
-            {started ? `${progress.done} / ${progress.total} seen` : 'Not started'}
-            {deck.mix.mastered > 0 && (
-              <span className="text-success-strong dark:text-success">
-                {' '}
-                · {deck.mix.mastered} mastered
-              </span>
-            )}
-          </p>
-
-          <span
-            className={cn(
-              'rounded-pill inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-bold',
-              'from-pulse-500 to-pulse-600 bg-linear-to-b text-white',
-              'ease-out-soft transition-transform duration-200 group-hover:translate-x-0.5',
-              'motion-reduce:group-hover:translate-x-0',
-            )}
-          >
-            {started ? 'Continue' : 'Start'}
-            <ArrowRight className="size-4" aria-hidden />
-          </span>
-        </div>
-      </button>
-    </motion.div>
+      </p>
+    </div>
   );
 }
 
 /**
- * The four-segment mastery meter.
+ * The mastery meter, shrunk to sit on a folder's paper.
  *
- * Segments rather than a single percentage fill, because "62% done" hides the distinction
- * that actually matters here: a deck where the remaining third is *difficult* is a very
- * different evening from one where it is merely *new*. The widths are the counts, and an
- * untouched deck is a flat inset track rather than a bar at zero — nothing to feel bad about
- * before you have begun.
+ * Same three bands and colours as the deck shelf used before — mastered green, learning
+ * indigo, difficult amber — just at paper scale. An untouched deck is a flat track.
  */
-function MasteryMeter({ deck }: { deck: DeckSummary }) {
+function MiniMeter({ deck }: { deck: DeckSummary }) {
   const segments = [
-    { key: 'mastered', value: deck.mix.mastered, className: 'bg-success', label: 'mastered' },
-    { key: 'learning', value: deck.mix.learning, className: 'bg-pulse-500', label: 'learning' },
-    { key: 'difficult', value: deck.mix.difficult, className: 'bg-flame-500', label: 'difficult' },
+    { key: 'mastered', value: deck.mix.mastered, className: 'bg-emerald-500' },
+    { key: 'learning', value: deck.mix.learning, className: 'bg-indigo-500' },
+    { key: 'difficult', value: deck.mix.difficult, className: 'bg-amber-500' },
   ].filter((segment) => segment.value > 0);
 
   const total = deck.cardCount || 1;
 
   return (
-    <div
-      className="bg-bg-inset flex h-1.5 w-full overflow-hidden rounded-full"
-      role="img"
-      aria-label={
-        segments.length === 0
-          ? 'Not started'
-          : segments.map((s) => `${s.value} ${s.label}`).join(', ')
-      }
-    >
+    <span className="flex h-1 w-10 overflow-hidden rounded-full bg-slate-200" aria-hidden>
       {segments.map((segment) => (
         <span
           key={segment.key}
-          className={cn('ease-out-soft h-full transition-[width] duration-500', segment.className)}
+          className={cn('h-full', segment.className)}
           style={{ width: `${(segment.value / total) * 100}%` }}
         />
       ))}
-    </div>
+    </span>
   );
 }

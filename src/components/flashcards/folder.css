@@ -1,0 +1,162 @@
+/*
+ * Folder — ported from React Bits (reactbits.dev), JavaScript + CSS variant.
+ *
+ * Class names are prefixed `rbf` so the generic pieces (`paper`, `front`) cannot collide
+ * with the app's own utilities. Colours come in through CSS custom properties set inline by
+ * the component. A `prefers-reduced-motion` block at the end flattens every transform so the
+ * folder still opens, just without the fan-out.
+ */
+
+.rbf {
+  transition: transform 0.2s ease-in;
+  cursor: pointer;
+}
+
+.rbf:not(.rbf--click):hover {
+  transform: translateY(-8px);
+}
+
+.rbf:not(.rbf--click):hover .rbf-paper {
+  transform: translate(-50%, 0%);
+}
+
+.rbf:not(.rbf--click):hover .rbf__front {
+  transform: skew(15deg) scaleY(0.6);
+}
+
+.rbf:not(.rbf--click):hover .rbf__front--right {
+  transform: skew(-15deg) scaleY(0.6);
+}
+
+.rbf.open {
+  transform: translateY(-8px);
+}
+
+.rbf.open .rbf-paper:nth-child(1) {
+  transform: translate(-120%, -70%) rotateZ(-15deg);
+}
+
+.rbf.open .rbf-paper:nth-child(1):hover {
+  transform: translate(-120%, -70%) rotateZ(-15deg) scale(1.1);
+}
+
+.rbf.open .rbf-paper:nth-child(2) {
+  transform: translate(10%, -70%) rotateZ(15deg);
+  height: 80%;
+}
+
+.rbf.open .rbf-paper:nth-child(2):hover {
+  transform: translate(10%, -70%) rotateZ(15deg) scale(1.1);
+}
+
+.rbf.open .rbf-paper:nth-child(3) {
+  transform: translate(-50%, -100%) rotateZ(5deg);
+  height: 80%;
+}
+
+.rbf.open .rbf-paper:nth-child(3):hover {
+  transform: translate(-50%, -100%) rotateZ(5deg) scale(1.1);
+}
+
+.rbf.open .rbf__front {
+  transform: skew(15deg) scaleY(0.6);
+}
+
+.rbf.open .rbf__front--right {
+  transform: skew(-15deg) scaleY(0.6);
+}
+
+.rbf__back {
+  position: relative;
+  width: 100px;
+  height: 80px;
+  background: var(--folder-back-color);
+  border-radius: 0 10px 10px 10px;
+}
+
+.rbf__back::after {
+  position: absolute;
+  z-index: 0;
+  bottom: 98%;
+  left: 0;
+  content: '';
+  width: 30px;
+  height: 10px;
+  background: var(--folder-back-color);
+  border-radius: 5px 5px 0 0;
+}
+
+.rbf-paper {
+  position: absolute;
+  z-index: 2;
+  bottom: 10%;
+  left: 50%;
+  transform: translate(-50%, 10%);
+  width: 70%;
+  height: 80%;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  overflow: hidden;
+  background: var(--paper-1);
+  border-radius: 10px;
+  transition: transform 0.3s ease-in-out;
+}
+
+.rbf-paper:nth-child(2) {
+  background: var(--paper-2);
+  width: 80%;
+  height: 70%;
+}
+
+.rbf-paper:nth-child(3) {
+  background: var(--paper-3);
+  width: 90%;
+  height: 60%;
+}
+
+.rbf__front {
+  position: absolute;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  background: var(--folder-color);
+  border-radius: 5px 10px 10px 10px;
+  transform-origin: bottom;
+  transition: transform 0.3s ease-in-out;
+}
+
+.rbf:focus-visible {
+  outline: 2px solid var(--color-pulse-400, #8b8bff);
+  outline-offset: 4px;
+  border-radius: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rbf,
+  .rbf .rbf-paper,
+  .rbf .rbf__front {
+    transition: none;
+  }
+
+  .rbf:hover,
+  .rbf.open {
+    transform: none;
+  }
+
+  .rbf:hover .rbf-paper,
+  .rbf.open .rbf-paper,
+  .rbf.open .rbf-paper:nth-child(1),
+  .rbf.open .rbf-paper:nth-child(2),
+  .rbf.open .rbf-paper:nth-child(3) {
+    transform: translate(-50%, -10%);
+  }
+
+  .rbf:hover .rbf__front,
+  .rbf.open .rbf__front,
+  .rbf.open .rbf__front--right {
+    transform: none;
+  }
+}

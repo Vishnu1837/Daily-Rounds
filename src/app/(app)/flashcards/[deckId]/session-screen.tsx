@@ -49,18 +49,36 @@ export function SessionScreen({
   const [, startTransition] = useTransition();
 
   const [phase, setPhase] = useState<Phase>(reduce ? 'studying' : 'opening');
-  const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [chosen, setChosen] = useState<number | null>(null);
   const [outcomes, setOutcomes] = useState<ReviewOutcome[]>([]);
-  const [exitGrade, setExitGrade] = useState<Grade | null>(null);
+  /*
+   * How the card on screen should leave: a `Grade` throws it away in that grade's own
+   * direction, `'skip'` settles it back down toward the deck. Held on `AnimatePresence`'s
+   * `custom` so the *outgoing* card animates with the intent set at the moment it left —
+   * not the one from the render before, which a plain prop would freeze it at.
+   */
+  const [exitIntent, setExitIntent] = useState<Grade | 'skip' | null>(null);
   const [dragGrade, setDragGrade] = useState<Grade | null>(null);
   const [result, setResult] = useState<FlashcardSessionResult | null>(null);
   const [error, setError] = useState<string | undefined>();
 
-  const cards = deck.cards;
-  const total = cards.length;
-  const card = cards[index];
+  const allCards = deck.cards;
+  const total = allCards.length;
+  const cardsById = useMemo(() => new Map(allCards.map((c) => [c.id, c])), [allCards]);
+
+  /*
+   * The run as a working queue rather than a cursor over a fixed array.
+   *
+   * `order` holds the ids of every card not yet graded, head first. Grading drops the head;
+   * a *skip* moves the head to the tail — the card is not thrown away, it comes back round
+   * later this session (the send-to-back gesture from a card stack). `deck.cards` stays the
+   * source of truth for content and for `total`; only the ordering lives here.
+   */
+  const [order, setOrder] = useState<string[]>(() => allCards.map((c) => c.id));
+  const card = order.length > 0 ? (cardsById.get(order[0]!) ?? null) : null;
+  const gradedCount = outcomes.length;
+  const remaining = order.length;
 
   /*
    * Guards the "save what you have on the way out" effect from firing twice — once from the
@@ -177,14 +195,16 @@ export function SessionScreen({
       if (!revealed || !card || phase !== 'studying') return;
       haptic(value === 'again' ? 'wither' : value === 'easy' ? 'celebrate' : 'tap');
 
+      const last = order.length <= 1;
       const next = [...outcomesRef.current, { cardId: card.id, grade: value }];
-      setExitGrade(value);
+      setExitIntent(value);
       setOutcomes(next);
+      setOrder((prev) => prev.slice(1));
       setDragGrade(null);
       setRevealed(false);
       setChosen(null);
 
-      if (index + 1 >= total) {
+      if (last) {
         /*
          * The card is still flying off screen. Letting the summary mount underneath it
          * rather than after it is the difference between "the deck finished" and "the
@@ -192,13 +212,31 @@ export function SessionScreen({
          */
         outcomesRef.current = next;
         window.setTimeout(() => save(true), reduce ? 0 : 300);
-        setIndex(total);
-        return;
       }
-      setIndex((i) => i + 1);
     },
-    [revealed, card, phase, index, total, save, reduce],
+    [revealed, card, phase, order, save, reduce],
   );
+
+  /*
+   * Skip: send the current card to the back of the queue without grading it.
+   *
+   * This is the card-stack "send to back" gesture — throw the face-down card far enough in
+   * any direction and it loops round to the bottom of the deck instead of leaving. Nothing
+   * is recorded: a skip is "not this one right now", not a judgement, so the scheduler never
+   * hears about it and the card simply comes up again before the run ends.
+   *
+   * A no-op when it is the only card left — there is no "back" to send it to, and re-keying
+   * the same card would just make it flicker.
+   */
+  const skip = useCallback(() => {
+    if (!card || phase !== 'studying' || order.length <= 1) return;
+    haptic('tap');
+    setExitIntent('skip');
+    setDragGrade(null);
+    setRevealed(false);
+    setChosen(null);
+    setOrder((prev) => (prev.length > 1 ? [...prev.slice(1), prev[0]!] : prev));
+  }, [card, phase, order.length]);
 
   /* ------------------------------------------------------------ keyboard */
 
@@ -209,6 +247,13 @@ export function SessionScreen({
       // Never steal keys from a control that wants them.
       const target = event.target as HTMLElement | null;
       if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+
+      // `s` sends the current card to the back of the deck — the keyboard's skip.
+      if ((event.key === 's' || event.key === 'S') && !revealed && card) {
+        event.preventDefault();
+        skip();
+        return;
+      }
 
       if (event.key === ' ' || event.key === 'Enter') {
         if (revealed || !card) return;
@@ -243,7 +288,7 @@ export function SessionScreen({
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [phase, revealed, card, chosen, reveal, choose, grade]);
+  }, [phase, revealed, card, chosen, reveal, choose, grade, skip]);
 
   /* --------------------------------------------------------------- render */
 
@@ -289,7 +334,7 @@ export function SessionScreen({
 
       <SessionProgress
         total={total}
-        index={index}
+        index={gradedCount}
         grades={grades}
         streak={streak}
         message={message}
@@ -309,7 +354,7 @@ export function SessionScreen({
           never an empty rectangle between one card and the next and the deck reads as
           having depth even on the very last card.
         */}
-        <StackLayers remaining={total - index} />
+        <StackLayers remaining={remaining} />
 
         {/*
           The stage owns the height, and every card in it is absolutely positioned.
@@ -323,7 +368,7 @@ export function SessionScreen({
           was being asked for in the first place.
         */}
         <div className={cn('relative', CARD_HEIGHT)}>
-          <AnimatePresence initial={false}>
+          <AnimatePresence initial={false} custom={exitIntent}>
             {card && phase === 'studying' && (
               <Flashcard
                 key={card.id}
@@ -334,9 +379,10 @@ export function SessionScreen({
                 onReveal={reveal}
                 onGrade={grade}
                 onDragGrade={setDragGrade}
-                exitGrade={exitGrade}
+                onSkip={skip}
                 reduce={reduce}
                 swipeEnabled={revealed}
+                skipEnabled={phase === 'studying' && remaining > 1}
               />
             )}
           </AnimatePresence>
@@ -420,24 +466,35 @@ export function SessionScreen({
               </p>
             </motion.div>
           ) : (
-            <motion.p
+            <motion.div
               key="hint"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.18 }}
-              className="text-fg-subtle absolute inset-x-0 top-0 pt-7 text-center text-xs"
+              className="absolute inset-x-0 top-0 flex flex-col items-center gap-2 pt-5 text-center"
             >
-              {index === 0 && outcomes.length === 0
-                ? 'Answer it in your head first — that is the part that works.'
-                : `${total - index} to go`}
-            </motion.p>
+              <p className="text-fg-subtle text-xs">
+                {gradedCount === 0 && remaining === total
+                  ? 'Answer it in your head first — that is the part that works.'
+                  : `${remaining} to go`}
+              </p>
+              {remaining > 1 && (
+                <button
+                  type="button"
+                  onClick={skip}
+                  className="tap text-fg-subtle hover:text-fg-muted pointer-events-auto inline-flex items-center rounded-lg px-2 py-1 text-xs font-semibold transition-colors"
+                >
+                  Skip for now
+                </button>
+              )}
+            </motion.div>
           )}
         </AnimatePresence>
       </div>
 
       <p className="sr-only" aria-live="polite">
-        Card {Math.min(index + 1, total)} of {total}.{' '}
+        Card {Math.min(gradedCount + 1, total)} of {total}.{' '}
         {running.reviewed > 0 && `${running.correct} of ${running.reviewed} recalled so far.`}
       </p>
     </div>
