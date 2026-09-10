@@ -205,6 +205,18 @@
   --nav-border: oklch(0.906 0.009 285 / 0.9);
   --scrim: oklch(0.132 0.022 278 / 0.5);
 
+  /*
+   * How much of the viewport the admin "viewing as student" bar is currently eating.
+   *
+   * Zero for everyone who is not inside a view-as session, and measured by the bar itself
+   * when there is one — it is a conditional element whose height depends on how far its
+   * sentence wraps, which is one line on a desktop and three on a phone, so neither the
+   * layout nor a constant in a stylesheet can know it. Anything that sizes itself against
+   * the height of the window has to subtract this or it will run off the bottom of the
+   * screen by exactly the height of the bar; see `CARD_BOX` in the flashcard.
+   */
+  --viewing-as-height: 0px;
+
   /* Ambient washes used behind hero surfaces. Defined once so every page agrees. */
   --wash-pulse: oklch(0.615 0.213 277 / 0.1);
   --wash-iris: oklch(0.635 0.222 310 / 0.09);
