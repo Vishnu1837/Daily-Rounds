@@ -51,27 +51,53 @@ import { CardBack, CardFront } from './card-face';
  */
 
 /**
- * The card's height, sized off the viewport rather than fixed.
+ * The card's box: a floor, and a ceiling sized off the viewport.
  *
- * A 27rem card is right on a laptop and wrong on a short window, where it pushes the four
- * grade buttons below the fold — and a student who has to scroll to answer has been handed
- * back every millisecond the rest of this file spent making the interaction quick. The
- * clamp keeps the card as large as it can be while leaving room for the header, the
- * progress rail and the controls beneath it.
+ * The card is as tall as the thing written on it. A fixed height meant every card was the
+ * height of the longest one it might ever have to hold — a two-word definition floated in a
+ * field of white, and, worse, a five-option question on a short window was handed a box it
+ * did not fit in and had its prompt scrolled out of sight above the first option. Sizing to
+ * content fixes both ends of that: the short card shrinks, the long one grows.
+ *
+ * The floor stops a one-word answer from collapsing into a chip — it still has to read as a
+ * card. The ceiling is what keeps the grade buttons above the fold: a 34rem card is right on
+ * a laptop and wrong on a short window, where it pushes the four buttons below it off the
+ * screen — and a student who has to scroll to answer has been handed back every millisecond
+ * the rest of this file spent making the interaction quick. Only a card that would exceed
+ * that ceiling scrolls internally, and by then scrolling is the honest answer.
  *
  * Two clamps rather than one because the two layouts do not have the same furniture: a
- * phone additionally carries the floating bottom bar and a taller header, so roughly nine
- * more rem of the viewport is already spoken for before the card gets any. Sharing a single
+ * phone additionally carries the floating bottom bar and a taller header, so several more
+ * rem of the viewport is already spoken for before the card gets any. Sharing a single
  * subtrahend meant either a stunted card on the desktop or grade buttons sitting underneath
  * the navigation on a phone — which is the one place they must never be, because that is
  * exactly where the thumb is.
  *
- * Exported because the deck cover and the stack layers behind the card have to agree with
- * it exactly; a stack that is a few pixels taller than the card it sits under reads as a
- * rendering bug rather than as depth.
+ * The phone's subtrahend is measured rather than guessed, and it is what everything above
+ * and below the card actually occupies on a 375×812 viewport: the header and the deck's own
+ * title and progress rail above (13rem), the gap and the grade buttons below (8.75rem), and
+ * the floating bottom bar (5rem), with a little over a rem left so a deck title that wraps
+ * to two lines does not spend the card's height.
+ *
+ * `--viewing-as-height` is the one piece of that furniture which is neither constant nor
+ * known here: the bar an admin gets while viewing the app as a student, which is absent for
+ * every ordinary student, one line tall on a desktop and three on a phone. It resolves to
+ * `0px` from `globals.css` when there is no bar, and the bar publishes its own height when
+ * there is. Without it, the height the card claims is height the window does not have, and
+ * the grade buttons end up underneath the bottom bar for exactly the people whose job is to
+ * check that they are not.
+ *
+ * Exported because the stack layers behind the card are sized from the live card rather than
+ * from this, and the stage needs the same floor before the first card has been measured.
  */
-export const CARD_HEIGHT =
-  'h-[clamp(14rem,calc(100dvh-30rem),27rem)] sm:h-[clamp(15rem,calc(100dvh-21rem),27rem)]';
+export const CARD_BOX = [
+  'min-h-[14rem] sm:min-h-[15rem]',
+  'max-h-[clamp(14rem,calc(100dvh-27.5rem-var(--viewing-as-height)),34rem)]',
+  'sm:max-h-[clamp(15rem,calc(100dvh-21rem-var(--viewing-as-height)),34rem)]',
+].join(' ');
+
+/** The stage's height before a card has been measured, and while the cover is still on. */
+export const CARD_FALLBACK_HEIGHT = 'min-h-[24rem] sm:min-h-[27rem]';
 
 /** How far the card leans, in degrees, at the very corner. Small on purpose. */
 const TILT = 7;
@@ -155,6 +181,7 @@ export function Flashcard({
   reduce,
   swipeEnabled,
   skipEnabled,
+  onMeasure,
 }: {
   card: SessionCard;
   revealed: boolean;
@@ -170,9 +197,42 @@ export function Flashcard({
   swipeEnabled: boolean;
   /** Whether the face-down skip throw is available (off for the last remaining card). */
   skipEnabled: boolean;
+  /**
+   * Reports the card's laid-out height, tagged with the card it belongs to, whenever that
+   * height changes — on mount, on flip, on a choice that grows the face, on a resize.
+   *
+   * Tagged because a graded card is still mounted and still being measured while it sails
+   * off the stage; the caller keys on the id so the outgoing card cannot resize the stage
+   * out from under the one that has replaced it.
+   */
+  onMeasure?: (cardId: string, height: number) => void;
 }) {
   const [dragging, setDragging] = useState(false);
   const surfaceRef = useRef<HTMLDivElement>(null);
+
+  /*
+   * The card is absolutely positioned inside the stage, so it cannot push the stage to its
+   * own size the way a card in flow would — the stage has to be told. A ResizeObserver
+   * rather than a measurement on render because most of what changes the height happens
+   * after a commit: a web font landing, an image decoding, the answer side turning up.
+   *
+   * `contentRect` is a layout box, so none of this file's transforms — the tilt, the scale
+   * dip through the flip, the throw — perturb it. The observed element is the untransformed
+   * wrapper for the same reason.
+   */
+  useEffect(() => {
+    const element = surfaceRef.current;
+    if (!element || !onMeasure) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const height = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+      if (height > 0) onMeasure(card.id, height);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [card.id, onMeasure]);
 
   /*
    * A card never un-flips.
@@ -375,7 +435,7 @@ export function Flashcard({
             scale: reduce ? 1 : flipScale,
             transformStyle: 'preserve-3d',
           }}
-          className="relative"
+          className="relative grid"
         >
           {/*
             Both faces are always mounted and the back is pre-rotated, so the flip is one
@@ -472,11 +532,19 @@ function Face({
         backfaceVisibility: reduce ? 'visible' : 'hidden',
         WebkitBackfaceVisibility: reduce ? 'visible' : 'hidden',
         transform: back ? 'rotateY(180deg)' : undefined,
-        ...(back && !reduce ? { position: 'absolute', inset: 0 } : {}),
       }}
+      /*
+        Both faces occupy the same grid cell — `col-start-1 row-start-1` — rather than the
+        back being taken out of flow with `position: absolute`. That is what lets the card
+        size to its content: an absolutely positioned back is measured against the front and
+        so contributes nothing, which means a long answer behind a short question would have
+        been clipped the moment the card turned. Sharing a cell makes the card as tall as the
+        taller of its two faces, so the height is settled before the flip starts and the card
+        does not resize halfway through turning.
+      */
       className={cn(
-        'rounded-hero border-border bg-bg-elevated shadow-float relative flex flex-col overflow-hidden border',
-        CARD_HEIGHT,
+        'rounded-hero border-border bg-bg-elevated shadow-float relative col-start-1 row-start-1 flex flex-col overflow-hidden border',
+        CARD_BOX,
       )}
     >
       {/* Ground: a barely-there wash so the card is not flat white on a flat canvas. */}
@@ -505,7 +573,10 @@ function Face({
         aria-hidden
       />
 
-      <div className="relative flex min-h-0 flex-1 flex-col">{children}</div>
+      {/* `flex-auto`, not `flex-1`: see the note in `FaceShell`. A zero flex basis here
+          would report the face as wanting no height, and the card would size to its floor
+          no matter what was written on it. */}
+      <div className="relative flex min-h-0 flex-auto flex-col">{children}</div>
     </div>
   );
 }

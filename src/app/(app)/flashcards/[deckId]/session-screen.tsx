@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft } from 'lucide-react';
 
 import { CompletionSummary, SavingState } from '@/components/flashcards/completion';
-import { CARD_HEIGHT, Flashcard } from '@/components/flashcards/flashcard';
+import { CARD_FALLBACK_HEIGHT, Flashcard } from '@/components/flashcards/flashcard';
 import { DragVerdict, GRADE_ORDER, GradeBar } from '@/components/flashcards/grade-bar';
 import { SessionProgress } from '@/components/flashcards/session-progress';
 import { Button } from '@/components/ui/button';
@@ -85,6 +85,40 @@ export function SessionScreen({
    * deliberate exit and again from the unmount that exit causes. A double submit would
    * write a second session row and a second set of reviews for the same work.
    */
+  /* ---------------------------------------------------------- stage size */
+
+  /*
+   * The stage's height, taken from whatever the live card measured itself to be.
+   *
+   * The cards inside the stage are absolutely positioned so that a graded card and its
+   * replacement can overlap, and absolute children cannot size their parent — so the stage
+   * would have to be a fixed height, which is precisely the thing that was clipping long
+   * cards. Reading the height back from the card and animating the stage to it keeps both:
+   * the cards still overlap, and the page still ends where the card does.
+   *
+   * `null` until the first measurement lands, and the stage falls back to a floor for that
+   * frame and for the whole of `opening`, where there is no card mounted to measure yet.
+   */
+  const [stageHeight, setStageHeight] = useState<number | null>(null);
+
+  // Read inside the measurement callback, which must not be re-created per card — a new
+  // callback identity would tear down and re-attach the card's observer on every render.
+  // Written in an effect, which is early enough: the card only starts observing itself in
+  // an effect of its own, and a child's effects run before its parent's in the same commit.
+  const liveCardId = useRef<string | null>(null);
+  useEffect(() => {
+    liveCardId.current = card?.id ?? null;
+  }, [card?.id]);
+
+  const measureStage = useCallback((cardId: string, height: number) => {
+    // The outgoing card is still mounted and still being observed; only the card that is
+    // actually on top gets to say how tall the stage is.
+    if (cardId !== liveCardId.current) return;
+    setStageHeight((current) =>
+      current !== null && Math.abs(current - height) < 1 ? current : height,
+    );
+  }, []);
+
   const flushed = useRef(false);
   const outcomesRef = useRef(outcomes);
   useEffect(() => {
@@ -362,12 +396,26 @@ export function SessionScreen({
           `AnimatePresence mode="popLayout"` was the obvious choice and the wrong one: it
           needs to measure and re-position its exiting child, which it cannot do through a
           plain function component, so the graded card stayed in the flow and pushed its
-          replacement a full card-height down the page. Giving the stage a fixed height and
-          stacking the cards inside it means the two simply overlap — the new card is
-          already in place before the old one has left, which is the effect the popLayout
-          was being asked for in the first place.
+          replacement a full card-height down the page. Stacking the cards inside a stage
+          that owns the height means the two simply overlap — the new card is already in
+          place before the old one has left, which is the effect the popLayout was being
+          asked for in the first place.
+
+          That height is no longer fixed: it is whatever the live card last measured itself
+          to be, and it eases between cards rather than snapping, so a short card following
+          a long one reads as the deck settling rather than as the page jumping. The
+          transition is on `height` alone — animating `all` here would drag the absolutely
+          positioned cards' own transforms into a CSS transition that framer is already
+          driving, and the two would fight for every frame of the throw.
         */}
-        <div className={cn('relative', CARD_HEIGHT)}>
+        <div
+          className={cn(
+            'relative',
+            stageHeight === null && CARD_FALLBACK_HEIGHT,
+            !reduce && 'ease-out-soft transition-[height] duration-300',
+          )}
+          style={stageHeight === null ? undefined : { height: stageHeight }}
+        >
           <AnimatePresence initial={false} custom={exitIntent}>
             {card && phase === 'studying' && (
               <Flashcard
@@ -383,6 +431,7 @@ export function SessionScreen({
                 reduce={reduce}
                 swipeEnabled={revealed}
                 skipEnabled={phase === 'studying' && remaining > 1}
+                onMeasure={measureStage}
               />
             )}
           </AnimatePresence>
@@ -400,7 +449,7 @@ export function SessionScreen({
                 initial={{ opacity: 1, y: 0, scale: 1, rotateX: 0 }}
                 animate={{ opacity: 0, y: -26, scale: 1.03, rotateX: -12 }}
                 transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                className="rounded-hero from-pulse-600 via-pulse-700 to-iris-800 shadow-float pointer-events-none absolute inset-0 z-30 flex min-h-[24rem] flex-col justify-end bg-linear-to-br p-8 text-white sm:min-h-[27rem]"
+                className="rounded-hero from-pulse-600 via-pulse-700 to-iris-800 shadow-float pointer-events-none absolute inset-0 z-30 flex flex-col justify-end bg-linear-to-br p-8 text-white"
                 style={{ transformOrigin: 'bottom center' }}
                 aria-hidden
               >
@@ -512,13 +561,18 @@ function StackLayers({ remaining }: { remaining: number }) {
   if (remaining <= 1) return null;
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0" aria-hidden>
+    /*
+      Inset to the stage rather than given a height of their own. The stage is sized from the
+      live card now, so a layer that restated the card's height would agree with it only for
+      as long as the two happened to be looking at the same card — and a stack that stands a
+      few pixels proud of the card on top of it reads as a rendering bug rather than as depth.
+    */
+    <div className="pointer-events-none absolute inset-0" aria-hidden>
       {[1, 2].slice(0, Math.min(2, remaining - 1)).map((depth) => (
         <div
           key={depth}
           className={cn(
-            CARD_HEIGHT,
-            'rounded-hero border-border bg-bg-elevated absolute inset-x-0 top-0 border',
+            'rounded-hero border-border bg-bg-elevated absolute inset-0 border',
             depth === 1 ? 'shadow-lift' : 'shadow-soft',
           )}
           style={{

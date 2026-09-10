@@ -64,17 +64,29 @@ function FaceShell({
 }) {
   return (
     <div
-      className={cn('flex min-h-0 flex-1 flex-col p-6 sm:p-8', className)}
+      className={cn('flex min-h-0 flex-auto flex-col p-6 sm:p-8', className)}
       style={{ transform: 'translateZ(40px)' }}
     >
       <div className="flex items-center justify-between gap-3">{eyebrow}</div>
       {/*
-        `min-h-0` with its own overflow, not just `flex-1`. A centred flex child that cannot
-        fit overflows in *both* directions, so an eight-option question on a short window
-        spilled its prompt straight up through the eyebrow. Scrolling is the honest fallback;
-        the scrollbar itself is hidden for the reason the answer side hides its own.
+        `flex-auto`, emphatically not `flex-1`.
+
+        The card is sized by its content now, and `flex-1` is `flex: 1 1 0%` — a zero basis,
+        which paired with the `min-h-0` below tells the card that this region wants no height
+        at all. The card then shrank to its floor and scrolled the question it was supposed
+        to be showing. `flex-auto` grows and shrinks exactly the same way but bases itself on
+        the content, so the card asks for the room the prompt actually needs.
+
+        `min-h-0` and the overflow still matter for the one case that is left: a card that
+        would exceed the ceiling has to shrink past its content, and scrolling is the honest
+        fallback there. `justify-center-safe` rather than `justify-center` because centring
+        an overflowing flex child overflows it in *both* directions — that is what put an
+        eight-option question's prompt above the top edge of its own scroll container, out of
+        reach of any scrollbar. The safe alignment gives up centring at exactly the point it
+        would start hiding something. The scrollbar itself stays hidden for the reason the
+        answer side hides its own.
       */}
-      <div className="no-scrollbar flex min-h-0 flex-1 flex-col justify-center overflow-y-auto overscroll-contain py-5">
+      <div className="no-scrollbar flex min-h-0 flex-auto flex-col justify-center-safe overflow-y-auto overscroll-contain py-5">
         {children}
       </div>
       {footer && <div className="shrink-0">{footer}</div>}
