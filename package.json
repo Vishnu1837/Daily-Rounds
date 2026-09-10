@@ -25,6 +25,7 @@
     "test:ui": "vitest --ui",
     "db:resequence": "tsx src/db/scripts/resequence-roadmaps.ts",
     "db:clear-students": "tsx src/db/scripts/clear-students.ts",
+    "db:ingest-decks": "tsx --conditions=react-server src/db/scripts/ingest-decks.ts",
     "db:repair-sessions": "tsx --conditions=react-server src/db/scripts/repair-sessions.ts"
   },
   "dependencies": {

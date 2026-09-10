@@ -14,3 +14,7 @@ coverage/
 .scratch/
 
 .env*
+
+# Local study-material corpora and access docs — source PDFs, not app code.
+FMGE PYQ/
+Daily-Rounds-Demo-Access.pdf
