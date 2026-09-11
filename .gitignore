@@ -16,5 +16,13 @@ coverage/
 .env*
 
 # Local study-material corpora and access docs — source PDFs, not app code.
+#
+# Textbooks are hosted objects, not repository contents: they go to the R2 bucket through
+# Admin -> Materials and reach students as byte ranges. A book checked in here would also be
+# a book anyone with repository access could take whole, which is the one thing the reader
+# exists to prevent. They are big enough to matter too — a 181 MB atlas is past GitHub's
+# 100 MB file limit, so committing one does not fail at review, it fails at push, after the
+# commit already exists.
+*.pdf
 FMGE PYQ/
 Daily-Rounds-Demo-Access.pdf
