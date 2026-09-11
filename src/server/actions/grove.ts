@@ -15,7 +15,9 @@ import {
   presetByKey,
   speciesFor,
 } from '@/lib/domain/grove';
+import type { StudySeed } from '@/components/grove/seed';
 import { getMemberContext } from '@/server/context';
+import { buildStudySeed } from '@/server/study-seed';
 import { settleOverdueTrees } from '@/server/grove';
 import { todaysAssignment } from '@/server/roadmap';
 
@@ -33,6 +35,21 @@ export type PlantedTree = {
   /** True when this was already running and we handed the same tree back. */
   resumed: boolean;
 };
+
+/**
+ * Everything the focus round needs, fetched by the dock rather than by a page.
+ *
+ * A round now outlives the screen that started it: a student can minimise it and go and read
+ * a textbook, and the dock that carries it has to be able to pick a live round up on a cold
+ * load of any route. It is a read, guarded like every other action, and the dock only calls
+ * it when it has reason to think something is growing.
+ */
+export async function loadStudySeedAction(): Promise<Result<StudySeed>> {
+  return guarded(async () => {
+    const ctx = await context();
+    return ok(await buildStudySeed(ctx));
+  }, 'We could not pick your round back up. Open the study screen to see where it stands.');
+}
 
 async function context() {
   const user = await requireUserAction();

@@ -19,6 +19,7 @@ import {
 
 import { cn } from '@/lib/cn';
 import type { Grade } from '@/lib/domain/flashcards';
+import { useCoarsePointer } from '@/lib/use-coarse-pointer';
 import type { SessionCard } from '@/server/queries/flashcards';
 
 import { CardBack, CardFront } from './card-face';
@@ -186,6 +187,7 @@ export function Flashcard({
 }) {
   const [dragging, setDragging] = useState(false);
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const coarse = useCoarsePointer();
 
   /*
    * The card is absolutely positioned inside the stage, so it cannot push the stage to its
@@ -310,16 +312,25 @@ export function Flashcard({
    * whether the card is face up:
    *   - face up  → drag left/right to grade (`canGrade`), x-axis only so the page can still
    *     scroll vertically under a thumb.
-   *   - face down → throw in any direction to skip (`canSkip`), the card-stack send-to-back.
+   *   - face down → throw it away to skip (`canSkip`), the card-stack send-to-back: in any
+   *     direction with a mouse, sideways under a thumb.
    *
-   * Both leave vertical panning to the browser on touch (`pan-y`). A card can be taller than
-   * the screen, and the page is how the rest of it is reached — `touch-action: none` on a
-   * card that fills the viewport leaves nothing to scroll with. A mouse still throws a
-   * face-down card in any direction; a thumb throws it sideways.
+   * Both leave vertical panning to the browser on touch. A card can be taller than the
+   * screen, and the page is how the rest of it is reached — a card that fills the viewport
+   * and claims the vertical axis leaves a student nothing to scroll with, because there is
+   * nothing else on screen to put a thumb on. Every swipe lands on the card, so every swipe
+   * throws it.
+   *
+   * Which axis a drag claims is not ours to set directly: framer derives `touch-action` from
+   * the `drag` prop and writes it over whatever `style` we pass, so `drag` *is* the setting —
+   * `true` means `touch-action: none`, and an inline `touchAction: 'pan-y'` beside it is
+   * quietly discarded. So the skip throw is sideways-only wherever the pointer is a finger,
+   * and stays free-direction for a mouse, which has a wheel and loses nothing by it.
    */
   const canGrade = swipeEnabled && faceUp && !reduce;
   const canSkip = skipEnabled && !faceUp && !reduce;
   const canDrag = canGrade || canSkip;
+  const skipAxis = coarse ? ('x' as const) : (true as const);
 
   // Set the moment a real drag begins; read by the reveal click so a throw never also flips.
   const didDragRef = useRef(false);
@@ -331,7 +342,9 @@ export function Flashcard({
 
       if (!faceUp) {
         /*
-         * Skip: any direction, velocity folded in the same way the grade throw folds it, so
+         * Skip: the distance travelled in whatever directions were available — both for a
+         * mouse, sideways only for a thumb, which leaves `y` at zero and reduces this to the
+         * horizontal throw. Velocity is folded in the same way the grade throw folds it, so
          * a fast flick counts even if it did not travel the full distance. Under the
          * threshold, `dragSnapToOrigin` carries the card back on its own.
          */
@@ -375,7 +388,7 @@ export function Flashcard({
   return (
     <motion.div
       // `key` lives on the caller's AnimatePresence; this element owns only the throw.
-      drag={canGrade ? 'x' : canSkip ? true : false}
+      drag={canGrade ? 'x' : canSkip ? skipAxis : false}
       dragSnapToOrigin
       dragElastic={0.5}
       dragConstraints={canSkip ? { top: 0, right: 0, bottom: 0, left: 0 } : { left: 0, right: 0 }}
@@ -385,12 +398,9 @@ export function Flashcard({
         setDragging(true);
       }}
       onDragEnd={handleDragEnd}
-      style={{
-        x,
-        y,
-        rotate,
-        touchAction: canDrag ? 'pan-y' : 'auto',
-      }}
+      // No `touchAction` here: framer writes its own over anything we pass whenever `drag`
+      // is set, and the default is what a card that cannot be dragged wants anyway.
+      style={{ x, y, rotate }}
       initial={reduce ? { opacity: 0 } : { opacity: 0, y: 40, scale: 0.93 }}
       animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
       /*
@@ -475,7 +485,7 @@ export function Flashcard({
         {canGrade
           ? 'You can also swipe this card: left to mark it forgotten, right to mark it known.'
           : canSkip
-            ? 'You can throw this card away in any direction to skip it for now; it comes back later this session. Or press S.'
+            ? `You can throw this card ${coarse ? 'sideways' : 'in any direction'} to skip it for now; it comes back later this session. Or press S.`
             : ''}
       </span>
     </motion.div>

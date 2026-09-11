@@ -3,6 +3,7 @@ import Link from 'next/link';
 
 import { LinkDeviceLauncher } from '@/components/auth/link-device';
 import { Logo } from '@/components/brand/logo';
+import { GroveDock } from '@/components/grove/dock';
 import {
   BottomNav,
   BottomNavFallback,
@@ -153,6 +154,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           it offers is only minted once a student actually asks for one.
         */}
         <LinkDeviceLauncher />
+
+        {/*
+          The focus round, once it has been minimised.
+
+          It lives in the shell rather than on `/study` because that is the whole point of
+          it: a round that only exists on its own page is a round the student has to choose
+          between and the reading it was supposed to protect. A client component with no
+          props, so the static shell is untouched — and it resolves to nothing for the
+          overwhelming majority of page loads, where nothing is growing. See the component.
+        */}
+        <ShellSlot>
+          <GroveDock />
+        </ShellSlot>
 
         {/*
           The feedback round's one interruption. Resolves to nothing for a student who has
