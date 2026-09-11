@@ -202,6 +202,20 @@ export const DIGEST_CHARS_PER_PAGE = 240;
 export const DIGEST_MAX_PAGES = 700;
 export const DIGEST_FRONT_MATTER_PAGES = 40;
 
+/**
+ * Front matter is read much further down the page, because that is where the contents live.
+ * A contents page is the book's own topic list with a printed page against every entry, and
+ * matching one of those entries to the running header on the physical page it names is how
+ * the offset between printed and physical numbering is found — 240 characters of a contents
+ * page is its title and two entries, which is not enough to do either.
+ */
+export const DIGEST_FRONT_MATTER_CHARS = 2500;
+
+/** How much text to read from a physical page for the digest. */
+export function digestCharsFor(page: number): number {
+  return page <= DIGEST_FRONT_MATTER_PAGES ? DIGEST_FRONT_MATTER_CHARS : DIGEST_CHARS_PER_PAGE;
+}
+
 /** Which physical pages the browser should read, for a book of this length. */
 export function digestPageNumbers(numPages: number): number[] {
   const total = Math.max(1, Math.floor(numPages) || 1);

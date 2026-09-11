@@ -2,8 +2,8 @@
 
 import {
   type BookDigest,
-  DIGEST_CHARS_PER_PAGE,
   type OutlineEntry,
+  digestCharsFor,
   digestPageNumbers,
 } from '@/lib/domain/chapter-plan';
 import { TEXTBOOK_READER_HEADER } from '@/lib/domain/textbooks';
@@ -75,8 +75,12 @@ export async function buildBookDigest(
   };
 }
 
-/** The first few lines of a page's text layer, which is where a chapter announces itself. */
+/**
+ * The first few lines of a page's text layer, which is where a chapter announces itself —
+ * or, in the front matter, most of the page, which is where the contents are listed.
+ */
 async function readPageOpening(doc: PdfDocument, pageNumber: number): Promise<string> {
+  const limit = digestCharsFor(pageNumber);
   const page = await doc.getPage(pageNumber);
   try {
     const content = await page.getTextContent();
@@ -84,9 +88,9 @@ async function readPageOpening(doc: PdfDocument, pageNumber: number): Promise<st
     for (const item of content.items) {
       if (!('str' in item)) continue;
       text += item.str + (item.hasEOL ? '\n' : ' ');
-      if (text.length >= DIGEST_CHARS_PER_PAGE) break;
+      if (text.length >= limit) break;
     }
-    return text.replace(/\s+/g, ' ').trim().slice(0, DIGEST_CHARS_PER_PAGE);
+    return text.replace(/\s+/g, ' ').trim().slice(0, limit);
   } finally {
     page.cleanup();
   }

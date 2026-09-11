@@ -626,7 +626,8 @@ export const bookDigestSchema = z.object({
     .array(
       z.object({
         page: z.number().int().min(1).max(20000),
-        text: z.string().max(600),
+        // Front-matter pages carry their contents listing — see `DIGEST_FRONT_MATTER_CHARS`.
+        text: z.string().max(3000),
       }),
     )
     .max(1000),

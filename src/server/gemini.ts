@@ -36,7 +36,7 @@ const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 export const GEMINI_MODEL = 'gemini-2.5-flash';
 
 /** A book is a long prompt and a long answer; the default fetch timeout is not the limit. */
-const TIMEOUT_MS = 120_000;
+const TIMEOUT_MS = 240_000;
 
 export type ChapterProposal =
   { ok: true; plan: NormalisedPlan; model: string } | { ok: false; message: string };
@@ -140,27 +140,42 @@ type GeminiResponse = {
   candidates?: { content?: { parts?: { text?: string }[] } }[];
 };
 
+/*
+ * Chapter-sized: the book's own top-level divisions — "General anatomy", "Bones", "Joints" —
+ * and nothing finer. The sections inside a chapter are how the author organised it, not how a
+ * cohort navigates it, and a 178-row list of them buries the book. The method below finds the
+ * printed-to-physical offset from the contents, then confirms each chapter's first page from
+ * the running header every page carries.
+ */
 const SYSTEM_PROMPT = `You split medical textbooks into chapters for a study app.
 
-You are given a book's page-by-page digest: the first lines of text on each physical page,
-and the PDF's own bookmarks when it has any. You return the chapters a student would read
-one at a time.
+You are given a book's page-by-page digest: the text at the top of each physical page (for the
+first 40 pages, most of the page, so the contents listing is readable), and the PDF's own
+bookmarks when it has any. You return the book's top-level chapters.
+
+Method:
+1. Read the contents pages. They give the book's top-level chapters (or parts), each with a
+   PRINTED page number, and the sections within each.
+2. Work out the offset between printed and physical pages by finding a title from the
+   contents in the page digest (running headers at the top of a page usually repeat the
+   chapter or section name). Check the offset in several places across the book — it is
+   normally constant, but confirm it rather than assuming.
+3. Walk the page digest. A chapter starts on the first physical page whose header shows it.
 
 Rules:
-- Page numbers are PHYSICAL PDF pages, counting the cover as page 1. Ignore the numbers
-  printed on the paper — front matter puts them out of step, sometimes by 20 pages or more.
-  When the digest shows a printed number, use it only to work out the offset.
-- Return the page where each chapter's content BEGINS, not where it is listed in the
-  contents.
-- Chapters must be in reading order and each must start after the one before it.
-- Prefer the book's own divisions: numbered chapters, or the top level of its bookmarks.
-  Do not invent finer sections, and do not merge two real chapters into one.
-- Front matter (cover, preface, contents) and back matter (index, appendices) are chapters
-  only when a student would sit and read them. An index is not.
-- Titles are the chapter's own name, without the word "Chapter" and without its number.
-- Aim for between 5 and 60 chapters. A 900-page atlas has chapters; it does not have 400.
-- If the digest is too sparse to be sure, still answer with your best division and say so in
-  the note.`;
+- Page numbers are PHYSICAL PDF pages, counting the cover as page 1. Never return a printed
+  page number.
+- Return only the TOP level of the book's own division: one entry per chapter or part, e.g.
+  "General anatomy", "Bones", "Joints", "Muscles". Never split a chapter into its sections,
+  and never merge two real chapters into one.
+- A chapter's review questions, figures and schemes belong to that chapter, not their own entry.
+- Skip cover, title pages, contents, prefaces, acknowledgements, author lists, and the index.
+- Titles are the chapter's own name, in English, without numbers, the word "Chapter", or a
+  section name after it.
+- Chapters must be in reading order and each must start on a LATER page than the one before.
+- Aim for between 5 and 40 chapters. An anatomy atlas has about a dozen; it does not have 150.
+- If the digest is too sparse to be sure (for example a scanned book with no text), still
+  answer with your best division and say so in the note.`;
 
 function userPrompt(bookTitle: string, digest: BookDigest): string {
   const outline =
