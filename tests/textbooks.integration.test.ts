@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import type { SessionUser } from '@/lib/auth/session';
+import { SESSION_COOKIE, type SessionUser } from '@/lib/auth/session';
 
 /**
  * Hosted textbooks, against a real database and the local storage driver.
@@ -137,6 +137,33 @@ describe('the textbook route', () => {
       .set({ status: 'left' })
       .where(eq(schema.cohortMembers.id, memberId));
     expect((await read(bookId, { [TEXTBOOK_READER_HEADER]: '1' })).status).toBe(404);
+  });
+
+  /*
+   * A reader makes one request per byte range, so the allowed answer is memoised per session
+   * token for half a minute (see `authorisedTextbookKey`). That memo is a cache of a *yes*,
+   * and only of a yes: this pins both halves, because the day it starts remembering a no is
+   * the day a student who has just been added to a cohort cannot open their first book.
+   */
+  it('remembers an allowed session briefly, and never remembers a refusal', async () => {
+    const { user } = await createTestMember(cohortId);
+    const cookie = { cookie: `${SESSION_COOKIE}=range-memo-token` };
+    const reader = { [TEXTBOOK_READER_HEADER]: '1', ...cookie };
+
+    session.user = null;
+    expect((await read(bookId, reader)).status).toBe(404);
+
+    // The refusal above was not cached under this token: the yes is found on the next ask.
+    session.user = asUser(user);
+    expect((await read(bookId, reader)).status).toBe(200);
+
+    // And now it is remembered — this range is served without the session being consulted.
+    session.user = null;
+    expect((await read(bookId, reader)).status).toBe(200);
+
+    // The memo is per token, so another browser's request is still checked from scratch.
+    const other = { [TEXTBOOK_READER_HEADER]: '1', cookie: `${SESSION_COOKIE}=another-token` };
+    expect((await read(bookId, other)).status).toBe(404);
   });
 });
 

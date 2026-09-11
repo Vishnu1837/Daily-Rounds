@@ -6,10 +6,10 @@ import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { ArrowLeft, BookLock, Minus, Plus } from 'lucide-react';
 
 import { useBookArrived } from '@/components/textbook/book-opening';
+import { acquireTextbook, releaseTextbook, statusOf } from '@/components/textbook/pdf-runtime';
 import { Card } from '@/components/ui/card';
 import { EmptyState, Skeleton } from '@/components/ui/feedback';
 import { cn } from '@/lib/cn';
-import { TEXTBOOK_READER_HEADER } from '@/lib/domain/textbooks';
 
 /**
  * Reads a hosted textbook inside the app, and only inside the app.
@@ -30,6 +30,13 @@ import { TEXTBOOK_READER_HEADER } from '@/lib/domain/textbooks';
  * the rest of the file in the background, and only the pages within a screen of the
  * viewport hold a canvas at all — so a thousand-page book costs the pages actually read.
  *
+ * ## Opening quickly
+ *
+ * The document itself is not built here. `pdf-runtime` owns it: it warms the library ahead
+ * of the tap, opens the file over an authorised range transport rather than PDF.js's own
+ * range-less probe request, and keeps the open document alive between chapters of the same
+ * book. This component asks for it and lays pages out.
+ *
  * ## Reading one chapter
  *
  * Given a `range`, the reader lays out only those pages. It is the same document and the
@@ -42,8 +49,6 @@ import { TEXTBOOK_READER_HEADER } from '@/lib/domain/textbooks';
 const ZOOMS = [0.6, 0.8, 1, 1.25, 1.5, 2, 2.5];
 /** Pages never grow wider than this at 100%; a 1,400px-wide page is not easier to read. */
 const MAX_PAGE_WIDTH = 880;
-/** PDF.js fetches in chunks this size. Big enough that a scanned page is one or two trips. */
-const RANGE_CHUNK = 512 * 1024;
 
 type Status = 'loading' | 'ready' | 'denied' | 'error';
 
@@ -87,50 +92,36 @@ export function TextbookReader({
   /* ------------------------------------------------------------ open the book */
   useEffect(() => {
     let cancelled = false;
-    let loadingTask: { destroy: () => Promise<void> } | null = null;
 
     (async () => {
-      const pdfjs = await import('pdfjs-dist');
-      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-        'pdfjs-dist/build/pdf.worker.min.mjs',
-        import.meta.url,
-      ).toString();
-
-      const task = pdfjs.getDocument({
-        url: `/api/textbooks/${materialId}`,
-        httpHeaders: { [TEXTBOOK_READER_HEADER]: '1' },
-        rangeChunkSize: RANGE_CHUNK,
-        disableAutoFetch: true,
-        disableStream: true,
-        isEvalSupported: false,
-      });
-      // Unmounted while the library was still loading: nobody will call destroy for us.
-      if (cancelled) {
-        task.promise.catch(() => {}); // rejects with "Worker was destroyed" — expected
-        void task.destroy();
-        return;
-      }
-      loadingTask = task;
-
       try {
-        const loaded = await task.promise;
+        const loaded = await acquireTextbook(materialId);
         if (cancelled) return;
-        const first = await loaded.getPage(Math.min(rangeStart ?? 1, loaded.numPages));
-        const viewport = first.getViewport({ scale: 1 });
-        if (cancelled) return;
-        setBaseAspect(viewport.height / viewport.width);
+
+        /*
+         * Pages are laid out the moment the document is open, without waiting to measure
+         * the first one. A placeholder at the wrong aspect ratio for a few hundred
+         * milliseconds is a page arriving; a skeleton while a round trip resolves the page
+         * tree is a loading screen. The real ratio lands via `onAspect` as each page paints,
+         * and the first one measured becomes the guess for every page after it.
+         */
         setDoc(loaded);
         setStatus('ready');
+
+        const first = await loaded.getPage(Math.min(rangeStart ?? 1, loaded.numPages));
+        if (cancelled) return;
+        const viewport = first.getViewport({ scale: 1 });
+        setBaseAspect(viewport.height / viewport.width);
       } catch (error) {
         if (cancelled) return;
-        const status = (error as { status?: number } | null)?.status;
-        setStatus(status === 404 ? 'denied' : 'error');
+        setStatus(statusOf(error) === 404 ? 'denied' : 'error');
       }
     })();
 
     return () => {
       cancelled = true;
-      void loadingTask?.destroy();
+      // Kept open for a little while: the next chapter of this book reuses it as it is.
+      releaseTextbook(materialId);
     };
   }, [materialId, rangeStart]);
 

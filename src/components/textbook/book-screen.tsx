@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ArrowRight, BookOpen, Check, ChevronRight } from 'lucide-react';
 
 import { BookCover } from '@/components/textbook/book-cover';
 import { useBookArrived } from '@/components/textbook/book-opening';
+import { warmPdfjs } from '@/components/textbook/pdf-runtime';
 import { Badge } from '@/components/ui/badge';
 import { Button, LinkButton } from '@/components/ui/button';
 import { Card, SectionTitle } from '@/components/ui/card';
@@ -58,6 +59,13 @@ export function BookScreen({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   useBookArrived(materialId);
+  /*
+   * A chapter list is read in order to pick a chapter. Pulling PDF.js now — rather than when
+   * one is tapped — means the reader's library is already in memory by the time it mounts,
+   * and covers the arrivals the shelf's own warm-up misses: a deep link, a back button, the
+   * "next chapter" button at the end of a chapter.
+   */
+  useEffect(warmPdfjs, []);
 
   const studiedIds = useMemo(
     () => new Set(topics.filter((t) => t.studied).map((t) => t.id)),

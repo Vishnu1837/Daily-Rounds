@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { motion, useAnimate } from 'framer-motion';
 
 import { BookCover } from '@/components/textbook/book-cover';
+import { warmPdfjs } from '@/components/textbook/pdf-runtime';
 
 /**
  * Opening a book from the shelf.
@@ -80,6 +81,14 @@ export function openBookFromShelf(
   event: MouseEvent<HTMLAnchorElement>,
   book: Omit<OpeningBook, 'from'>,
 ) {
+  /*
+   * Whatever this click turns out to be — an animated opening, a plain navigation, a new
+   * tab — it is a student heading for a book, and the reader they land in needs 1.4 MB of
+   * PDF.js it has no other reason to have. Started here, it downloads while the cover turns
+   * and while the server renders the page, instead of after both.
+   */
+  warmPdfjs();
+
   if (
     event.defaultPrevented ||
     event.button !== 0 ||

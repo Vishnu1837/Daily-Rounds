@@ -32,17 +32,24 @@ async function Topic({ params }: { params: Promise<{ materialId: string; topicId
   const { materialId, topicId } = await params;
   if (!UUID.test(materialId) || !UUID.test(topicId)) notFound();
 
-  const topic = await getTopicForReader(ctx.cohort.id, topicId);
-  // The chapter must belong to the book in the URL, not merely to the same cohort: a
-  // mismatched pair is a broken link, and following it would open the wrong file.
-  if (!topic || topic.materialId !== materialId) notFound();
-
   /*
    * The sibling chapters are loaded for two small things — whether this one is already
    * marked, and what "next" means at the bottom of the last page. Cheap: one indexed read
    * of a list that is twenty rows long, against a reader that is about to fetch megabytes.
+   *
+   * Fired alongside the chapter rather than after it. Neither query needs the other's
+   * answer, and this render is what the browser is waiting on before it can even begin
+   * loading the book — every round trip spent here is a round trip of blank screen.
    */
-  const siblings = await getBookTopics(ctx.cohort.id, materialId, ctx.memberId);
+  const [topic, siblings] = await Promise.all([
+    getTopicForReader(ctx.cohort.id, topicId),
+    getBookTopics(ctx.cohort.id, materialId, ctx.memberId),
+  ]);
+
+  // The chapter must belong to the book in the URL, not merely to the same cohort: a
+  // mismatched pair is a broken link, and following it would open the wrong file.
+  if (!topic || topic.materialId !== materialId) notFound();
+
   const here = siblings.find((t) => t.id === topic.id);
   const next = siblings.find((t) => t.position > topic.position) ?? null;
 

@@ -34,10 +34,12 @@ async function Book({ params }: { params: Promise<{ materialId: string }> }) {
   const { materialId } = await params;
   if (!UUID.test(materialId)) notFound();
 
-  const book = await getHostedTextbook(ctx.cohort.id, materialId);
+  // Independent reads, so they go together: this render gates the reader's first byte.
+  const [book, topics] = await Promise.all([
+    getHostedTextbook(ctx.cohort.id, materialId),
+    getBookTopics(ctx.cohort.id, materialId, ctx.memberId),
+  ]);
   if (!book) notFound();
-
-  const topics = await getBookTopics(ctx.cohort.id, book.id, ctx.memberId);
 
   /*
    * A book nobody has split yet is still a book. It opens straight into the whole-book

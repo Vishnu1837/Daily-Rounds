@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { getCurrentUser } from '@/lib/auth/session';
 import { TEXTBOOK_READER_HEADER } from '@/lib/domain/textbooks';
-import { textbookKeyFor } from '@/server/queries/textbooks';
+import { authorisedTextbookKey } from '@/server/textbook-access';
 import { readObject } from '@/server/textbook-storage';
 
 /**
@@ -13,7 +12,9 @@ import { readObject } from '@/server/textbook-storage';
  * Checked on every request, against the real session: an admin, or an active member of the
  * cohort the book is filed under (see `textbookKeyFor`). Everyone else — signed out, paused,
  * removed, another cohort — gets the same 404, because "no such book" and "a book you may
- * not read" should look identical from outside.
+ * not read" should look identical from outside. An allowed answer is memoised for half a
+ * minute per session and book, so a reader turning pages is not re-joining two tables for
+ * every byte range it asks for; `authorisedTextbookKey` carries the reasoning for that trade.
  *
  * ## Only the reader
  *
@@ -27,13 +28,10 @@ import { readObject } from '@/server/textbook-storage';
 export async function GET(request: Request, context: { params: Promise<{ materialId: string }> }) {
   if (request.headers.get(TEXTBOOK_READER_HEADER) !== '1') return notFound();
 
-  const user = await getCurrentUser();
-  if (!user) return notFound();
-
   const { materialId } = await context.params;
   if (!/^[0-9a-f-]{36}$/i.test(materialId)) return notFound();
 
-  const key = await textbookKeyFor(user, materialId);
+  const key = await authorisedTextbookKey(request, materialId);
   if (!key) return notFound();
 
   const object = await readObject(key, request.headers.get('range'));
