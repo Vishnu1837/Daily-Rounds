@@ -657,6 +657,9 @@ export async function getCohortMaterials(cohortId: string) {
       description: materials.description,
       type: materials.type,
       url: materials.url,
+      // Whether it is a file in our bucket. The key itself stays on the server.
+      hosted: sql<boolean>`${materials.storageKey} IS NOT NULL`,
+      sizeBytes: materials.sizeBytes,
       curriculumRef: materials.curriculumRef,
       subjectId: materials.subjectId,
       subjectName: subjects.name,

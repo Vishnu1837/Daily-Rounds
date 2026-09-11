@@ -148,6 +148,57 @@ every derived metric from source records if you ever need it.
 
 ---
 
+## 6. Hosted textbooks (Cloudflare R2)
+
+Textbooks uploaded under **Admin → Materials → Upload textbook** live in a private R2
+bucket. Students read them in the in-app reader; the file itself is never given a public
+URL, and every page the reader fetches is checked against the student's membership, so
+setting someone to _paused_ or _left_ locks them out on their next page turn. R2's free tier
+is 10 GB of storage with no charge for downloads.
+
+1. **Create the bucket.** Cloudflare dashboard → **R2** → **Create bucket**, e.g.
+   `daily-rounds-textbooks`. Leave **Public access** off — do not add a custom domain or
+   enable the `r2.dev` URL.
+2. **Create an API token.** R2 → **Manage R2 API Tokens** → **Create API token** with
+   **Object Read & Write**, scoped to that one bucket. Note the Access Key ID and Secret.
+3. **Allow uploads from the site.** The admin's browser sends the file straight to R2, so the
+   bucket needs a CORS rule. Bucket → **Settings** → **CORS policy**:
+
+   ```json
+   [
+     {
+       "AllowedOrigins": ["https://your-domain.com", "http://localhost:3000"],
+       "AllowedMethods": ["PUT"],
+       "AllowedHeaders": ["content-type"],
+       "MaxAgeSeconds": 3600
+     }
+   ]
+   ```
+
+   Only `PUT` is allowed from the browser. Reads go through the app, never to R2 directly.
+
+4. **Add four environment variables** to the deployment (your account ID is on the R2
+   overview page):
+
+   ```bash
+   vercel env add R2_ACCOUNT_ID production
+   vercel env add R2_BUCKET production
+   vercel env add R2_ACCESS_KEY_ID production
+   vercel env add R2_SECRET_ACCESS_KEY production
+   ```
+
+Without them, production shows "Textbook storage is not set up yet" on upload. Local
+development without them stores uploads under `.data/textbooks` instead, so the feature
+works on a laptop with no Cloudflare account.
+
+**What the reader does and does not prevent.** There is no download button, no text to
+copy, and printing and Ctrl+S are blocked; the file URL answers 404 to anything but the
+reader. Every page is also stamped with the reader's name and email, drawn into the page
+image itself. Nothing on a screen can be protected from a screenshot or a phone camera —
+the watermark is what makes a leaked page traceable to whoever leaked it.
+
+---
+
 ## Upgrading
 
 Schema changes:

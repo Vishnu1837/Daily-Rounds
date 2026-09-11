@@ -8,6 +8,7 @@ import { requireAdmin } from '@/lib/auth/guards';
 import { refOptionsBySubject, resolveRef } from '@/lib/curriculum';
 import { getPrimaryCohort } from '@/server/context';
 import { getCohortMaterials } from '@/server/queries/admin';
+import { getCohortTextbookTopics } from '@/server/queries/textbooks';
 
 import { MaterialsAdminScreen } from './materials-admin';
 
@@ -21,9 +22,10 @@ export default async function MaterialsAdminPage() {
   const cohort = await getPrimaryCohort();
   if (!cohort) redirect('/admin/no-cohort');
 
-  const [materials, subjectRows] = await Promise.all([
+  const [materials, subjectRows, topicsByMaterial] = await Promise.all([
     getCohortMaterials(cohort.id),
     db.select().from(subjects).orderBy(asc(subjects.name)),
+    getCohortTextbookTopics(cohort.id),
   ]);
 
   return (
@@ -33,6 +35,7 @@ export default async function MaterialsAdminPage() {
         ...m,
         // Resolved here so the client never has to carry the curriculum tree to do it.
         refPath: resolveRef(m.curriculumRef)?.path ?? null,
+        topics: topicsByMaterial.get(m.id) ?? [],
       }))}
       subjects={subjectRows.map((s) => ({ id: s.id, name: s.name, slug: s.slug }))}
       refOptions={refOptionsBySubject()}

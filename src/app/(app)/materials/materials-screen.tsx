@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   BookOpen,
+  ChevronRight,
   ExternalLink,
   FileText,
   FolderOpen,
@@ -20,6 +21,7 @@ import { EmptyState } from '@/components/ui/feedback';
 import { TextInput } from '@/components/ui/form';
 import { PageHeader } from '@/components/ui/page-header';
 import { Reveal } from '@/components/ui/reveal';
+import { Segmented } from '@/components/ui/segmented';
 import { cn } from '@/lib/cn';
 import type { MaterialType } from '@/db/schema';
 
@@ -67,12 +69,16 @@ type Material = {
   title: string;
   description: string | null;
   type: MaterialType;
-  url: string;
+  /** Null for a hosted textbook, which opens in the in-app reader instead. */
+  url: string | null;
+  hosted: boolean;
   curriculumRef: string | null;
   /** The curriculum section or topic this sits under, resolved server-side. */
   topicLabel: string | null;
   subjectName: string | null;
 };
+
+type Shelf = 'textbooks' | 'links';
 
 type Quiz = {
   id: string;
@@ -91,16 +97,25 @@ export function MaterialsScreen({
 }) {
   const [query, setQuery] = useState('');
 
+  /*
+   * Textbooks are the `textbook` type; everything else — videos, drives, sites, recordings —
+   * is a link. A cohort with no textbooks yet opens on Links rather than on an empty tab.
+   */
+  const textbooks = useMemo(() => materials.filter((m) => m.type === 'textbook'), [materials]);
+  const links = useMemo(() => materials.filter((m) => m.type !== 'textbook'), [materials]);
+  const [shelf, setShelf] = useState<Shelf>(textbooks.length > 0 ? 'textbooks' : 'links');
+  const shelfItems = shelf === 'textbooks' ? textbooks : links;
+
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = q
-      ? materials.filter(
+      ? shelfItems.filter(
           (m) =>
             m.title.toLowerCase().includes(q) ||
             (m.topicLabel ?? '').toLowerCase().includes(q) ||
             (m.subjectName ?? '').toLowerCase().includes(q),
         )
-      : materials;
+      : shelfItems;
 
     const map = new Map<string, Material[]>();
     for (const m of filtered) {
@@ -110,7 +125,7 @@ export function MaterialsScreen({
       map.set(key, list);
     }
     return [...map.entries()];
-  }, [materials, query]);
+  }, [shelfItems, query]);
 
   const matchCount = grouped.reduce((sum, [, items]) => sum + items.length, 0);
 
@@ -121,6 +136,16 @@ export function MaterialsScreen({
         title="Materials"
         description="Curated by your cohort lead and grouped by topic."
       >
+        <Segmented
+          ariaLabel="Material type"
+          value={shelf}
+          onChange={setShelf}
+          options={[
+            { value: 'textbooks', label: 'Textbooks', count: textbooks.length },
+            { value: 'links', label: 'Links', count: links.length },
+          ]}
+          className="mb-3"
+        />
         <TextInput
           type="search"
           placeholder="Search by topic, subject or title"
@@ -183,11 +208,17 @@ export function MaterialsScreen({
         <Card variant="outline">
           <EmptyState
             icon={<BookOpen className="size-6" aria-hidden />}
-            title={query ? 'Nothing matched that search' : 'No materials yet'}
+            title={
+              query
+                ? 'Nothing matched that search'
+                : shelf === 'textbooks'
+                  ? 'No textbooks yet'
+                  : 'No links yet'
+            }
             description={
               query
                 ? 'Try a different topic name, or clear the search to see everything.'
-                : 'Your cohort lead has not added any resources yet. They will show up here, grouped by topic.'
+                : `Your cohort lead has not added any ${shelf} yet. They will show up here, grouped by topic.`
             }
           />
         </Card>
@@ -234,14 +265,10 @@ export function MaterialsScreen({
 function MaterialRow({ material }: { material: Material }) {
   const meta = TYPE_META[material.type];
   const Icon = meta.icon;
+  const className = 'tap group hover:bg-bg-sunken flex items-start gap-3.5 p-4 transition-colors';
 
-  return (
-    <a
-      href={material.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={cn('tap group hover:bg-bg-sunken flex items-start gap-3.5 p-4 transition-colors')}
-    >
+  const body = (
+    <>
       <span
         className={cn('grid size-10 shrink-0 place-items-center rounded-xl', meta.className)}
         aria-hidden
@@ -259,7 +286,24 @@ function MaterialRow({ material }: { material: Material }) {
           {material.subjectName ? ` · ${material.subjectName}` : ''}
         </p>
       </div>
+    </>
+  );
 
+  if (material.hosted || !material.url) {
+    return (
+      <Link href={`/materials/${material.id}`} className={className}>
+        {body}
+        <ChevronRight
+          className="text-fg-subtle group-hover:text-fg-muted mt-0.5 size-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
+          aria-hidden
+        />
+      </Link>
+    );
+  }
+
+  return (
+    <a href={material.url} target="_blank" rel="noopener noreferrer" className={className}>
+      {body}
       <ExternalLink
         className="text-fg-subtle group-hover:text-fg-muted mt-0.5 size-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
         aria-hidden

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { resolveRef } from './curriculum';
 import { FEEDBACK_TEXT_MAX } from './domain/feedback';
 import { EDITABLE_POINT_EVENTS } from './domain/points';
+import { MAX_TOPIC_TITLE, MAX_TOPICS } from './domain/textbook-topics';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -505,6 +506,36 @@ export const bulkAssignmentSchema = z.object({
     .transform((v) => v === true || v === 'true' || v === 'on'),
 });
 
+/**
+ * One chapter in a pasted or edited chapter list.
+ *
+ * Page bounds are checked for *shape* here — whole numbers, forward-running, within a
+ * plausible book. Whether they fit the actual PDF, and whether the positions run 1..n, is
+ * `validateTopicPlan`'s job, because those need the book's page count and the whole list.
+ */
+export const textbookTopicSchema = z.object({
+  position: z.number().int().min(1).max(MAX_TOPICS),
+  title: z.string().trim().min(1).max(MAX_TOPIC_TITLE),
+  startPage: z.number().int().min(1).max(20000),
+  endPage: z.number().int().min(1).max(20000),
+  curriculumRef: z
+    .string()
+    .trim()
+    .max(200)
+    .nullish()
+    .transform((v) => v || null)
+    .refine((v) => v === null || resolveRef(v) !== null, {
+      message: 'That is not a place in the curriculum.',
+    }),
+});
+
+export const textbookTopicsSchema = z.object({
+  materialId: z.string().uuid(),
+  cohortId: z.string().uuid(),
+  /** Empty is meaningful: it clears the chapter list and the book reads whole again. */
+  topics: z.array(textbookTopicSchema).max(MAX_TOPICS),
+});
+
 export const materialSchema = z.object({
   cohortId: z.string().uuid(),
   subjectId: z
@@ -536,7 +567,26 @@ export const materialSchema = z.object({
     .or(z.literal(''))
     .transform((v) => v || undefined),
   type: z.enum(['pdf', 'drive', 'video', 'textbook', 'website', 'recording']),
-  url: z.string().trim().url('Enter a full URL including https://').max(1000),
+  /** `link` carries a URL; `file` is a textbook uploaded to our own bucket. */
+  source: z.enum(['link', 'file']).default('link'),
+  url: z
+    .string()
+    .trim()
+    .url('Enter a full URL including https://')
+    .max(1000)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  /**
+   * The key of a file the admin's browser has just finished uploading. Absent when editing
+   * a hosted book without replacing its file. Checked against the cohort server-side.
+   */
+  storageKey: z
+    .string()
+    .max(200)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
 });
 
 export const eventSchema = z.object({

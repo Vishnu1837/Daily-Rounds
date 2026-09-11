@@ -6,11 +6,7 @@ import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 import { db } from '@/db/client';
-import {
-  invalidateCohortActivity,
-  invalidateCohortConfig,
-  invalidateCohortLibrary,
-} from '@/server/cache';
+import { invalidateCohortActivity, invalidateCohortConfig } from '@/server/cache';
 import {
   announcements,
   attendance,
@@ -22,7 +18,6 @@ import {
   dailyActivity,
   dailyAssignments,
   events,
-  materials,
   pointRules,
   pointsLedger,
   quizAttempts,
@@ -52,7 +47,6 @@ import {
   fieldErrors,
   holidaySchema,
   individualAssignmentSchema,
-  materialSchema,
   pointAdjustmentSchema,
   pointRuleSchema,
   roadmapSchema,
@@ -1879,66 +1873,6 @@ export async function deleteAnnouncementAction(
     revalidatePath('/today');
     return ok();
   }, 'We could not delete that announcement. Please try again.');
-}
-
-/* -------------------------------------------------------------- materials */
-
-export async function saveMaterialAction(
-  materialId: string | null,
-  _prev: unknown,
-  formData: FormData,
-): Promise<Result> {
-  return guarded(async () => {
-    const user = await requireAdminAction();
-    const parsed = materialSchema.safeParse(Object.fromEntries(formData));
-    if (!parsed.success) return fail('Check the highlighted fields.', fieldErrors(parsed.error));
-
-    const input = parsed.data;
-    const values = {
-      cohortId: input.cohortId,
-      subjectId: input.subjectId ?? null,
-      curriculumRef: input.curriculumRef ?? null,
-      title: input.title,
-      description: input.description ?? null,
-      type: input.type,
-      url: input.url,
-    };
-
-    if (materialId) {
-      await db
-        .update(materials)
-        .set(values)
-        .where(and(eq(materials.id, materialId), eq(materials.cohortId, input.cohortId)));
-    } else {
-      await db.insert(materials).values(values);
-    }
-
-    await recordAudit({
-      actorUserId: user.id,
-      action: materialId ? 'material.update' : 'material.create',
-      entity: 'material',
-      entityId: materialId ?? undefined,
-      payload: { title: input.title },
-    });
-
-    invalidateCohortLibrary(input.cohortId);
-    revalidatePath('/admin/materials');
-    revalidatePath('/materials');
-    return ok();
-  }, 'We could not save that material. Please try again.');
-}
-
-export async function deleteMaterialAction(cohortId: string, materialId: string): Promise<Result> {
-  return guarded(async () => {
-    await requireAdminAction();
-    await db
-      .delete(materials)
-      .where(and(eq(materials.id, materialId), eq(materials.cohortId, cohortId)));
-    invalidateCohortLibrary(cohortId);
-    revalidatePath('/admin/materials');
-    revalidatePath('/materials');
-    return ok();
-  }, 'We could not delete that material. Please try again.');
 }
 
 /** Reads the full points ledger for one student, for the admin correction screen. */

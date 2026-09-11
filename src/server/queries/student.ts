@@ -1435,6 +1435,8 @@ const loadMaterials = async (cohortId: string) => {
       description: materials.description,
       type: materials.type,
       url: materials.url,
+      // A hosted textbook opens in the reader; its storage key never leaves the server.
+      hosted: sql<boolean>`${materials.storageKey} IS NOT NULL`,
       curriculumRef: materials.curriculumRef,
       subjectName: subjects.name,
     })

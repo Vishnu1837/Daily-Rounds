@@ -12,7 +12,9 @@
  */
 import { relations, sql } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
+  check,
   customType,
   date,
   index,
@@ -1328,10 +1330,86 @@ export const materials = pgTable(
     title: varchar('title', { length: 200 }).notNull(),
     description: text('description'),
     type: materialTypeEnum('type').notNull().default('website'),
-    url: text('url').notNull(),
+    /** An external link. Null exactly when the material is a hosted file. */
+    url: text('url'),
+    /**
+     * The object's name in the private textbook bucket, for a hosted file.
+     *
+     * Never sent to a browser. A student reaches the bytes only through
+     * `/api/textbooks/[materialId]`, which checks their membership on every request.
+     */
+    storageKey: text('storage_key'),
+    sizeBytes: bigint('size_bytes', { mode: 'number' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('materials_cohort_idx').on(t.cohortId)],
+  (t) => [
+    index('materials_cohort_idx').on(t.cohortId),
+    check('materials_link_or_file', sql`(${t.url} IS NULL) <> (${t.storageKey} IS NULL)`),
+  ],
+);
+
+/* ------------------------------------------------------- textbook topics */
+
+/**
+ * One chapter of a hosted textbook, as a page range into the single stored PDF.
+ *
+ * The file is never split. `startPage` and `endPage` are inclusive, 1-based **physical**
+ * page indices — what the reader can address — and not the numbers printed on the paper,
+ * which front matter puts out of step. Consecutive topics may share a page, because a
+ * chapter that ends mid-page is still on that page.
+ */
+export const textbookTopics = pgTable(
+  'textbook_topics',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    materialId: uuid('material_id')
+      .notNull()
+      .references(() => materials.id, { onDelete: 'cascade' }),
+    /** 1-based and contiguous: the order the chapters are read in. */
+    position: smallint('position').notNull(),
+    title: varchar('title', { length: 200 }).notNull(),
+    startPage: integer('start_page').notNull(),
+    endPage: integer('end_page').notNull(),
+    /** Curriculum slug this chapter covers, so a roadmap topic can open its pages. */
+    curriculumRef: varchar('curriculum_ref', { length: 200 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('textbook_topics_material_position_key').on(t.materialId, t.position),
+    index('textbook_topics_material_idx').on(t.materialId, t.position),
+    check(
+      'textbook_topics_pages_sane',
+      sql`${t.startPage} >= 1 AND ${t.endPage} >= ${t.startPage}`,
+    ),
+    check('textbook_topics_position_sane', sql`${t.position} >= 1`),
+  ],
+);
+
+/**
+ * Whether one student has read one chapter.
+ *
+ * The row is the answer. Marking a topic studied inserts it; taking the mark back deletes
+ * it. A toggle rather than a one-way flag, so the mark stays worth something: a student who
+ * realises they skimmed can say so instead of living with a lie on their timeline.
+ *
+ * Carries no points and raises no behaviour event, by the same argument as
+ * `flashcard_progress` — an optional tool must not enter the consistency denominator.
+ */
+export const textbookTopicProgress = pgTable(
+  'textbook_topic_progress',
+  {
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => cohortMembers.id, { onDelete: 'cascade' }),
+    topicId: uuid('topic_id')
+      .notNull()
+      .references(() => textbookTopics.id, { onDelete: 'cascade' }),
+    studiedAt: timestamp('studied_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.memberId, t.topicId] }),
+    index('textbook_topic_progress_member_idx').on(t.memberId),
+  ],
 );
 
 /* ---------------------------------------------------------- announcements */
@@ -1666,6 +1744,21 @@ export const flashcardProgressRelations = relations(flashcardProgress, ({ one })
   card: one(flashcards, {
     fields: [flashcardProgress.cardId],
     references: [flashcards.id],
+  }),
+}));
+
+export const textbookTopicsRelations = relations(textbookTopics, ({ one, many }) => ({
+  material: one(materials, {
+    fields: [textbookTopics.materialId],
+    references: [materials.id],
+  }),
+  progress: many(textbookTopicProgress),
+}));
+
+export const textbookTopicProgressRelations = relations(textbookTopicProgress, ({ one }) => ({
+  topic: one(textbookTopics, {
+    fields: [textbookTopicProgress.topicId],
+    references: [textbookTopics.id],
   }),
 }));
 
