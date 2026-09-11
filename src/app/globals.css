@@ -213,7 +213,7 @@
    * sentence wraps, which is one line on a desktop and three on a phone, so neither the
    * layout nor a constant in a stylesheet can know it. Anything that sizes itself against
    * the height of the window has to subtract this or it will run off the bottom of the
-   * screen by exactly the height of the bar; see `CARD_BOX` in the flashcard.
+   * screen by exactly the height of the bar.
    */
   --viewing-as-height: 0px;
 

@@ -71,23 +71,25 @@ function FaceShell({
       {/*
         `flex-auto`, emphatically not `flex-1`.
 
-        The card is sized by its content now, and `flex-1` is `flex: 1 1 0%` — a zero basis,
-        which paired with the `min-h-0` below tells the card that this region wants no height
-        at all. The card then shrank to its floor and scrolled the question it was supposed
-        to be showing. `flex-auto` grows and shrinks exactly the same way but bases itself on
-        the content, so the card asks for the room the prompt actually needs.
+        The card is sized by its content, and `flex-1` is `flex: 1 1 0%` — a zero basis, which
+        tells the card that this region wants no height at all, so the card shrinks to its
+        floor. `flex-auto` grows the same way but bases itself on the content, so the card
+        asks for the room the prompt actually needs.
 
-        `min-h-0` and the overflow still matter for the one case that is left: a card that
-        would exceed the ceiling has to shrink past its content, and scrolling is the honest
-        fallback there. `justify-center-safe` rather than `justify-center` because centring
-        an overflowing flex child overflows it in *both* directions — that is what put an
-        eight-option question's prompt above the top edge of its own scroll container, out of
-        reach of any scrollbar. The safe alignment gives up centring at exactly the point it
-        would start hiding something. The scrollbar itself stays hidden for the reason the
-        answer side hides its own.
+        Deliberately not a scroll container. The card has no ceiling any more, so it never
+        has anything to scroll — and a scroll container a thumb lands on, with
+        `overscroll-contain`, is a place the page's own scroll can get stuck.
+
+        The shorter face shares its height with the taller one, so it has room to spare, and
+        the two spacers share it out: equally, which centres the content, until the top one
+        reaches its cap, after which the rest goes underneath. Plain centring put a one-line
+        question in the middle of a card sized for a long answer, which on a phone is
+        underneath the grade buttons pinned to the bottom of the screen.
       */}
-      <div className="no-scrollbar flex min-h-0 flex-auto flex-col justify-center-safe overflow-y-auto overscroll-contain py-5">
+      <div className="flex flex-auto flex-col py-5">
+        <div className="max-h-8 flex-1" aria-hidden />
         {children}
+        <div className="flex-1" aria-hidden />
       </div>
       {footer && <div className="shrink-0">{footer}</div>}
     </div>
@@ -291,12 +293,11 @@ export function CardBack({ card, chosen }: { card: SessionCard; chosen: number |
       }
     >
       {/*
-        Scrollable, because a long explanation on a short window has to go somewhere and
-        clipping an answer is not an option. `no-scrollbar` because a scrollbar track drawn
-        down the side of the card breaks the illusion that it is a card — it still scrolls
-        by wheel, touch and keyboard, it just does not draw furniture on top of the answer.
+        Not scrollable: a long explanation makes the card taller and the page scrolls. It
+        used to scroll in here instead, with its scrollbar hidden, which on a phone meant a
+        key idea cut off mid-sentence with nothing to say there was more of it.
       */}
-      <div className="no-scrollbar space-y-4 overflow-y-auto overscroll-contain">
+      <div className="space-y-4">
         {/*
           The prompt is repeated small above the answer on every back face. Without it the
           card that arrives after a flip is a sentence with no question attached, and a

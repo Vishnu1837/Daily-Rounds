@@ -51,50 +51,27 @@ import { CardBack, CardFront } from './card-face';
  */
 
 /**
- * The card's box: a floor, and a ceiling sized off the viewport.
+ * The card's box: a floor, and no ceiling.
  *
  * The card is as tall as the thing written on it. A fixed height meant every card was the
  * height of the longest one it might ever have to hold — a two-word definition floated in a
- * field of white, and, worse, a five-option question on a short window was handed a box it
- * did not fit in and had its prompt scrolled out of sight above the first option. Sizing to
- * content fixes both ends of that: the short card shrinks, the long one grows.
+ * field of white, and a five-option question on a short window was handed a box it did not
+ * fit in. The floor stops a one-word answer from collapsing into a chip; it still has to
+ * read as a card.
  *
- * The floor stops a one-word answer from collapsing into a chip — it still has to read as a
- * card. The ceiling is what keeps the grade buttons above the fold: a 34rem card is right on
- * a laptop and wrong on a short window, where it pushes the four buttons below it off the
- * screen — and a student who has to scroll to answer has been handed back every millisecond
- * the rest of this file spent making the interaction quick. Only a card that would exceed
- * that ceiling scrolls internally, and by then scrolling is the honest answer.
+ * There used to be a viewport-derived ceiling as well, so the grade buttons could never be
+ * pushed below the fold, with anything taller scrolling inside the card. On a phone that
+ * ceiling was around 300px once the header, progress rail, grade buttons and bottom bar had
+ * taken their share, which is less than a cloze sentence and its key idea — so real answers
+ * were cut off mid-line, inside a scroll container with no scrollbar, on a card whose touch
+ * handling belongs to the swipe. Nothing said there was more, and on a face-down card
+ * nothing could reach it.
  *
- * Two clamps rather than one because the two layouts do not have the same furniture: a
- * phone additionally carries the floating bottom bar and a taller header, so several more
- * rem of the viewport is already spoken for before the card gets any. Sharing a single
- * subtrahend meant either a stunted card on the desktop or grade buttons sitting underneath
- * the navigation on a phone — which is the one place they must never be, because that is
- * exactly where the thumb is.
- *
- * The phone's subtrahend is measured rather than guessed, and it is what everything above
- * and below the card actually occupies on a 375×812 viewport: the header and the deck's own
- * title and progress rail above (13rem), the gap and the grade buttons below (8.75rem), and
- * the floating bottom bar (5rem), with a little over a rem left so a deck title that wraps
- * to two lines does not spend the card's height.
- *
- * `--viewing-as-height` is the one piece of that furniture which is neither constant nor
- * known here: the bar an admin gets while viewing the app as a student, which is absent for
- * every ordinary student, one line tall on a desktop and three on a phone. It resolves to
- * `0px` from `globals.css` when there is no bar, and the bar publishes its own height when
- * there is. Without it, the height the card claims is height the window does not have, and
- * the grade buttons end up underneath the bottom bar for exactly the people whose job is to
- * check that they are not.
- *
- * Exported because the stack layers behind the card are sized from the live card rather than
- * from this, and the stage needs the same floor before the first card has been measured.
+ * So the card grows and the page scrolls, which every student already knows how to do, and
+ * the grade buttons are kept in reach a different way: the session screen pins them above
+ * the bottom bar whenever the card runs past it.
  */
-export const CARD_BOX = [
-  'min-h-[14rem] sm:min-h-[15rem]',
-  'max-h-[clamp(14rem,calc(100dvh-27.5rem-var(--viewing-as-height)),34rem)]',
-  'sm:max-h-[clamp(15rem,calc(100dvh-21rem-var(--viewing-as-height)),34rem)]',
-].join(' ');
+export const CARD_BOX = 'min-h-[14rem] sm:min-h-[15rem]';
 
 /** The stage's height before a card has been measured, and while the cover is still on. */
 export const CARD_FALLBACK_HEIGHT = 'min-h-[24rem] sm:min-h-[27rem]';
@@ -334,6 +311,11 @@ export function Flashcard({
    *   - face up  → drag left/right to grade (`canGrade`), x-axis only so the page can still
    *     scroll vertically under a thumb.
    *   - face down → throw in any direction to skip (`canSkip`), the card-stack send-to-back.
+   *
+   * Both leave vertical panning to the browser on touch (`pan-y`). A card can be taller than
+   * the screen, and the page is how the rest of it is reached — `touch-action: none` on a
+   * card that fills the viewport leaves nothing to scroll with. A mouse still throws a
+   * face-down card in any direction; a thumb throws it sideways.
    */
   const canGrade = swipeEnabled && faceUp && !reduce;
   const canSkip = skipEnabled && !faceUp && !reduce;
@@ -407,7 +389,7 @@ export function Flashcard({
         x,
         y,
         rotate,
-        touchAction: canSkip ? 'none' : canGrade ? 'pan-y' : 'auto',
+        touchAction: canDrag ? 'pan-y' : 'auto',
       }}
       initial={reduce ? { opacity: 0 } : { opacity: 0, y: 40, scale: 0.93 }}
       animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}

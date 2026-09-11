@@ -80,11 +80,6 @@ export function SessionScreen({
   const gradedCount = outcomes.length;
   const remaining = order.length;
 
-  /*
-   * Guards the "save what you have on the way out" effect from firing twice — once from the
-   * deliberate exit and again from the unmount that exit causes. A double submit would
-   * write a second session row and a second set of reviews for the same work.
-   */
   /* ---------------------------------------------------------- stage size */
 
   /*
@@ -119,6 +114,65 @@ export function SessionScreen({
     );
   }, []);
 
+  /*
+   * Each new card starts at its own top edge.
+   *
+   * A card can be taller than the screen, and the page is how the rest of it is read — so a
+   * student grading a long answer has usually scrolled down to its key idea. Without this
+   * the next card arrives with the page still scrolled, its prompt somewhere above the top
+   * of the window, and the first thing they read is the middle of a question.
+   */
+  const shownCardId = useRef(card?.id);
+  useEffect(() => {
+    if (shownCardId.current === card?.id) return;
+    shownCardId.current = card?.id;
+    if (window.scrollY > 0) window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+  }, [card?.id, reduce]);
+
+  /*
+   * Whether the pinned controls are currently sitting over the card.
+   *
+   * The controls are sticky (see the note on them below), and while they overlap a long
+   * card they need a backdrop so the card passes under them. They must not have one
+   * otherwise: in place under a short card, that backdrop would lie across the edges of the
+   * stack peeking out beneath it and wash them out. There is no CSS for "is stuck", so this
+   * compares the two boxes — on scroll, on resize, and on every frame of the stage easing to
+   * a new card's height, which a ResizeObserver sees and a scroll listener does not.
+   */
+  const stageRef = useRef<HTMLDivElement>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const [controlsOverCard, setControlsOverCard] = useState(false);
+  useEffect(() => {
+    const stage = stageRef.current;
+    const controls = controlsRef.current;
+    if (!stage || !controls) return;
+
+    const check = () => {
+      // A little early, so the backdrop's faded top edge is already in place by the time
+      // the card's own bottom edge reaches the buttons.
+      const over = stage.getBoundingClientRect().bottom > controls.getBoundingClientRect().top - 12;
+      setControlsOverCard((current) => (current === over ? current : over));
+    };
+
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(stage);
+    window.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('scroll', check);
+      window.removeEventListener('resize', check);
+    };
+    // Re-run on reveal: that is when the controls become sticky, which moves them without
+    // scrolling or resizing anything.
+  }, [revealed]);
+
+  /*
+   * Guards the "save what you have on the way out" effect from firing twice — once from the
+   * deliberate exit and again from the unmount that exit causes. A double submit would
+   * write a second session row and a second set of reviews for the same work.
+   */
   const flushed = useRef(false);
   const outcomesRef = useRef(outcomes);
   useEffect(() => {
@@ -382,7 +436,7 @@ export function SessionScreen({
       )}
 
       {/* ------------------------------------------------------------- stage */}
-      <div className="relative">
+      <div ref={stageRef} className="relative">
         {/*
           The deck the card is drawn from. Two static layers, always behind, so the stage is
           never an empty rectangle between one card and the next and the deck reads as
@@ -480,10 +534,29 @@ export function SessionScreen({
         is ever derived from animation state. Both layers are always mounted, stacked, and
         toggled by opacity, so the buttons exist the instant the card is revealed whether or
         not a single frame ever renders.
+
+        Sticky once the card is revealed, so a card taller than the screen cannot push the
+        grade buttons out of reach. The card has no height ceiling — its content decides — so
+        on a phone a long answer runs past the bottom bar, and the four buttons ride just
+        above that bar (clearing the raised action in its middle) until the student scrolls
+        to the end of the card, where they settle back into place. A short card never reaches
+        the offset, so for most cards this changes nothing. While they do sit over the card
+        they get a backdrop of the page's own ground, faded in at the top, so the card passes
+        under the buttons rather than showing through the gaps between them.
+
+        Not while the card is face down: nothing in the hint is needed to go on — the card
+        itself is the reveal control — and pinning it would lay a strip across the bottom of
+        the question the student is meant to be reading.
       */}
       <div
+        ref={controlsRef}
         className={cn(
-          'relative min-h-[7.5rem]',
+          'min-h-[7.5rem]',
+          revealed
+            ? 'sticky bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+5.75rem)] z-20 lg:bottom-4'
+            : 'relative',
+          'before:bg-bg/92 before:pointer-events-none before:absolute before:-inset-x-4 before:-top-5 before:-bottom-2 before:[mask-image:linear-gradient(to_bottom,transparent,black_1.25rem)] before:backdrop-blur-md before:transition-opacity before:duration-200',
+          controlsOverCard ? 'before:opacity-100' : 'before:opacity-0',
           /*
            * The grade buttons of the card that has just been graded are still on screen,
            * animating away, and their props are frozen at the moment they left — so they
