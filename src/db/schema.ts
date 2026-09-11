@@ -1340,6 +1340,13 @@ export const materials = pgTable(
      */
     storageKey: text('storage_key'),
     sizeBytes: bigint('size_bytes', { mode: 'number' }),
+    /**
+     * The object name of a cover image, for a book an admin has given one.
+     *
+     * Null means the shelf draws a title card instead — see `BookCover`. Kept in the same
+     * private bucket and read through the same membership-checked route as the book itself.
+     */
+    coverKey: text('cover_key'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -1411,6 +1418,58 @@ export const textbookTopicProgress = pgTable(
     index('textbook_topic_progress_member_idx').on(t.memberId),
   ],
 );
+
+/**
+ * A chapter list somebody proposed, waiting for a person to agree with it.
+ *
+ * Separate from `textbookTopics` on purpose. The published list is what students read and
+ * what their progress rows point at; a draft has to be re-generatable, editable and
+ * throw-away-able without a single "studied" mark noticing. The two meet exactly once, at
+ * publish, through the same validated path a hand-typed list takes.
+ *
+ * One row per book: generating again replaces the proposal rather than piling up
+ * alternatives nobody asked to choose between.
+ */
+export const textbookChapterDrafts = pgTable('textbook_chapter_drafts', {
+  materialId: uuid('material_id')
+    .primaryKey()
+    .references(() => materials.id, { onDelete: 'cascade' }),
+  /** The proposed chapters, in the shape the editor and the save action already speak. */
+  plan: jsonb('plan')
+    .$type<
+      {
+        position: number;
+        title: string;
+        startPage: number;
+        endPage: number;
+        curriculumRef: string | null;
+      }[]
+    >()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  /** Which model proposed it, so an odd list can be traced after the model has moved on. */
+  model: varchar('model', { length: 80 }),
+  /** `gemini` when a model wrote it, `outline` when it came from the PDF's own bookmarks. */
+  source: varchar('source', { length: 20 }).notNull().default('gemini'),
+  /** What the model said about its own confidence. Shown to the reviewing admin verbatim. */
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Settings that belong to the deployment rather than to a cohort.
+ *
+ * Created for a Gemini key typed into the admin UI; the key now comes only from the
+ * `GEMINI_API_KEY` environment variable, so nothing reads or writes this table today. Kept
+ * so the schema matches migration 0021, and free for the next deployment-wide setting.
+ */
+export const appSettings = pgTable('app_settings', {
+  key: varchar('key', { length: 60 }).primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+});
 
 /* ---------------------------------------------------------- announcements */
 

@@ -43,10 +43,13 @@ export type ScreenTopic = {
 export function BookScreen({
   materialId,
   title,
+  coverVersion = null,
   topics: initial,
 }: {
   materialId: string;
   title: string;
+  /** Non-null when an admin uploaded a cover; otherwise the drawn title card is used. */
+  coverVersion?: string | null;
   topics: ScreenTopic[];
 }) {
   const [topics, setTopics] = useState(initial);
@@ -104,7 +107,12 @@ export function BookScreen({
       {/* --------------------------------------------------- continue reading */}
       <Reveal>
         {next ? (
-          <ContinueCard materialId={materialId} bookTitle={title} topic={next} />
+          <ContinueCard
+            materialId={materialId}
+            bookTitle={title}
+            coverVersion={coverVersion}
+            topic={next}
+          />
         ) : (
           <Card variant="wash" tone="success" padding="md">
             <div className="flex items-center gap-3">
@@ -184,7 +192,12 @@ export function BookScreen({
         {open && (
           <div className="space-y-4">
             <div className="flex items-start gap-4">
-              <BookCover title={title} size="md" />
+              <BookCover
+                title={title}
+                materialId={materialId}
+                coverVersion={coverVersion}
+                size="md"
+              />
               <div className="min-w-0 flex-1 space-y-2">
                 <Badge tone={open.studied ? 'success' : 'neutral'} size="sm">
                   {open.studied ? 'Studied' : 'Not studied yet'}
@@ -289,10 +302,12 @@ function TimelineRow({
 function ContinueCard({
   materialId,
   bookTitle,
+  coverVersion,
   topic,
 }: {
   materialId: string;
   bookTitle: string;
+  coverVersion: string | null;
   topic: ScreenTopic;
 }) {
   const pages = topicPageCount(topic);
@@ -304,7 +319,12 @@ function ContinueCard({
       <Card variant="wash" tone="pulse" padding="md" interactive glow>
         <p className="eyebrow text-pulse-700 dark:text-pulse-300 mb-2.5">Continue reading</p>
         <div className="flex items-center gap-3.5">
-          <BookCover title={bookTitle} size="sm" />
+          <BookCover
+            title={bookTitle}
+            materialId={materialId}
+            coverVersion={coverVersion}
+            size="sm"
+          />
           <div className="min-w-0 flex-1">
             <p className="text-fg truncate text-sm font-bold">{topic.title}</p>
             <p className="text-fg-muted mt-0.5 text-xs font-semibold tabular-nums">

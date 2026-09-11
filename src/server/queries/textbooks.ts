@@ -3,8 +3,15 @@ import 'server-only';
 import { and, asc, eq, inArray, isNotNull } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { cohortMembers, materials, textbookTopicProgress, textbookTopics } from '@/db/schema';
+import {
+  cohortMembers,
+  materials,
+  textbookChapterDrafts,
+  textbookTopicProgress,
+  textbookTopics,
+} from '@/db/schema';
 import type { SessionUser } from '@/lib/auth/session';
+import { coverVersion } from '@/lib/domain/textbooks';
 
 /**
  * The storage key of a hosted textbook, if — and only if — this user may read it.
@@ -47,10 +54,49 @@ export async function textbookKeyFor(user: SessionUser, materialId: string) {
   return rows[0]?.key ?? null;
 }
 
+/**
+ * The key of a book's cover, if this user may see the shelf it sits on.
+ *
+ * The same membership question as `textbookKeyFor`, asked separately because the answers
+ * differ: a cover has no reader header to check, since it is drawn by an `<img>` and an
+ * `<img>` cannot set one. What it does have is the same 404 for everyone who is not an
+ * active member — a cohort's reading list is theirs, and a cover is part of it.
+ */
+export async function coverKeyFor(user: SessionUser, materialId: string) {
+  if (user.role === 'admin') {
+    const rows = await db
+      .select({ key: materials.coverKey })
+      .from(materials)
+      .where(and(eq(materials.id, materialId), isNotNull(materials.coverKey)))
+      .limit(1);
+    return rows[0]?.key ?? null;
+  }
+
+  const rows = await db
+    .select({ key: materials.coverKey })
+    .from(materials)
+    .innerJoin(
+      cohortMembers,
+      and(
+        eq(cohortMembers.cohortId, materials.cohortId),
+        eq(cohortMembers.userId, user.id),
+        eq(cohortMembers.status, 'active'),
+      ),
+    )
+    .where(and(eq(materials.id, materialId), isNotNull(materials.coverKey)))
+    .limit(1);
+  return rows[0]?.key ?? null;
+}
+
 /** The reader page's view of a hosted textbook in the student's own cohort. */
 export async function getHostedTextbook(cohortId: string, materialId: string) {
   const rows = await db
-    .select({ id: materials.id, title: materials.title, sizeBytes: materials.sizeBytes })
+    .select({
+      id: materials.id,
+      title: materials.title,
+      sizeBytes: materials.sizeBytes,
+      coverKey: materials.coverKey,
+    })
     .from(materials)
     .where(
       and(
@@ -60,7 +106,11 @@ export async function getHostedTextbook(cohortId: string, materialId: string) {
       ),
     )
     .limit(1);
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (!row) return null;
+  // The key stays here; the page gets a version to hang off the cover route's URL.
+  const { coverKey, ...book } = row;
+  return { ...book, coverVersion: coverKey ? coverVersion(coverKey) : null };
 }
 
 export type BookTopic = {
@@ -223,4 +273,28 @@ export async function getCohortTextbookTopics(cohortId: string) {
     byMaterial.set(materialId, list);
   }
   return byMaterial;
+}
+
+/**
+ * Every unpublished chapter proposal in a cohort, for the admin materials screen.
+ *
+ * One query for the same reason `getCohortTextbookTopics` is one: the screen needs to show
+ * which books have a draft waiting the moment it renders, and a handful of rows is cheaper
+ * than a round trip per book.
+ */
+export async function getCohortChapterDrafts(cohortId: string) {
+  const rows = await db
+    .select({
+      materialId: textbookChapterDrafts.materialId,
+      plan: textbookChapterDrafts.plan,
+      model: textbookChapterDrafts.model,
+      source: textbookChapterDrafts.source,
+      note: textbookChapterDrafts.note,
+      updatedAt: textbookChapterDrafts.updatedAt,
+    })
+    .from(textbookChapterDrafts)
+    .innerJoin(materials, eq(materials.id, textbookChapterDrafts.materialId))
+    .where(eq(materials.cohortId, cohortId));
+
+  return new Map(rows.map((row) => [row.materialId, row]));
 }

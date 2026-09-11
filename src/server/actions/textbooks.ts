@@ -5,7 +5,12 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { db } from '@/db/client';
-import { materials, textbookTopicProgress, textbookTopics } from '@/db/schema';
+import {
+  materials,
+  textbookChapterDrafts,
+  textbookTopicProgress,
+  textbookTopics,
+} from '@/db/schema';
 import { requireAdminAction, requireUserAction } from '@/lib/auth/guards';
 import { validateTopicPlan } from '@/lib/domain/textbook-topics';
 import { fieldErrors, textbookTopicsSchema } from '@/lib/validation';
@@ -148,6 +153,13 @@ export async function saveTextbookTopicsAction(input: {
         await tx.insert(textbookTopicProgress).values(restored).onConflictDoNothing();
       }
     });
+
+    /*
+     * Publishing consumes the draft. A proposal that has been agreed with and published is
+     * no longer a proposal, and leaving it behind would leave the admin screen offering to
+     * review a list students are already reading.
+     */
+    await db.delete(textbookChapterDrafts).where(eq(textbookChapterDrafts.materialId, materialId));
 
     await recordAudit({
       actorUserId: user.id,

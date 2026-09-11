@@ -100,6 +100,55 @@ export function keyBelongsToCohort(key: string, cohortId: string): boolean {
   );
 }
 
+/* ------------------------------------------------------------------ covers */
+
+/** A cover is a thumbnail on a shelf, not a plate in an atlas. Anything larger is a mistake. */
+export const MAX_COVER_BYTES = 5 * 1024 * 1024;
+
+/**
+ * The image types a cover may be, and the first bytes each one really starts with.
+ *
+ * Both halves matter. The extension decides the key and the `Content-Type` the shelf is
+ * served with; the magic bytes are how the server knows the file is what the browser said
+ * it was, since a `.png` is a name an uploader chooses and not a fact about the bytes.
+ */
+export const COVER_TYPES = {
+  'image/png': { ext: 'png', magic: [0x89, 0x50, 0x4e, 0x47] },
+  'image/jpeg': { ext: 'jpg', magic: [0xff, 0xd8, 0xff] },
+  'image/webp': { ext: 'webp', magic: [0x52, 0x49, 0x46, 0x46] },
+} as const;
+
+export type CoverType = keyof typeof COVER_TYPES;
+
+export function isCoverType(value: string): value is CoverType {
+  return value in COVER_TYPES;
+}
+
+/** The content type a stored cover is served with, read back from its own extension. */
+export function coverContentType(key: string): string {
+  const ext = key.slice(key.lastIndexOf('.') + 1).toLowerCase();
+  const match = Object.entries(COVER_TYPES).find(([, meta]) => meta.ext === ext);
+  return match?.[0] ?? 'application/octet-stream';
+}
+
+export function newCoverKey(cohortId: string, type: CoverType): string {
+  return `covers/${cohortId}/${crypto.randomUUID()}.${COVER_TYPES[type].ext}`;
+}
+
+export function coverKeyBelongsToCohort(key: string, cohortId: string): boolean {
+  return (
+    /^covers\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(png|jpg|webp)$/.test(key) &&
+    key.startsWith(`covers/${cohortId}/`)
+  );
+}
+
+/** Whether the stored object really begins the way one of the allowed image types does. */
+export function looksLikeCover(bytes: Uint8Array): boolean {
+  return Object.values(COVER_TYPES).some((meta) =>
+    meta.magic.every((byte, i) => bytes[i] === byte),
+  );
+}
+
 /** Where the admin's browser should PUT the file. */
 export async function uploadUrlFor(key: string): Promise<string> {
   const driver = storageDriver();

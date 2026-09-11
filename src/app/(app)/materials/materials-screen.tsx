@@ -12,9 +12,11 @@ import {
   Library,
   PlayCircle,
   Search,
+  SlidersHorizontal,
   Video,
 } from 'lucide-react';
 
+import { BookCover } from '@/components/textbook/book-cover';
 import { Badge } from '@/components/ui/badge';
 import { Card, SectionTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/feedback';
@@ -76,6 +78,8 @@ type Material = {
   /** The curriculum section or topic this sits under, resolved server-side. */
   topicLabel: string | null;
   subjectName: string | null;
+  /** Non-null when this book has an uploaded cover. Changes when the image is replaced. */
+  coverVersion: string | null;
 };
 
 type Shelf = 'textbooks' | 'links';
@@ -104,30 +108,6 @@ export function MaterialsScreen({
   const textbooks = useMemo(() => materials.filter((m) => m.type === 'textbook'), [materials]);
   const links = useMemo(() => materials.filter((m) => m.type !== 'textbook'), [materials]);
   const [shelf, setShelf] = useState<Shelf>(textbooks.length > 0 ? 'textbooks' : 'links');
-  const shelfItems = shelf === 'textbooks' ? textbooks : links;
-
-  const grouped = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const filtered = q
-      ? shelfItems.filter(
-          (m) =>
-            m.title.toLowerCase().includes(q) ||
-            (m.topicLabel ?? '').toLowerCase().includes(q) ||
-            (m.subjectName ?? '').toLowerCase().includes(q),
-        )
-      : shelfItems;
-
-    const map = new Map<string, Material[]>();
-    for (const m of filtered) {
-      const key = m.topicLabel ?? m.subjectName ?? 'General';
-      const list = map.get(key) ?? [];
-      list.push(m);
-      map.set(key, list);
-    }
-    return [...map.entries()];
-  }, [shelfItems, query]);
-
-  const matchCount = grouped.reduce((sum, [, items]) => sum + items.length, 0);
 
   return (
     <div className="space-y-5">
@@ -148,7 +128,9 @@ export function MaterialsScreen({
         />
         <TextInput
           type="search"
-          placeholder="Search by topic, subject or title"
+          placeholder={
+            shelf === 'textbooks' ? 'Search books by title or subject' : 'Search by topic or title'
+          }
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search materials"
@@ -203,62 +185,219 @@ export function MaterialsScreen({
         </Reveal>
       )}
 
-      {/* ------------------------------------------------------- the library */}
-      {grouped.length === 0 ? (
+      {shelf === 'textbooks' ? (
+        <Bookshelf books={textbooks} query={query} />
+      ) : (
+        <LinkShelf links={links} query={query} />
+      )}
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------- textbooks */
+
+/**
+ * The books, as books.
+ *
+ * A textbook is chosen by sight — a student looking for the red anatomy one is not reading
+ * titles, they are looking for the red one — so the shelf is a grid of covers rather than
+ * the row-per-item list the links use. Subject chips sit above it because a cohort with
+ * fifteen books across six subjects is one filter away from being a shelf of three.
+ */
+function Bookshelf({ books, query }: { books: Material[]; query: string }) {
+  const [subject, setSubject] = useState<string>('all');
+
+  const subjects = useMemo(() => {
+    const names = new Set<string>();
+    for (const book of books) if (book.subjectName) names.add(book.subjectName);
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [books]);
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return books.filter((book) => {
+      if (subject !== 'all' && book.subjectName !== subject) return false;
+      if (!q) return true;
+      return (
+        book.title.toLowerCase().includes(q) ||
+        (book.subjectName ?? '').toLowerCase().includes(q) ||
+        (book.topicLabel ?? '').toLowerCase().includes(q)
+      );
+    });
+  }, [books, subject, query]);
+
+  if (books.length === 0) {
+    return (
+      <Card variant="outline">
+        <EmptyState
+          icon={<BookOpen className="size-6" aria-hidden />}
+          title="No textbooks yet"
+          description="Your cohort lead has not uploaded any books yet. They will appear here, ready to read chapter by chapter."
+        />
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {subjects.length > 0 && (
+        <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1">
+          <span
+            className="text-fg-subtle border-border grid size-8 shrink-0 place-items-center rounded-full border"
+            aria-hidden
+          >
+            <SlidersHorizontal className="size-3.5" />
+          </span>
+          <FilterChip label="All" active={subject === 'all'} onClick={() => setSubject('all')} />
+          {subjects.map((name) => (
+            <FilterChip
+              key={name}
+              label={name}
+              active={subject === name}
+              onClick={() => setSubject(name)}
+            />
+          ))}
+        </div>
+      )}
+
+      {shown.length === 0 ? (
         <Card variant="outline">
           <EmptyState
             icon={<BookOpen className="size-6" aria-hidden />}
-            title={
-              query
-                ? 'Nothing matched that search'
-                : shelf === 'textbooks'
-                  ? 'No textbooks yet'
-                  : 'No links yet'
-            }
-            description={
-              query
-                ? 'Try a different topic name, or clear the search to see everything.'
-                : `Your cohort lead has not added any ${shelf} yet. They will show up here, grouped by topic.`
-            }
+            title="Nothing matched"
+            description="Try a different title, or clear the search and filter to see every book."
           />
         </Card>
       ) : (
-        <>
-          {query && (
-            <p className="text-fg-muted px-1 text-sm">
-              <strong className="text-fg">{matchCount}</strong>{' '}
-              {matchCount === 1 ? 'resource' : 'resources'} matching “{query}”
-            </p>
-          )}
-          <div className="space-y-5">
-            {grouped.map(([topic, items], groupIndex) => (
-              <Reveal key={topic} delay={groupIndex}>
-                <section className="space-y-2.5">
-                  <SectionTitle
-                    action={
-                      <span className="text-2xs text-fg-subtle font-bold tabular-nums">
-                        {items.length}
-                      </span>
-                    }
-                  >
-                    {topic}
-                  </SectionTitle>
-                  <Card padding="none" className="overflow-hidden">
-                    <ul className="divide-border divide-y">
-                      {items.map((m) => (
-                        <li key={m.id}>
-                          <MaterialRow material={m} />
-                        </li>
-                      ))}
-                    </ul>
-                  </Card>
-                </section>
-              </Reveal>
-            ))}
-          </div>
-        </>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {shown.map((book, index) => (
+            <Reveal key={book.id} delay={Math.min(index, 8)}>
+              <Link href={`/materials/${book.id}`} className="tap group block">
+                <BookCover
+                  title={book.title}
+                  materialId={book.id}
+                  coverVersion={book.coverVersion}
+                  size="shelf"
+                  className="transition-transform duration-200 group-hover:-translate-y-1 group-hover:shadow-lg"
+                />
+                <p className="text-fg mt-2.5 line-clamp-2 text-sm font-bold">{book.title}</p>
+                {(book.subjectName ?? book.topicLabel) && (
+                  <p className="text-fg-subtle mt-0.5 truncate text-xs font-semibold">
+                    {book.subjectName ?? book.topicLabel}
+                  </p>
+                )}
+              </Link>
+            </Reveal>
+          ))}
+        </div>
       )}
     </div>
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'tap rounded-pill shrink-0 px-3.5 py-1.5 text-xs font-bold whitespace-nowrap transition-colors',
+        active
+          ? 'bg-pulse-600 text-white'
+          : 'border-border text-fg-muted hover:text-fg hover:bg-bg-sunken border',
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------- links */
+
+function LinkShelf({ links, query }: { links: Material[]; query: string }) {
+  const grouped = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = q
+      ? links.filter(
+          (m) =>
+            m.title.toLowerCase().includes(q) ||
+            (m.topicLabel ?? '').toLowerCase().includes(q) ||
+            (m.subjectName ?? '').toLowerCase().includes(q),
+        )
+      : links;
+
+    const map = new Map<string, Material[]>();
+    for (const m of filtered) {
+      const key = m.topicLabel ?? m.subjectName ?? 'General';
+      const list = map.get(key) ?? [];
+      list.push(m);
+      map.set(key, list);
+    }
+    return [...map.entries()];
+  }, [links, query]);
+
+  const matchCount = grouped.reduce((sum, [, items]) => sum + items.length, 0);
+
+  if (grouped.length === 0) {
+    return (
+      <Card variant="outline">
+        <EmptyState
+          icon={<BookOpen className="size-6" aria-hidden />}
+          title={query ? 'Nothing matched that search' : 'No links yet'}
+          description={
+            query
+              ? 'Try a different topic name, or clear the search to see everything.'
+              : 'Your cohort lead has not added any links yet. They will show up here, grouped by topic.'
+          }
+        />
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      {query && (
+        <p className="text-fg-muted px-1 text-sm">
+          <strong className="text-fg">{matchCount}</strong>{' '}
+          {matchCount === 1 ? 'resource' : 'resources'} matching “{query}”
+        </p>
+      )}
+      <div className="space-y-5">
+        {grouped.map(([topic, items], groupIndex) => (
+          <Reveal key={topic} delay={groupIndex}>
+            <section className="space-y-2.5">
+              <SectionTitle
+                action={
+                  <span className="text-2xs text-fg-subtle font-bold tabular-nums">
+                    {items.length}
+                  </span>
+                }
+              >
+                {topic}
+              </SectionTitle>
+              <Card padding="none" className="overflow-hidden">
+                <ul className="divide-border divide-y">
+                  {items.map((m) => (
+                    <li key={m.id}>
+                      <MaterialRow material={m} />
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            </section>
+          </Reveal>
+        ))}
+      </div>
+    </>
   );
 }
 

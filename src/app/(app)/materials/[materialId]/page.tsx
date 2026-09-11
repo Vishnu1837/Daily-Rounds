@@ -56,7 +56,14 @@ async function Book({ params }: { params: Promise<{ materialId: string }> }) {
     );
   }
 
-  return <BookScreen materialId={book.id} title={book.title} topics={topics} />;
+  return (
+    <BookScreen
+      materialId={book.id}
+      title={book.title}
+      coverVersion={book.coverVersion}
+      topics={topics}
+    />
+  );
 }
 
 function BookFallback() {

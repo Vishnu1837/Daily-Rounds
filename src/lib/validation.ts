@@ -587,6 +587,49 @@ export const materialSchema = z.object({
     .optional()
     .or(z.literal(''))
     .transform((v) => v || undefined),
+  /**
+   * The key of a cover image the browser has just uploaded, checked against the cohort on
+   * the server exactly as `storageKey` is.
+   */
+  coverKey: z
+    .string()
+    .max(200)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  /** Set when the admin took the cover off. Distinct from "did not touch the cover". */
+  removeCover: z
+    .union([z.literal('true'), z.literal('false'), z.literal('on'), z.literal('')])
+    .optional()
+    .transform((v) => v === 'true' || v === 'on'),
+});
+
+/**
+ * The summary of a book the admin's browser sends for chapter detection.
+ *
+ * Bounded on every axis, because this is a client-supplied payload that becomes a model
+ * prompt: an unbounded digest is an unbounded bill. The limits are generous enough for a
+ * sampled 900-page atlas and small enough that no single request is a surprise.
+ */
+export const bookDigestSchema = z.object({
+  numPages: z.number().int().min(1).max(20000),
+  outline: z
+    .array(
+      z.object({
+        title: z.string().trim().min(1).max(300),
+        page: z.number().int().min(1).max(20000),
+        depth: z.number().int().min(0).max(6),
+      }),
+    )
+    .max(2000),
+  pages: z
+    .array(
+      z.object({
+        page: z.number().int().min(1).max(20000),
+        text: z.string().max(600),
+      }),
+    )
+    .max(1000),
 });
 
 export const eventSchema = z.object({

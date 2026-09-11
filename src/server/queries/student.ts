@@ -88,6 +88,7 @@ import {
   calculateComebackState,
   nextMilestone,
 } from '@/lib/domain/streak';
+import { coverVersion } from '@/lib/domain/textbooks';
 import { formatTimeInZone, timezoneLabel } from '@/lib/timezones';
 import { cohortTag } from '@/server/cache';
 import { type MemberContext, loadCalendar } from '@/server/context';
@@ -1437,6 +1438,7 @@ const loadMaterials = async (cohortId: string) => {
       url: materials.url,
       // A hosted textbook opens in the reader; its storage key never leaves the server.
       hosted: sql<boolean>`${materials.storageKey} IS NOT NULL`,
+      coverKey: materials.coverKey,
       curriculumRef: materials.curriculumRef,
       subjectName: subjects.name,
     })
@@ -1447,9 +1449,15 @@ const loadMaterials = async (cohortId: string) => {
 
   // The heading a material groups under is resolved from its ref, so renaming a curriculum
   // section renames the group everywhere rather than leaving a stale typed-in string.
-  return rows.map((row) => ({
+  /*
+   * The cover key never leaves the server — the shelf asks for `/api/textbooks/[id]/cover`,
+   * which checks membership again on its own. What it gets instead is a version to hang off
+   * that URL, so replacing a cover replaces what a browser already cached.
+   */
+  return rows.map(({ coverKey, ...row }) => ({
     ...row,
     topicLabel: resolveRef(row.curriculumRef)?.label ?? null,
+    coverVersion: coverKey ? coverVersion(coverKey) : null,
   }));
 };
 
