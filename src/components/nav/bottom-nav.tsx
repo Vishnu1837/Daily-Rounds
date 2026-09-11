@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, useReducedMotion } from 'framer-motion';
 
+import { GlassSurface } from '@/components/ui/glass-surface';
 import { cn } from '@/lib/cn';
 
 import { NavIcon } from './icon';
@@ -50,44 +51,56 @@ function BottomBar({ items, pathname }: { items: NavItem[]; pathname: string | n
       aria-label="Primary"
       className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden"
     >
-      <div className="rounded-pill border-border shadow-float relative mx-auto flex max-w-md items-stretch gap-1 border bg-[var(--nav-bg)] px-2 py-1.5 backdrop-blur-2xl">
-        {groups.map((group, groupIndex) => (
-          <ul key={groupIndex} className="flex flex-1 items-stretch justify-around">
-            {group.map((item) => {
-              const active = isActive(pathname, item.href);
-              return (
-                <li key={item.href} className="flex-1">
-                  <Link
-                    href={item.href}
-                    aria-current={active ? 'page' : undefined}
-                    className={cn(
-                      'tap rounded-pill relative flex min-h-13 flex-col items-center justify-center gap-1 px-1 transition-colors duration-150',
-                      active ? 'text-pulse-700 dark:text-pulse-200' : 'text-fg-subtle',
-                    )}
-                  >
-                    {active && (
-                      <motion.span
-                        layoutId="bottom-nav-pill"
-                        className="rounded-pill bg-pulse-500/14 absolute inset-0 -z-10"
-                        transition={
-                          reduce ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 34 }
-                        }
+      <div className="relative mx-auto max-w-md">
+        {/* The glass clips to its pill, so the raised button lives beside it, not in it. */}
+        <GlassSurface
+          borderRadius={999}
+          backgroundOpacity={0.24}
+          saturation={1.7}
+          distortionScale={-160}
+          displace={0.4}
+          contentClassName="flex items-stretch gap-1 px-2 py-1.5"
+        >
+          {groups.map((group, groupIndex) => (
+            <ul key={groupIndex} className="flex flex-1 items-stretch justify-around">
+              {group.map((item) => {
+                const active = isActive(pathname, item.href);
+                return (
+                  <li key={item.href} className="flex-1">
+                    <Link
+                      href={item.href}
+                      aria-current={active ? 'page' : undefined}
+                      className={cn(
+                        'tap rounded-pill relative flex min-h-13 flex-col items-center justify-center gap-1 px-1 transition-colors duration-150',
+                        active ? 'text-pulse-700 dark:text-pulse-200' : 'text-fg-muted',
+                      )}
+                    >
+                      {active && (
+                        <motion.span
+                          layoutId="bottom-nav-pill"
+                          className="rounded-pill glass-bead absolute inset-0 -z-10"
+                          transition={
+                            reduce
+                              ? { duration: 0 }
+                              : { type: 'spring', stiffness: 400, damping: 34 }
+                          }
+                        />
+                      )}
+                      <NavIcon
+                        name={item.icon}
+                        className="size-[21px]"
+                        strokeWidth={active ? 2.5 : 1.9}
                       />
-                    )}
-                    <NavIcon
-                      name={item.icon}
-                      className="size-[21px]"
-                      strokeWidth={active ? 2.5 : 1.9}
-                    />
-                    <span className="text-2xs leading-none font-semibold">{item.short}</span>
-                  </Link>
-                </li>
-              );
-            })}
-            {/* Reserves the footprint the raised button occupies above the bar. */}
-            {fab && groupIndex === 0 && <li className="w-16 shrink-0" aria-hidden />}
-          </ul>
-        ))}
+                      <span className="text-2xs leading-none font-semibold">{item.short}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+              {/* Reserves the footprint the raised button occupies above the bar. */}
+              {fab && groupIndex === 0 && <li className="w-16 shrink-0" aria-hidden />}
+            </ul>
+          ))}
+        </GlassSurface>
 
         {fab && (
           <Link
@@ -96,8 +109,10 @@ function BottomBar({ items, pathname }: { items: NavItem[]; pathname: string | n
             aria-current={isActive(pathname, fab.href) ? 'page' : undefined}
             className={cn(
               'tap absolute -top-4 left-1/2 grid size-14 -translate-x-1/2 place-items-center rounded-full',
-              'from-pulse-400 to-pulse-600 shadow-glow-pulse bg-linear-to-br text-white',
-              'ease-out-soft ring-4 ring-[var(--bg)] transition-transform duration-200',
+              // Lit like the glass it sits on, with a glass collar in place of a canvas-coloured
+              // notch, which over a see-through bar would read as a hole.
+              'from-pulse-400 to-pulse-600 glass-orb bg-linear-to-br text-white',
+              'ease-out-soft transition-transform duration-200',
               'active:scale-95 motion-reduce:active:scale-100',
             )}
           >

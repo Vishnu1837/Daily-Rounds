@@ -203,6 +203,17 @@
 
   --nav-bg: oklch(1 0 0 / 0.78);
   --nav-border: oklch(0.906 0.009 285 / 0.9);
+
+  /* Liquid glass: a brand-tinted pane with a lit rim. See `.glass-surface`. */
+  --glass-frost: oklch(1 0 0);
+  --glass-tint: oklch(0.615 0.213 277 / 0.16);
+  --glass-tint-2: oklch(0.635 0.222 310 / 0.13);
+  --glass-rim: oklch(1 0 0 / 0.95);
+  --glass-rim-low: oklch(1 0 0 / 0.5);
+  --glass-edge: oklch(0.545 0.232 276 / 0.3);
+  --glass-sheen: oklch(1 0 0 / 0.75);
+  --glass-depth: oklch(0.545 0.232 276 / 0.22);
+  --glass-glow: oklch(0.545 0.232 276 / 0.28);
   --scrim: oklch(0.132 0.022 278 / 0.5);
 
   /*
@@ -243,6 +254,18 @@
 
   --nav-bg: oklch(0.192 0.024 278 / 0.82);
   --nav-border: oklch(0.268 0.024 278 / 0.9);
+
+  --glass-frost: oklch(0.192 0.024 278);
+  --glass-tint: oklch(0.7 0.175 278 / 0.22);
+  --glass-tint-2: oklch(0.712 0.185 311 / 0.16);
+  --glass-rim: oklch(1 0 0 / 0.38);
+  --glass-rim-low: oklch(1 0 0 / 0.1);
+  --glass-edge: oklch(0.7 0.175 278 / 0.4);
+  --glass-sheen: oklch(1 0 0 / 0.16);
+  --glass-depth: oklch(0.7 0.175 278 / 0.3);
+  --glass-glow: oklch(0.615 0.213 277 / 0.35);
+  /* Light labels over refracted content need more frost behind them than dark ones do. */
+  --glass-frost-boost: 0.32;
   --scrim: oklch(0.09 0.018 278 / 0.66);
 
   --wash-pulse: oklch(0.7 0.175 278 / 0.16);
@@ -641,6 +664,165 @@
 .toast-out {
   animation: dr-toast-out 0.22s var(--ease-out-soft) both;
   pointer-events: none;
+}
+
+/* ------------------------------------------------------------ liquid glass */
+
+/*
+ * Layered in `components` so utilities passed through `className` still win.
+ *
+ * Both paths share the same three layers: a brand tint (indigo drifting to iris), a frost
+ * of the canvas colour for legibility, and a lit rim — bright along the top edge where
+ * light would catch, faint along the bottom. Only the backdrop treatment differs.
+ */
+@layer components {
+  .glass-surface {
+    position: relative;
+    display: flex;
+    overflow: hidden;
+    isolation: isolate;
+    background:
+      linear-gradient(120deg, var(--glass-tint), var(--glass-tint-2)),
+      color-mix(
+        in oklch,
+        var(--glass-frost)
+          calc(min(var(--glass-frost-amount, 0) + var(--glass-frost-boost, 0), 0.9) * 100%),
+        transparent
+      );
+    box-shadow:
+      /* Thickness: light pooling under the top edge, tinted shade gathering at the bottom. */
+      inset 0 10px 14px -12px var(--glass-rim),
+      inset 0 -12px 18px -12px var(--glass-depth),
+      inset 0 0 20px 0 var(--glass-tint),
+      /* Lift: a brand-coloured glow under the pane rather than a grey shadow. */ 0 14px 32px -14px
+        var(--glass-glow),
+      var(--shadow-float);
+  }
+
+  /*
+   * The specular pass: a long highlight along the upper curve, and a softer violet bounce
+   * off the lower right, as if light were passing through the pane and out the far side.
+   */
+  .glass-surface::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      radial-gradient(55% 45% at 28% 0%, var(--glass-sheen), transparent 70%),
+      radial-gradient(35% 60% at 92% 110%, var(--glass-tint-2), transparent 70%);
+  }
+
+  /*
+   * The rim. A 1.25px ring whose brightness travels round the edge — hot at the top left,
+   * gone along the sides, catching again at the bottom right — which is what makes a
+   * shape read as a curved lens rather than a flat translucent sticker.
+   */
+  .glass-surface::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    padding: 1.25px;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(
+      160deg,
+      var(--glass-rim) 0%,
+      var(--glass-rim-low) 22%,
+      var(--glass-edge) 50%,
+      transparent 68%,
+      var(--glass-rim-low) 100%
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+  }
+
+  /* A smaller bead of the same glass, for a selected item sitting inside a pane. */
+  .glass-bead {
+    background: linear-gradient(
+      160deg,
+      color-mix(in oklch, var(--glass-frost) 70%, transparent),
+      color-mix(in oklch, var(--glass-frost) 25%, transparent)
+    );
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-rim),
+      inset 0 -6px 10px -8px var(--glass-depth),
+      inset 0 0 0 1px var(--glass-edge),
+      0 4px 12px -6px var(--glass-glow);
+  }
+
+  /* A solid-colour button that sits on glass: lit from above like the pane around it. */
+  .glass-orb {
+    box-shadow:
+      inset 0 1.5px 1px 0 oklch(1 0 0 / 0.55),
+      inset 0 -6px 12px -4px oklch(0.315 0.13 277 / 0.45),
+      0 0 0 3px var(--glass-rim-low),
+      0 10px 26px -8px oklch(0.545 0.232 276 / 0.6);
+  }
+
+  .glass-surface__filter {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  .glass-surface__content {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+  }
+
+  /* Chromium: the backdrop is refracted, then lightly softened so labels stay readable. */
+  .glass-surface--svg {
+    backdrop-filter: var(--filter-id) blur(3px) saturate(var(--glass-saturation, 1));
+  }
+
+  /* WebKit and Gecko: no refraction available, so more frost and a deeper blur. */
+  .glass-surface--fallback {
+    background:
+      linear-gradient(135deg, var(--glass-tint), var(--glass-tint-2)),
+      color-mix(
+        in oklch,
+        var(--glass-frost)
+          calc(min(var(--glass-frost-amount, 0) + var(--glass-frost-boost, 0) + 0.12, 0.9) * 100%),
+        transparent
+      );
+    -webkit-backdrop-filter: blur(14px) saturate(2) brightness(1.06);
+    backdrop-filter: blur(14px) saturate(2) brightness(1.06);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass-surface--fallback {
+      background:
+        linear-gradient(135deg, var(--glass-tint), var(--glass-tint-2)),
+        color-mix(in oklch, var(--glass-frost) 92%, transparent);
+    }
+  }
+
+  /* Honour a request for less see-through UI: keep the tint and rim, lose the transparency. */
+  @media (prefers-reduced-transparency: reduce) {
+    .glass-surface--svg,
+    .glass-surface--fallback {
+      background:
+        linear-gradient(135deg, var(--glass-tint), var(--glass-tint-2)), var(--glass-frost);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
 }
 
 /* ---------------------------------------------------------- reduced motion */
