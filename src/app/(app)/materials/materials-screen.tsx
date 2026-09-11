@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 
 import { BookCover } from '@/components/textbook/book-cover';
+import { openBookFromShelf, useOpeningBookId } from '@/components/textbook/book-opening';
 import { Badge } from '@/components/ui/badge';
 import { Card, SectionTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/feedback';
@@ -206,6 +207,7 @@ export function MaterialsScreen({
  */
 function Bookshelf({ books, query }: { books: Material[]; query: string }) {
   const [subject, setSubject] = useState<string>('all');
+  const openingId = useOpeningBookId();
 
   const subjects = useMemo(() => {
     const names = new Set<string>();
@@ -272,14 +274,28 @@ function Bookshelf({ books, query }: { books: Material[]; query: string }) {
         <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {shown.map((book, index) => (
             <Reveal key={book.id} delay={Math.min(index, 8)}>
-              <Link href={`/materials/${book.id}`} className="tap group block">
-                <BookCover
-                  title={book.title}
-                  materialId={book.id}
-                  coverVersion={book.coverVersion}
-                  size="shelf"
-                  className="transition-transform duration-200 group-hover:-translate-y-1 group-hover:shadow-lg"
-                />
+              <Link
+                href={`/materials/${book.id}`}
+                className="tap group block"
+                onClick={(event) =>
+                  openBookFromShelf(event, {
+                    id: book.id,
+                    title: book.title,
+                    coverVersion: book.coverVersion,
+                    href: `/materials/${book.id}`,
+                  })
+                }
+              >
+                {/* Hidden while the overlay carries it, so it looks lifted off the shelf. */}
+                <div data-book-cover className={cn(openingId === book.id && 'invisible')}>
+                  <BookCover
+                    title={book.title}
+                    materialId={book.id}
+                    coverVersion={book.coverVersion}
+                    size="shelf"
+                    className="transition-transform duration-200 group-hover:-translate-y-1 group-hover:shadow-lg"
+                  />
+                </div>
                 <p className="text-fg mt-2.5 line-clamp-2 text-sm font-bold">{book.title}</p>
                 {(book.subjectName ?? book.topicLabel) && (
                   <p className="text-fg-subtle mt-0.5 truncate text-xs font-semibold">

@@ -11,6 +11,7 @@ import {
   SideNavFallback,
 } from '@/components/nav/bottom-nav';
 import { MobileMenu, MobileMenuFallback } from '@/components/nav/mobile-menu';
+import { BookOpeningOverlay } from '@/components/textbook/book-opening';
 import { STUDENT_NAV } from '@/components/nav/nav-items';
 import { AvatarSkeleton, HeaderStatsSkeleton, TopBar } from '@/components/nav/top-bar';
 import { NotificationBellSkeleton } from '@/components/notifications/notification-bell';
@@ -176,6 +177,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <ShellSlot>
           <FeedbackPrompt />
         </ShellSlot>
+
+        {/*
+          Opening a book from the shelf. It lives here because the animation has to outlive
+          the shelf page that starts it. No props, and nothing rendered until a cover is
+          tapped, so the static shell is untouched. See the component.
+        */}
+        <BookOpeningOverlay />
       </div>
     </>
   );

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, ArrowRight, BookOpen, Check, ChevronRight } from 'lucide-react';
 
 import { BookCover } from '@/components/textbook/book-cover';
+import { useBookArrived } from '@/components/textbook/book-opening';
 import { Badge } from '@/components/ui/badge';
 import { Button, LinkButton } from '@/components/ui/button';
 import { Card, SectionTitle } from '@/components/ui/card';
@@ -56,6 +57,7 @@ export function BookScreen({
   const [openId, setOpenId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  useBookArrived(materialId);
 
   const studiedIds = useMemo(
     () => new Set(topics.filter((t) => t.studied).map((t) => t.id)),

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { ArrowLeft, BookLock, Minus, Plus } from 'lucide-react';
 
+import { useBookArrived } from '@/components/textbook/book-opening';
 import { Card } from '@/components/ui/card';
 import { EmptyState, Skeleton } from '@/components/ui/feedback';
 import { cn } from '@/lib/cn';
@@ -75,6 +76,7 @@ export function TextbookReader({
   const [trackWidth, setTrackWidth] = useState(0);
   const [current, setCurrent] = useState(1);
   const [pageInput, setPageInput] = useState('1');
+  useBookArrived(materialId);
 
   const trackRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
