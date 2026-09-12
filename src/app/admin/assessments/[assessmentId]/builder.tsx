@@ -1070,26 +1070,44 @@ function SettingsForm({
                 : '0 means only the per-question timers apply.'
             }
           />
-          <TextInput
-            label="Default seconds per question"
-            name="defaultQuestionSeconds"
-            type="number"
-            min={5}
-            max={3600}
-            // Read-only rather than disabled: a disabled input posts nothing, and the value
-            // would be reset to the schema default the first time an admin saved a
-            // whole-paper assessment — quietly losing the setting they would get back by
-            // switching the mode again.
-            readOnly={wholePaper}
-            className={wholePaper ? 'opacity-60' : undefined}
-            defaultValue={assessment.defaultQuestionSeconds}
-            error={errors.defaultQuestionSeconds}
-            hint={
-              wholePaper
-                ? 'Not used under one clock for the whole paper. Kept, in case you switch back.'
-                : 'Any question can override this with its own.'
-            }
-          />
+          {/*
+           * Under one clock there is no such thing as a per-question default, so the control
+           * goes rather than being greyed out — a disabled field still reads as a setting
+           * that exists and might matter, and this one was the thing making the two timing
+           * models look like they ran at the same time.
+           *
+           * The stored value rides along in a hidden input instead of being dropped. Leaving
+           * the field out entirely would post nothing, the schema would fall back to sixty,
+           * and an admin who had set forty-five would find it quietly rewritten the first
+           * time they saved a mock exam.
+           */}
+          {wholePaper ? (
+            <>
+              <input
+                type="hidden"
+                name="defaultQuestionSeconds"
+                value={assessment.defaultQuestionSeconds}
+              />
+              <div className="rounded-panel border-border bg-bg-sunken border border-dashed p-3">
+                <p className="text-fg text-sm font-semibold">No per-question timers</p>
+                <p className="text-fg-subtle mt-1 text-xs">
+                  The total above is the only clock. Individual questions cannot carry one either —
+                  switch back to per-question timing and every allowance you had set comes back.
+                </p>
+              </div>
+            </>
+          ) : (
+            <TextInput
+              label="Default seconds per question"
+              name="defaultQuestionSeconds"
+              type="number"
+              min={5}
+              max={3600}
+              defaultValue={assessment.defaultQuestionSeconds}
+              error={errors.defaultQuestionSeconds}
+              hint="Any question can override this with its own. Blank uses 60."
+            />
+          )}
           <TextInput
             label="Pass mark (%)"
             name="passMarkPct"

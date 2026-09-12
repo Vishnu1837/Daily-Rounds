@@ -232,25 +232,26 @@ function CreateAssessmentForm({ cohortId }: { cohortId: string }) {
               : '0 means only the per-question timers apply.'
           }
         />
-        <TextInput
-          label="Default seconds per question"
-          name="defaultQuestionSeconds"
-          type="number"
-          min={5}
-          max={3600}
-          // Read-only rather than disabled: a disabled input posts nothing, and the value
-          // would fall back to the schema default — losing a setting the admin would expect
-          // to find waiting for them if they switched the timing back.
-          readOnly={wholePaper}
-          className={wholePaper ? 'opacity-60' : undefined}
-          defaultValue={60}
-          error={errors.defaultQuestionSeconds}
-          hint={
-            wholePaper
-              ? 'Not used under one clock for the whole paper.'
-              : 'Used for any question with no timer of its own.'
-          }
-        />
+        {/* See the note in the settings tab: under one clock this setting does not exist. */}
+        {wholePaper ? (
+          <div className="rounded-panel border-border bg-bg-sunken border border-dashed p-3">
+            <p className="text-fg text-sm font-semibold">No per-question timers</p>
+            <p className="text-fg-subtle mt-1 text-xs">
+              The total is the only clock on this paper.
+            </p>
+          </div>
+        ) : (
+          <TextInput
+            label="Default seconds per question"
+            name="defaultQuestionSeconds"
+            type="number"
+            min={5}
+            max={3600}
+            defaultValue={60}
+            error={errors.defaultQuestionSeconds}
+            hint="Used for any question with no timer of its own."
+          />
+        )}
         <TextInput
           label="Pass mark (%)"
           name="passMarkPct"

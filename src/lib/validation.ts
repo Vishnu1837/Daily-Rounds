@@ -939,7 +939,19 @@ export const assessmentSchema = z
      * an empty field and a zero both arrive as "the admin did not set one".
      */
     totalTimeMinutes: z.coerce.number().int().min(0).max(600).default(0),
-    defaultQuestionSeconds: z.coerce.number().int().min(5).max(3600).default(60),
+    /*
+     * Blank means "I do not want to set one", not "zero seconds".
+     *
+     * An empty number input coerces to 0, which failed the floor below and refused the save
+     * with "expected number to be >=5" — against a field the admin had deliberately emptied,
+     * and which under one clock for the whole paper the engine never reads at all. Every
+     * other optional number on this form already treats empty as absent; this one now does
+     * too, and falls back to the same sixty seconds an untouched form would have sent.
+     */
+    defaultQuestionSeconds: z.preprocess(
+      (value) => (value === '' || value === null || value === undefined ? 60 : value),
+      z.coerce.number().int().min(5).max(3600),
+    ),
     focusGraceSeconds: z.coerce.number().int().min(1).max(120).default(5),
     /*
      * How many of the bank's questions one sitting draws. Zero means all of them, matching
