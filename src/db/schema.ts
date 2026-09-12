@@ -129,6 +129,29 @@ export const flashcardMasteryEnum = pgEnum('flashcard_mastery', [
  */
 export const roadmapSlotEnum = pgEnum('roadmap_slot', ['primary', 'secondary']);
 export const assessmentStatusEnum = pgEnum('assessment_status', ['draft', 'published', 'archived']);
+/**
+ * How an assessment spends its time.
+ *
+ * `per_question` is the original engine: every question carries its own allowance, it locks
+ * when that runs out, and an optional cap on the whole paper runs alongside. It suits a
+ * rapid-recall drill, where the pressure of a short clock per question *is* the exercise.
+ *
+ * `whole_paper` is how a mock exam works. One clock over the whole sitting, no per-question
+ * deadlines at all, and the student decides where the minutes go — which is the only timing
+ * under which skipping a question and coming back to it means anything.
+ */
+export const timerModeEnum = pgEnum('assessment_timer_mode', ['per_question', 'whole_paper']);
+
+/**
+ * Who a published assessment is for.
+ *
+ * `everyone` is publishing as it always was — live to the whole cohort. `selected` narrows
+ * it to the members named on `assessmentAudienceMembers`, which is what makes it possible
+ * to publish a finished paper to one test account, sit it end to end, and open it up
+ * afterwards without rebuilding anything.
+ */
+export const assessmentAudienceEnum = pgEnum('assessment_audience', ['everyone', 'selected']);
+
 export const questionTypeEnum = pgEnum('assessment_question_type', [
   'mcq',
   'image_mcq',
@@ -154,6 +177,10 @@ export const integrityEventEnum = pgEnum('assessment_integrity_event', [
   'focus_returned',
   'threshold_breached',
   'restarted',
+  /** Dropped out of full screen mid-attempt. One row per exit, whatever caused it. */
+  'fullscreen_exited',
+  /** The exit that took the count to the limit and ended the sitting. */
+  'fullscreen_invalidated',
 ]);
 export const waitlistStatusEnum = pgEnum('waitlist_status', [
   'new',
@@ -1097,10 +1124,29 @@ export const assessments = pgTable(
     title: varchar('title', { length: 200 }).notNull(),
     instructions: text('instructions'),
     status: assessmentStatusEnum('status').notNull().default('draft'),
-    /** Whole-assessment limit in seconds. Null means only the per-question timers apply. */
+    /**
+     * Which clock this paper runs on — see `timerModeEnum`.
+     *
+     * `whole_paper` makes `totalTimeSeconds` the only deadline there is and ignores both
+     * `defaultQuestionSeconds` and every per-question override, so the two columns below
+     * keep whatever they held and mean nothing until the mode changes back.
+     */
+    timerMode: timerModeEnum('timer_mode').notNull().default('per_question'),
+    /**
+     * Whole-assessment limit in seconds.
+     *
+     * In `per_question` mode this is an optional cap running alongside the per-question
+     * timers, and null means there is none. In `whole_paper` mode it is the entire clock and
+     * is required — `assessmentSchema` refuses to save that mode without one.
+     */
     totalTimeSeconds: integer('total_time_seconds'),
-    /** Fills in for any question that carries no timer of its own. */
+    /** Fills in for any question that carries no timer of its own. `per_question` only. */
     defaultQuestionSeconds: integer('default_question_seconds').notNull().default(60),
+    /**
+     * Whether publishing reaches the whole cohort or a named list — see
+     * `assessmentAudienceEnum`. Read on every student-facing query, never client-side.
+     */
+    audience: assessmentAudienceEnum('audience').notNull().default('everyone'),
     /**
      * How long the student may have the tab in the background before the attempt restarts.
      *
@@ -1133,6 +1179,35 @@ export const assessments = pgTable(
   (t) => [
     index('assessments_cohort_idx').on(t.cohortId, t.status),
     index('assessments_curriculum_ref_idx').on(t.curriculumRef),
+  ],
+);
+
+/**
+ * The students one narrowly-published assessment is for.
+ *
+ * Only consulted when `assessments.audience` is 'selected'; the rows are kept when it goes
+ * back to 'everyone' so that narrowing a paper again restores the list instead of asking
+ * the admin to rebuild it.
+ *
+ * Membership is checked in the WHERE clause of every student-facing read, the same place
+ * the cohort scope is checked, rather than by filtering a fetched list afterwards — an
+ * assessment a student is not an audience for should be un-fetchable, not merely unrendered.
+ */
+export const assessmentAudienceMembers = pgTable(
+  'assessment_audience_members',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    assessmentId: uuid('assessment_id')
+      .notNull()
+      .references(() => assessments.id, { onDelete: 'cascade' }),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => cohortMembers.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('assessment_audience_unique').on(t.assessmentId, t.memberId),
+    index('assessment_audience_member_idx').on(t.memberId),
   ],
 );
 
@@ -1201,6 +1276,15 @@ export const assessmentAttempts = pgTable(
     submittedAt: timestamp('submitted_at', { withTimezone: true }),
     /** How many times this student has had to restart this assessment, ever. */
     restartCount: integer('restart_count').notNull().default(0),
+    /**
+     * How many times this sitting dropped out of full screen.
+     *
+     * Incremented by the server, never sent by the client: the runner reports that an exit
+     * happened and this column decides what number it was, so a page with a doctored
+     * counter cannot award itself more. At `FULLSCREEN_EXIT_LIMIT` the attempt is
+     * invalidated and kept — see `recordFullscreenExitAction`.
+     */
+    fullscreenExits: integer('fullscreen_exits').notNull().default(0),
     /** Points earned on auto-gradable questions, and the total those were out of. */
     autoScore: integer('auto_score').notNull().default(0),
     autoTotal: integer('auto_total').notNull().default(0),
@@ -1280,6 +1364,15 @@ export const assessmentAnswers = pgTable(
     answeredAt: timestamp('answered_at', { withTimezone: true }),
     /** True when the per-question timer ran out before an answer was submitted. */
     expired: boolean('expired').notNull().default(false),
+    /**
+     * The student flagged this one to come back to.
+     *
+     * Stored rather than held in the page because the flag is what the question palette is
+     * steering by, and a palette that forgot which questions were marked the moment a laptop
+     * died would be worse than not having one. Carries no weight in grading — it is a note
+     * to self, and `submitAttemptAction` never reads it.
+     */
+    markedForReview: boolean('marked_for_review').notNull().default(false),
     /** Null while a subjective answer is still awaiting review. */
     isCorrect: boolean('is_correct'),
     awardedPoints: smallint('awarded_points').notNull().default(0),
@@ -1828,6 +1921,7 @@ export const quizQuestionsRelations = relations(quizQuestions, ({ one }) => ({
 export const assessmentsRelations = relations(assessments, ({ many }) => ({
   questions: many(assessmentQuestions),
   attempts: many(assessmentAttempts),
+  audienceMembers: many(assessmentAudienceMembers),
 }));
 
 export const assessmentQuestionsRelations = relations(assessmentQuestions, ({ one }) => ({
@@ -1922,7 +2016,10 @@ export type AssessmentAttempt = typeof assessmentAttempts.$inferSelect;
 export type AssessmentAnswer = typeof assessmentAnswers.$inferSelect;
 export type AssessmentAttemptQuestion = typeof assessmentAttemptQuestions.$inferSelect;
 export type AssessmentIntegrityEvent = typeof assessmentIntegrityEvents.$inferSelect;
+export type AssessmentAudienceMember = typeof assessmentAudienceMembers.$inferSelect;
 export type AssessmentStatus = (typeof assessmentStatusEnum.enumValues)[number];
+export type TimerMode = (typeof timerModeEnum.enumValues)[number];
+export type AssessmentAudience = (typeof assessmentAudienceEnum.enumValues)[number];
 export type QuestionType = (typeof questionTypeEnum.enumValues)[number];
 export type AttemptStatus = (typeof attemptStatusEnum.enumValues)[number];
 export type ReviewStatus = (typeof reviewStatusEnum.enumValues)[number];

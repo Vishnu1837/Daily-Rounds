@@ -8,6 +8,7 @@ import {
   type QuestionType,
   assessmentAnswers,
   assessmentAttempts,
+  assessmentAudienceMembers,
   assessmentIntegrityEvents,
   assessmentQuestions,
   assessments,
@@ -15,14 +16,17 @@ import {
 } from '@/db/schema';
 import { requireAdminAction, requireUserAction } from '@/lib/auth/guards';
 import { isAutoGradable, questionDeadline } from '@/lib/assessments/grade';
+import { FULLSCREEN_EXIT_LIMIT, fullscreenState } from '@/lib/assessments/integrity';
 import { parseQuestionBlock } from '@/lib/assessments/parse';
 import {
+  assessmentAudienceInputSchema,
   assessmentQuestionsSchema,
   assessmentReviewSchema,
   assessmentSchema,
   answerSubmissionSchema,
   fieldErrors,
 } from '@/lib/validation';
+import { visibleToMember } from '@/server/assessment-audience';
 import {
   attemptQuestionIds,
   copyAttemptPaper,
@@ -78,7 +82,10 @@ export async function saveAssessmentAction(
       curriculumRef: input.curriculumRef ?? null,
       instructions: input.instructions ?? null,
       // Zero in the form means "no total limit" — the honest way to say it in a number input.
+      // Never null in `whole_paper` mode: `assessmentSchema` refuses that combination outright.
       totalTimeSeconds: input.totalTimeMinutes > 0 ? input.totalTimeMinutes * 60 : null,
+      // Absent from the form leaves the column alone. See the note on the schema field.
+      ...(input.timerMode ? { timerMode: input.timerMode } : {}),
       defaultQuestionSeconds: input.defaultQuestionSeconds,
       focusGraceSeconds: input.focusGraceSeconds,
       // Zero means "serve the whole bank", the same convention the total-time field uses.
@@ -120,13 +127,35 @@ export async function saveAssessmentAction(
   }, 'We could not save that assessment. Please try again.');
 }
 
+/** Sittings of this assessment that are open right now, on somebody's screen. */
+async function liveAttemptCount(assessmentId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(assessmentAttempts)
+    .where(
+      and(
+        eq(assessmentAttempts.assessmentId, assessmentId),
+        eq(assessmentAttempts.status, 'in_progress'),
+      ),
+    );
+  return row?.n ?? 0;
+}
+
 /**
  * Replaces an assessment's questions wholesale.
  *
  * One write for the whole list rather than a call per question, because the builder and the
  * import preview both hand over a complete, already-ordered set and a partial application
- * would leave a published paper half-edited. Refused once the assessment is published: a
- * question that changes under a student mid-attempt would invalidate their answers.
+ * would leave a published paper half-edited.
+ *
+ * Allowed while published, which it was not before. The old rule — unpublish first — was
+ * aimed at the right hazard and aimed too wide: it stopped a typo in a live paper being
+ * fixed without first taking the paper away from everyone who could see it. What actually
+ * has to be protected is a *sitting in progress*, and that is what is checked instead. Every
+ * attempt already running holds its own drawn paper on `assessment_attempt_questions`, but
+ * those rows point at question ids this replace would delete and recreate, so a save during
+ * a live sitting really would pull the questions out from under it. With nobody mid-paper
+ * there is nothing to pull.
  */
 export async function saveQuestionsAction(
   cohortId: string,
@@ -138,9 +167,12 @@ export async function saveQuestionsAction(
     const assessment = await assertAssessmentInCohort(assessmentId, cohortId);
 
     if (assessment.status === 'published') {
-      return fail(
-        'Unpublish this assessment before changing its questions. Students may be part-way through it.',
-      );
+      const live = await liveAttemptCount(assessmentId);
+      if (live > 0) {
+        return fail(
+          `${live} student${live === 1 ? ' is' : 's are'} sitting this right now. Changing the questions would take the paper out from under them — wait until they have finished, or unpublish it.`,
+        );
+      }
     }
 
     const parsed = assessmentQuestionsSchema.safeParse(questions);
@@ -332,6 +364,79 @@ export async function setAssessmentStatusAction(
   }, 'We could not change that assessment. Please try again.');
 }
 
+/**
+ * Sets who a published assessment is for.
+ *
+ * Its own action rather than a field on the settings form, for two reasons. A list of
+ * member ids does not belong in a form that also carries a pass mark — a settings save that
+ * happened not to mention the audience would widen a narrowly-published paper back to the
+ * whole cohort without anybody asking for it. And this is the action an admin reaches for
+ * repeatedly while testing: publish to one account, sit it, fix it, open it up. It should
+ * not require re-submitting every other setting to do that.
+ *
+ * The named members are replaced wholesale, which is what a checkbox list means. Switching
+ * back to 'everyone' leaves the list intact so narrowing the paper again restores it.
+ */
+export async function setAssessmentAudienceAction(
+  cohortId: string,
+  assessmentId: string,
+  input: unknown,
+): Promise<Result<{ audience: 'everyone' | 'selected'; count: number }>> {
+  return guarded(async () => {
+    const { user } = await adminContext(cohortId);
+    await assertAssessmentInCohort(assessmentId, cohortId);
+
+    const parsed = assessmentAudienceInputSchema.safeParse(input);
+    if (!parsed.success) return fail('That audience could not be saved.');
+    const { audience, memberIds } = parsed.data;
+
+    /*
+     * Only members of *this* cohort, confirmed against the database rather than trusted from
+     * the payload. Without this an admin of one cohort could name another cohort's member id
+     * and hand them an assessment they have no business seeing.
+     */
+    const valid =
+      memberIds.length === 0
+        ? []
+        : await db
+            .select({ id: cohortMembers.id })
+            .from(cohortMembers)
+            .where(and(eq(cohortMembers.cohortId, cohortId), inArray(cohortMembers.id, memberIds)));
+
+    if (audience === 'selected' && valid.length === 0) {
+      return fail('Pick at least one student, or set this back to everyone in the cohort.');
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(assessmentAudienceMembers)
+        .where(eq(assessmentAudienceMembers.assessmentId, assessmentId));
+
+      if (valid.length > 0) {
+        await tx
+          .insert(assessmentAudienceMembers)
+          .values(valid.map((m) => ({ assessmentId, memberId: m.id })));
+      }
+
+      await tx
+        .update(assessments)
+        .set({ audience, updatedAt: new Date() })
+        .where(eq(assessments.id, assessmentId));
+    });
+
+    await recordAudit({
+      actorUserId: user.id,
+      action: 'assessment.audience',
+      entity: 'assessment',
+      entityId: assessmentId,
+      payload: { audience, count: valid.length },
+    });
+
+    revalidateAssessments(assessmentId);
+    return ok({ audience, count: valid.length });
+  }, 'We could not change who can see that assessment. Please try again.');
+}
+
 export async function deleteAssessmentAction(
   cohortId: string,
   assessmentId: string,
@@ -470,7 +575,9 @@ async function ownedAttempt(attemptId: string, memberId: string) {
       expiresAt: assessmentAttempts.expiresAt,
       attemptNumber: assessmentAttempts.attemptNumber,
       restartCount: assessmentAttempts.restartCount,
+      fullscreenExits: assessmentAttempts.fullscreenExits,
       focusGraceSeconds: assessments.focusGraceSeconds,
+      timerMode: assessments.timerMode,
       defaultQuestionSeconds: assessments.defaultQuestionSeconds,
       totalTimeSeconds: assessments.totalTimeSeconds,
       /** Carried so the ledger entry can name the paper the student sat. */
@@ -504,7 +611,15 @@ export async function startAttemptAction(assessmentId: string): Promise<Result<S
         questionsPerAttempt: assessments.questionsPerAttempt,
       })
       .from(assessments)
-      .where(and(eq(assessments.id, assessmentId), eq(assessments.cohortId, ctx.cohort.id)))
+      .where(
+        and(
+          eq(assessments.id, assessmentId),
+          eq(assessments.cohortId, ctx.cohort.id),
+          // Applied again here, not only on the list. A student holding a URL from before
+          // the audience narrowed would otherwise start a sitting they can no longer see.
+          visibleToMember(ctx.memberId),
+        ),
+      )
       .limit(1);
 
     if (!assessment) return fail('That assessment could not be found.');
@@ -606,8 +721,8 @@ export async function startAttemptAction(assessmentId: string): Promise<Result<S
 export async function openQuestionAction(
   attemptId: string,
   questionId: string,
-): Promise<Result<{ deadline: string }>> {
-  return guarded(async () => {
+): Promise<Result<{ deadline: string | null }>> {
+  return guarded<{ deadline: string | null }>(async () => {
     const ctx = await studentContext();
     const attempt = await ownedAttempt(attemptId, ctx.memberId);
     if (!attempt) return fail('That attempt could not be found.');
@@ -645,6 +760,13 @@ export async function openQuestionAction(
       })
       .returning({ startedAt: assessmentAnswers.startedAt });
 
+    /*
+     * One clock over the whole paper means no clock on this question. The row above is still
+     * written, because `startedAt` is what tells the question palette this one has been seen
+     * — the difference between a question a student skipped and one they never reached.
+     */
+    if (attempt.timerMode === 'whole_paper') return ok({ deadline: null });
+
     const deadline = questionDeadline(
       row?.startedAt ?? now,
       question.timeLimitSeconds,
@@ -668,7 +790,7 @@ export async function submitAnswerAction(input: unknown): Promise<Result<{ expir
     const parsed = answerSubmissionSchema.safeParse(input);
     if (!parsed.success) return fail('That answer could not be saved.');
 
-    const { attemptId, questionId, selectedIndex, textAnswer } = parsed.data;
+    const { attemptId, questionId, selectedIndex, textAnswer, markedForReview } = parsed.data;
     const attempt = await ownedAttempt(attemptId, ctx.memberId);
     if (!attempt) return fail('That attempt could not be found.');
     if (attempt.status !== 'in_progress') return fail('That attempt is already finished.');
@@ -691,7 +813,11 @@ export async function submitAnswerAction(input: unknown): Promise<Result<{ expir
     if (!question) return fail('That question is not part of this attempt.');
 
     const [existing] = await db
-      .select({ startedAt: assessmentAnswers.startedAt })
+      .select({
+        startedAt: assessmentAnswers.startedAt,
+        answeredAt: assessmentAnswers.answeredAt,
+        expired: assessmentAnswers.expired,
+      })
       .from(assessmentAnswers)
       .where(
         and(
@@ -703,13 +829,46 @@ export async function submitAnswerAction(input: unknown): Promise<Result<{ expir
 
     const now = new Date();
     const startedAt = existing?.startedAt ?? now;
-    const deadline = questionDeadline(
-      startedAt,
-      question.timeLimitSeconds,
-      attempt.defaultQuestionSeconds,
-    );
     const overall = attempt.expiresAt;
-    const expired = now > deadline || (overall !== null && now > overall);
+
+    /*
+     * What "too late" means depends on how the paper is timed, and both readings are decided
+     * here rather than taken from the client.
+     *
+     * With one clock over the whole paper there is no per-question deadline to miss: a
+     * student is free to leave a question, answer four others and come back, and an engine
+     * that quietly expired it the moment they navigated away would make the palette a lie.
+     * Only the paper's own deadline can end it.
+     */
+    const deadline =
+      attempt.timerMode === 'whole_paper'
+        ? null
+        : questionDeadline(startedAt, question.timeLimitSeconds, attempt.defaultQuestionSeconds);
+
+    const expired = (deadline !== null && now > deadline) || (overall !== null && now > overall);
+
+    /*
+     * A late save never erases an answer that was given in time.
+     *
+     * This became possible the moment students could navigate backwards. A question answered
+     * at five seconds and left behind is still answered when its sixty-second clock runs out,
+     * and revisiting it afterwards posts one more save — which, taken at face value, would
+     * store "expired, nothing selected" over a correct answer and mark the student down for
+     * having looked at their own work. The flag is still honoured, because wanting to keep a
+     * marker on a question you can no longer change is exactly what a review list is for.
+     */
+    if (expired && existing?.answeredAt && !existing.expired) {
+      await db
+        .update(assessmentAnswers)
+        .set({ markedForReview: markedForReview ?? false })
+        .where(
+          and(
+            eq(assessmentAnswers.attemptId, attemptId),
+            eq(assessmentAnswers.questionId, questionId),
+          ),
+        );
+      return ok({ expired: true });
+    }
 
     const values = {
       attemptId,
@@ -719,6 +878,7 @@ export async function submitAnswerAction(input: unknown): Promise<Result<{ expir
       textAnswer: expired ? null : (textAnswer ?? null),
       answeredAt: expired ? null : now,
       expired,
+      markedForReview: markedForReview ?? false,
     };
 
     await db
@@ -731,6 +891,7 @@ export async function submitAnswerAction(input: unknown): Promise<Result<{ expir
           textAnswer: values.textAnswer,
           answeredAt: values.answeredAt,
           expired: values.expired,
+          markedForReview: values.markedForReview,
         },
       });
 
@@ -794,6 +955,10 @@ export async function recordFocusEventAction(
           memberId: ctx.memberId,
           attemptNumber: attempt.attemptNumber + 1,
           restartCount,
+          // Carried, not reset. The replacement is the same sitting continuing, and a
+          // restart that handed back a fresh five would make a focus breach the cheapest
+          // way to buy more full-screen exits.
+          fullscreenExits: attempt.fullscreenExits,
           status: 'in_progress',
           startedAt,
           expiresAt: attempt.totalTimeSeconds
@@ -818,6 +983,77 @@ export async function recordFocusEventAction(
 
     revalidatePath('/assessments');
     return ok({ restarted: true, newAttemptId: created.id });
+  }, 'We could not record that. Please try again.');
+}
+
+/**
+ * Counts one drop out of full screen, and voids the attempt at the fifth.
+ *
+ * The client reports the *event* and nothing else — never the tally. The increment happens
+ * in the database (`fullscreen_exits + 1`), so two reports racing produce two counts rather
+ * than one, and a page whose counter has been edited cannot tell the server it is only on
+ * its second exit. The limit lives in `@/lib/assessments/integrity` so the warning the
+ * student reads and the decision made here come from one number.
+ *
+ * Unlike a focus breach this opens no replacement attempt. A restart is a second chance;
+ * five deliberate exits is the point at which the sitting stops being evidence of anything,
+ * so the attempt ends where it is and is kept — status `invalidated`, the exits on the row,
+ * an event for each one. The student may begin a new attempt from the rules screen, and
+ * that new attempt is visibly attempt number n+1.
+ */
+export async function recordFullscreenExitAction(
+  attemptId: string,
+): Promise<Result<{ exits: number; remaining: number; invalidated: boolean; limit: number }>> {
+  type Outcome = { exits: number; remaining: number; invalidated: boolean; limit: number };
+  return guarded<Outcome>(async () => {
+    const ctx = await studentContext();
+    const attempt = await ownedAttempt(attemptId, ctx.memberId);
+    if (!attempt) return fail('That attempt could not be found.');
+
+    // Already over, by this rule or another. Reported back as it stands rather than counted
+    // again — an exit on the way out of a finished paper is not a breach of anything.
+    if (attempt.status !== 'in_progress') {
+      const settled = fullscreenState(attempt.fullscreenExits, FULLSCREEN_EXIT_LIMIT);
+      return ok({ ...settled, limit: FULLSCREEN_EXIT_LIMIT });
+    }
+
+    const [counted] = await db
+      .update(assessmentAttempts)
+      .set({ fullscreenExits: sql`${assessmentAttempts.fullscreenExits} + 1` })
+      .where(eq(assessmentAttempts.id, attemptId))
+      .returning({ fullscreenExits: assessmentAttempts.fullscreenExits });
+
+    const state = fullscreenState(counted?.fullscreenExits ?? 0, FULLSCREEN_EXIT_LIMIT);
+
+    await db.insert(assessmentIntegrityEvents).values({
+      attemptId,
+      kind: 'fullscreen_exited',
+      detail: { exits: state.exits, limit: FULLSCREEN_EXIT_LIMIT },
+    });
+
+    if (!state.invalidated) {
+      return ok({ ...state, limit: FULLSCREEN_EXIT_LIMIT });
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(assessmentAttempts)
+        .set({ status: 'invalidated', submittedAt: new Date() })
+        .where(eq(assessmentAttempts.id, attemptId));
+
+      await tx.insert(assessmentIntegrityEvents).values({
+        attemptId,
+        kind: 'fullscreen_invalidated',
+        detail: {
+          exits: state.exits,
+          limit: FULLSCREEN_EXIT_LIMIT,
+          reason: 'fullscreen_exit_limit_reached',
+        },
+      });
+    });
+
+    revalidatePath('/assessments');
+    return ok({ ...state, limit: FULLSCREEN_EXIT_LIMIT });
   }, 'We could not record that. Please try again.');
 }
 

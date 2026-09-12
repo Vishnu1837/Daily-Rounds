@@ -38,7 +38,9 @@ function describeBank(row: AdminAssessmentRow): string {
 }
 
 function describeLength(row: AdminAssessmentRow): string {
-  if (row.totalTimeSeconds) return `${Math.round(row.totalTimeSeconds / 60)} min total`;
+  const minutes = row.totalTimeSeconds ? Math.round(row.totalTimeSeconds / 60) : null;
+  if (row.timerMode === 'whole_paper') return `${minutes ?? 0} min, one clock`;
+  if (minutes) return `${minutes} min total`;
   return 'Per-question timers';
 }
 
@@ -128,6 +130,17 @@ export function AssessmentsScreen({
                   {describeLength(row)} · pass {row.passMarkPct}%
                 </p>
               </div>
+              {/*
+               * Narrow visibility is called out on the list rather than only inside the
+               * paper, because "why can't my students see it?" is a question you ask from
+               * here — and a published assessment that reaches one test account looks
+               * identical to a fully live one without this.
+               */}
+              {row.audience === 'selected' && (
+                <Badge tone="iris">
+                  {row.audienceCount} {row.audienceCount === 1 ? 'student' : 'students'} only
+                </Badge>
+              )}
               {row.pendingReview > 0 && <Badge tone="warning">{row.pendingReview} to mark</Badge>}
               {row.attemptCount > 0 && (
                 <span className="text-fg-muted shrink-0 text-xs tabular-nums">

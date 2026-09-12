@@ -3,7 +3,11 @@ import { notFound, redirect } from 'next/navigation';
 
 import { requireAdmin } from '@/lib/auth/guards';
 import { getCohortContext, getPrimaryCohort } from '@/server/context';
-import { getAssessmentAttempts, getAssessmentDetail } from '@/server/queries/assessments';
+import {
+  getAssessmentAttempts,
+  getAssessmentDetail,
+  getAudienceCandidates,
+} from '@/server/queries/assessments';
 
 import { AssessmentBuilder } from './builder';
 
@@ -25,12 +29,20 @@ export default async function AdminAssessmentPage({
   if (!ctx) redirect('/admin/no-cohort');
 
   const { assessmentId } = await params;
-  const [detail, attempts] = await Promise.all([
+  const [detail, attempts, audience] = await Promise.all([
     getAssessmentDetail(ctx, assessmentId),
     getAssessmentAttempts(ctx, assessmentId),
+    getAudienceCandidates(ctx, assessmentId),
   ]);
 
   if (!detail) notFound();
 
-  return <AssessmentBuilder cohortId={cohort.id} assessment={detail} attempts={attempts} />;
+  return (
+    <AssessmentBuilder
+      cohortId={cohort.id}
+      assessment={detail}
+      attempts={attempts}
+      audience={audience}
+    />
+  );
 }

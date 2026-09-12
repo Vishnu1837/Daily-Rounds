@@ -919,33 +919,67 @@ const optionalText = (max: number) =>
     .or(z.literal(''))
     .transform((v) => v || undefined);
 
-export const assessmentSchema = z.object({
-  title: z.string().trim().min(3, 'Give it a title').max(200),
-  /** A section or topic path from the syllabus tree, or nothing. */
-  curriculumRef: z
-    .string()
-    .trim()
-    .max(200)
-    .optional()
-    .or(z.literal(''))
-    .transform((v) => v || undefined),
-  instructions: optionalText(4000),
+export const timerModeSchema = z.enum(['per_question', 'whole_paper']);
+export const assessmentAudienceSchema = z.enum(['everyone', 'selected']);
+
+export const assessmentSchema = z
+  .object({
+    title: z.string().trim().min(3, 'Give it a title').max(200),
+    /** A section or topic path from the syllabus tree, or nothing. */
+    curriculumRef: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .or(z.literal(''))
+      .transform((v) => v || undefined),
+    instructions: optionalText(4000),
+    /*
+     * Zero means "no total limit", which is the honest way to express it in a number input —
+     * an empty field and a zero both arrive as "the admin did not set one".
+     */
+    totalTimeMinutes: z.coerce.number().int().min(0).max(600).default(0),
+    defaultQuestionSeconds: z.coerce.number().int().min(5).max(3600).default(60),
+    focusGraceSeconds: z.coerce.number().int().min(1).max(120).default(5),
+    /*
+     * How many of the bank's questions one sitting draws. Zero means all of them, matching
+     * the total-time field's convention — an empty input and a nought both read as "the admin
+     * did not set a window", which for a fifteen-question paper is the right default.
+     */
+    questionsPerAttempt: z.coerce.number().int().min(0).max(500).default(0),
+    passMarkPct: z.coerce.number().int().min(1).max(100).default(60),
+    allowAnswerReview: z.coerce.boolean().optional().default(true),
+    /**
+     * Which clock the paper runs on.
+     *
+     * Optional rather than defaulted, and the action writes the column only when it is
+     * present. A default here would mean any form that happens not to carry the field — the
+     * quick-create panel, an older tab — silently resetting a mock exam's single clock back
+     * to per-question timers on the next unrelated save.
+     *
+     * The audience is deliberately *not* here. It is its own action: a set of member ids has
+     * no business round-tripping through a form that also carries a pass mark, and a
+     * settings save that did not mention it would otherwise widen a narrowly-published paper
+     * back to the whole cohort without anybody asking.
+     */
+    timerMode: timerModeSchema.optional(),
+  })
   /*
-   * Zero means "no total limit", which is the honest way to express it in a number input —
-   * an empty field and a zero both arrive as "the admin did not set one".
+   * One clock means there has to be a clock.
+   *
+   * Checked here rather than in the action because it is the same rule the settings form
+   * needs to show against the field, and a mode saved without a duration would leave a
+   * published paper with no deadline at all and no per-question timers to fall back on.
    */
-  totalTimeMinutes: z.coerce.number().int().min(0).max(600).default(0),
-  defaultQuestionSeconds: z.coerce.number().int().min(5).max(3600).default(60),
-  focusGraceSeconds: z.coerce.number().int().min(1).max(120).default(5),
-  /*
-   * How many of the bank's questions one sitting draws. Zero means all of them, matching
-   * the total-time field's convention — an empty input and a nought both read as "the admin
-   * did not set a window", which for a fifteen-question paper is the right default.
-   */
-  questionsPerAttempt: z.coerce.number().int().min(0).max(500).default(0),
-  passMarkPct: z.coerce.number().int().min(1).max(100).default(60),
-  allowAnswerReview: z.coerce.boolean().optional().default(true),
-});
+  .superRefine((value, ctx) => {
+    if (value.timerMode === 'whole_paper' && value.totalTimeMinutes <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['totalTimeMinutes'],
+        message: 'One timer for the whole paper needs a total time. Set the minutes.',
+      });
+    }
+  });
 
 export const questionTypeSchema = z.enum(['mcq', 'image_mcq', 'short_answer', 'long_answer']);
 
@@ -1030,4 +1064,16 @@ export const answerSubmissionSchema = z.object({
   questionId: z.string().uuid(),
   selectedIndex: z.coerce.number().int().min(0).max(7).nullable().optional(),
   textAnswer: optionalText(20000),
+  /**
+   * Carried on the answer rather than posted separately so that leaving a question saves
+   * the response and the flag in one round trip — two would let a flaky connection record
+   * one without the other, and a palette disagreeing with the paper is worse than no palette.
+   */
+  markedForReview: z.coerce.boolean().optional(),
+});
+
+/** Who a narrowly-published assessment is for, as the audience panel submits it. */
+export const assessmentAudienceInputSchema = z.object({
+  audience: assessmentAudienceSchema,
+  memberIds: z.array(z.string().uuid()).max(2000),
 });

@@ -430,16 +430,23 @@ describe('building the bank up', () => {
     expect(await paperOf(started.data.attemptId)).toEqual(paperBefore);
   });
 
-  it('still refuses to replace the questions of a published paper wholesale', async () => {
+  it('refuses to replace the questions under a student who is mid-sitting', async () => {
     const cohort = await createTestCohort();
     const admin = await createTestMember(cohort.cohort.id, { fullName: 'Lead', role: 'admin' });
+    const member = await createTestMember(cohort.cohort.id, { fullName: 'Ira' });
     const { assessment } = await createBankedAssessment(cohort.cohort.id, {
       bankSize: 10,
       questionsPerAttempt: 5,
     });
 
+    // A sitting in progress. Its drawn paper points at question rows a wholesale save would
+    // delete and recreate, so this is the one state the replace has to refuse.
+    state.user = sessionUser(member.user.id, 'student');
+    const { startAttemptAction, saveQuestionsAction } =
+      await import('@/server/actions/assessments');
+    await startAttemptAction(assessment.id);
+
     state.user = sessionUser(admin.user.id, 'admin');
-    const { saveQuestionsAction } = await import('@/server/actions/assessments');
     const result = await saveQuestionsAction(cohort.cohort.id, assessment.id, [
       { type: 'mcq', prompt: 'A replacement', options: ['Yes', 'No'], correctIndex: 0, points: 1 },
     ]);

@@ -304,6 +304,171 @@ describe('integrity', () => {
       .where(eq(schema.assessmentIntegrityEvents.attemptId, original));
     expect(events.some((e) => e.kind === 'threshold_breached')).toBe(true);
   });
+
+  it('carries the full-screen count across a focus restart', async () => {
+    const { cohort } = await createTestCohort();
+    const student = await createTestMember(cohort.id);
+    const { assessment } = await createAssessment(cohort.id, { focusGraceSeconds: 5 });
+
+    state.user = sessionUser(student.user.id, 'student');
+    const { recordFocusEventAction, recordFullscreenExitAction, startAttemptAction } =
+      await import('@/server/actions/assessments');
+
+    const started = await startAttemptAction(assessment.id);
+    if (!started.ok) throw new Error('attempt did not start');
+
+    await recordFullscreenExitAction(started.data.attemptId);
+    await recordFullscreenExitAction(started.data.attemptId);
+
+    const restarted = await recordFocusEventAction(started.data.attemptId, 30_000);
+    if (!restarted.ok || !restarted.data.newAttemptId) throw new Error('no restart');
+
+    // Two exits spent, three left — a restart is not a way of buying five more.
+    expect((await attemptRow(restarted.data.newAttemptId))?.fullscreenExits).toBe(2);
+  });
+});
+
+/**
+ * The full-screen lock.
+ *
+ * An assessment is sat in full screen and every drop out of it is counted; the fifth ends
+ * the sitting. What matters here is where the count lives — the client reports the event
+ * and the database decides the number — and that a voided attempt is kept intact, answers
+ * and all, because it is the evidence the cohort lead reads.
+ */
+describe('the full-screen lock', () => {
+  it('counts exits on the server and leaves the attempt alive under the limit', async () => {
+    const { cohort } = await createTestCohort();
+    const student = await createTestMember(cohort.id);
+    const { assessment } = await createAssessment(cohort.id);
+
+    state.user = sessionUser(student.user.id, 'student');
+    const { recordFullscreenExitAction, startAttemptAction } =
+      await import('@/server/actions/assessments');
+    const { FULLSCREEN_EXIT_LIMIT } = await import('@/lib/assessments/integrity');
+
+    const started = await startAttemptAction(assessment.id);
+    if (!started.ok) throw new Error('attempt did not start');
+    const attemptId = started.data.attemptId;
+
+    for (let exit = 1; exit < FULLSCREEN_EXIT_LIMIT; exit += 1) {
+      const result = await recordFullscreenExitAction(attemptId);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // The tally comes from the database, never from the caller.
+      expect(result.data.exits).toBe(exit);
+      expect(result.data.remaining).toBe(FULLSCREEN_EXIT_LIMIT - exit);
+      expect(result.data.invalidated).toBe(false);
+      expect((await attemptRow(attemptId))?.status).toBe('in_progress');
+    }
+
+    const events = await db
+      .select()
+      .from(schema.assessmentIntegrityEvents)
+      .where(eq(schema.assessmentIntegrityEvents.attemptId, attemptId));
+    expect(events).toHaveLength(FULLSCREEN_EXIT_LIMIT - 1);
+    expect(events.every((e) => e.kind === 'fullscreen_exited')).toBe(true);
+  });
+
+  it('voids the attempt on the fifth exit and keeps it as evidence', async () => {
+    const { cohort } = await createTestCohort();
+    const student = await createTestMember(cohort.id);
+    const { assessment, questions } = await createAssessment(cohort.id);
+
+    state.user = sessionUser(student.user.id, 'student');
+    const {
+      openQuestionAction,
+      recordFullscreenExitAction,
+      startAttemptAction,
+      submitAnswerAction,
+    } = await import('@/server/actions/assessments');
+    const { FULLSCREEN_EXIT_LIMIT } = await import('@/lib/assessments/integrity');
+
+    const started = await startAttemptAction(assessment.id);
+    if (!started.ok) throw new Error('attempt did not start');
+    const attemptId = started.data.attemptId;
+
+    // An answer given before the limit, so we can prove the work is kept and not erased.
+    await openQuestionAction(attemptId, questions[0]!.id);
+    await submitAnswerAction({ attemptId, questionId: questions[0]!.id, selectedIndex: 0 });
+
+    let last: Awaited<ReturnType<typeof recordFullscreenExitAction>> | null = null;
+    for (let exit = 0; exit < FULLSCREEN_EXIT_LIMIT; exit += 1) {
+      last = await recordFullscreenExitAction(attemptId);
+    }
+
+    expect(last?.ok).toBe(true);
+    if (!last?.ok) return;
+    expect(last.data.exits).toBe(FULLSCREEN_EXIT_LIMIT);
+    expect(last.data.remaining).toBe(0);
+    expect(last.data.invalidated).toBe(true);
+
+    const attempt = await attemptRow(attemptId);
+    expect(attempt?.status).toBe('invalidated');
+    expect(attempt?.fullscreenExits).toBe(FULLSCREEN_EXIT_LIMIT);
+    expect(attempt?.submittedAt).toBeTruthy();
+
+    // The answer survives: a voided sitting is evidence, not a deletion.
+    expect((await answerRow(attemptId, questions[0]!.id))?.selectedIndex).toBe(0);
+
+    const events = await db
+      .select()
+      .from(schema.assessmentIntegrityEvents)
+      .where(eq(schema.assessmentIntegrityEvents.attemptId, attemptId));
+    expect(events.filter((e) => e.kind === 'fullscreen_exited')).toHaveLength(
+      FULLSCREEN_EXIT_LIMIT,
+    );
+    expect(events.filter((e) => e.kind === 'fullscreen_invalidated')).toHaveLength(1);
+
+    // A voided attempt no longer serves a paper: the runtime refuses it.
+    const { getAttemptRuntime } = await import('@/server/queries/assessments');
+    expect(await getAttemptRuntime({ attemptId, memberId: student.memberId })).toBeNull();
+  });
+
+  it('stops counting once the attempt is over', async () => {
+    const { cohort } = await createTestCohort();
+    const student = await createTestMember(cohort.id);
+    const { assessment } = await createAssessment(cohort.id);
+
+    state.user = sessionUser(student.user.id, 'student');
+    const { recordFullscreenExitAction, startAttemptAction, submitAttemptAction } =
+      await import('@/server/actions/assessments');
+
+    const started = await startAttemptAction(assessment.id);
+    if (!started.ok) throw new Error('attempt did not start');
+    const attemptId = started.data.attemptId;
+
+    await recordFullscreenExitAction(attemptId);
+    await submitAttemptAction(attemptId);
+
+    // Leaving full screen on the way out of a finished paper is not a breach of anything.
+    const after = await recordFullscreenExitAction(attemptId);
+    expect(after.ok).toBe(true);
+    if (!after.ok) return;
+    expect(after.data.exits).toBe(1);
+    expect((await attemptRow(attemptId))?.status).toBe('submitted');
+  });
+
+  it('refuses to count an exit against somebody else', async () => {
+    const { cohort } = await createTestCohort();
+    const owner = await createTestMember(cohort.id, { fullName: 'Owner Student' });
+    const other = await createTestMember(cohort.id, { fullName: 'Nosy Student' });
+    const { assessment } = await createAssessment(cohort.id);
+
+    state.user = sessionUser(owner.user.id, 'student');
+    const { recordFullscreenExitAction, startAttemptAction } =
+      await import('@/server/actions/assessments');
+
+    const started = await startAttemptAction(assessment.id);
+    if (!started.ok) throw new Error('attempt did not start');
+
+    state.user = sessionUser(other.user.id, 'student');
+    const result = await recordFullscreenExitAction(started.data.attemptId);
+
+    expect(result.ok).toBe(false);
+    expect((await attemptRow(started.data.attemptId))?.fullscreenExits).toBe(0);
+  });
 });
 
 describe('who can see a result', () => {
@@ -506,7 +671,14 @@ describe('publishing', () => {
     expect(row).toBeTruthy();
   });
 
-  it('will not let questions change under a published paper', async () => {
+  /*
+   * The rule that replaced "unpublish before you edit".
+   *
+   * That one was aimed at the right hazard and aimed far too wide: fixing a typo in a live
+   * paper meant first taking the paper away from every student who could see it. What
+   * actually has to be protected is a sitting in progress, and these two say so.
+   */
+  it('lets a published paper be edited while nobody is sitting it', async () => {
     const { cohort } = await createTestCohort();
     const admin = await createTestMember(cohort.id, { role: 'admin' });
     const { assessment } = await createAssessment(cohort.id);
@@ -524,6 +696,48 @@ describe('publishing', () => {
       },
     ]);
 
+    expect(result.ok).toBe(true);
+    const rows = await db
+      .select()
+      .from(schema.assessmentQuestions)
+      .where(eq(schema.assessmentQuestions.assessmentId, assessment.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.prompt).toBe('A replacement question?');
+    // Still published: editing is not a hidden unpublish.
+    const [row] = await db
+      .select()
+      .from(schema.assessments)
+      .where(eq(schema.assessments.id, assessment.id));
+    expect(row!.status).toBe('published');
+  });
+
+  it('refuses to change the questions under a student who is part-way through', async () => {
+    const { cohort } = await createTestCohort();
+    const admin = await createTestMember(cohort.id, { role: 'admin' });
+    const member = await createTestMember(cohort.id);
+    const { assessment } = await createAssessment(cohort.id);
+
+    state.user = sessionUser(member.user.id, 'student');
+    const { startAttemptAction, saveQuestionsAction } =
+      await import('@/server/actions/assessments');
+    await startAttemptAction(assessment.id);
+
+    state.user = sessionUser(admin.user.id, 'admin');
+    const result = await saveQuestionsAction(cohort.id, assessment.id, [
+      {
+        type: 'mcq',
+        prompt: 'A replacement question?',
+        options: ['Yes', 'No'],
+        correctIndex: 0,
+        points: 1,
+      },
+    ]);
+
     expect(result.ok).toBe(false);
+    const rows = await db
+      .select()
+      .from(schema.assessmentQuestions)
+      .where(eq(schema.assessmentQuestions.assessmentId, assessment.id));
+    expect(rows).toHaveLength(3);
   });
 });

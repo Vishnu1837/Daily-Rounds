@@ -3,7 +3,15 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowLeft, CheckCircle2, Clock, HelpCircle, Lock, XCircle } from 'lucide-react';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Clock,
+  HelpCircle,
+  Lock,
+  ShieldAlert,
+  XCircle,
+} from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardAurora, SectionTitle } from '@/components/ui/card';
@@ -32,6 +40,15 @@ function formatSeconds(seconds: number | null): string {
 export function ResultScreen({ attempt }: { attempt: AttemptDetail }) {
   const reduced = usePrefersReducedMotion();
   const [shown, setShown] = useState(0);
+
+  /*
+   * An attempt that was closed on it rather than by the student. The percentage below is
+   * still shown — it is what they scored on the questions they reached, and hiding it would
+   * read as a punishment on top of the one already applied — but it is said clearly, first
+   * and in its own card, that the sitting does not count.
+   */
+  const voided = attempt.status === 'invalidated';
+  const voidedByFullscreen = voided && attempt.fullscreenExits >= attempt.fullscreenExitLimit;
 
   const band = feedbackBand(attempt.pct, attempt.passMarkPct);
   const passed = attempt.pct >= attempt.passMarkPct;
@@ -70,8 +87,30 @@ export function ResultScreen({ attempt }: { attempt: AttemptDetail }) {
       <PageHeader
         eyebrow={`Attempt #${attempt.attemptNumber}`}
         title={attempt.assessmentTitle}
-        description="Only you and your cohort lead can see this."
+        description={
+          voided
+            ? 'This sitting was closed before you finished it. Only you and your cohort lead can see it.'
+            : 'Only you and your cohort lead can see this.'
+        }
       />
+
+      {voided && (
+        <Card className="border-danger/40 bg-danger/8 flex items-start gap-3 p-4">
+          <ShieldAlert className="text-danger mt-0.5 size-4 shrink-0" aria-hidden />
+          <div>
+            <p className="text-fg text-sm">
+              <span className="font-bold">This attempt does not count.</span>{' '}
+              {voidedByFullscreen
+                ? `You left full screen ${attempt.fullscreenExits} times; ${attempt.fullscreenExitLimit} voids a sitting. The score below is what you had answered up to that point.`
+                : 'It was ended early on an integrity rule. The score below is what you had answered up to that point.'}
+            </p>
+            <p className="text-fg-muted mt-1 text-sm">
+              It is kept as part of your record, and your cohort lead can see it. You can sit the
+              assessment again.
+            </p>
+          </div>
+        </Card>
+      )}
 
       {/* ------------------------------------------------------------- score */}
       <Card

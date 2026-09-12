@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, Clock, RotateCcw, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Clock, Maximize, RotateCcw, ShieldAlert } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,8 @@ const INTEGRITY_LABELS: Record<string, string> = {
   focus_returned: 'Came back within the grace period',
   threshold_breached: 'Away past the threshold',
   restarted: 'Attempt restarted',
+  fullscreen_exited: 'Left full screen',
+  fullscreen_invalidated: 'Attempt voided — full-screen limit reached',
 };
 
 function formatSeconds(seconds: number | null): string {
@@ -82,7 +84,9 @@ export function AttemptReview({ cohortId, attempt }: { cohortId: string; attempt
         title={attempt.studentName}
         description={
           attempt.status === 'invalidated'
-            ? 'This sitting was restarted after an integrity breach. It is kept as part of the record.'
+            ? attempt.fullscreenExits >= attempt.fullscreenExitLimit
+              ? `This sitting was voided: the student left full screen ${attempt.fullscreenExits} times. It is kept as part of the record.`
+              : 'This sitting was restarted after an integrity breach. It is kept as part of the record.'
             : `${attempt.assessmentTitle} · submitted ${attempt.submittedAt ? attempt.submittedAt.toLocaleString('en-GB') : '—'}`
         }
       />
@@ -107,6 +111,17 @@ export function AttemptReview({ cohortId, attempt }: { cohortId: string; attempt
           label="Restarts"
           value={String(attempt.restartCount)}
           sub={breaches.length > 0 ? `${breaches.length} integrity events` : 'Clean run'}
+        />
+        <StatTile
+          label="Full-screen exits"
+          value={`${attempt.fullscreenExits} / ${attempt.fullscreenExitLimit}`}
+          sub={
+            attempt.fullscreenExits >= attempt.fullscreenExitLimit
+              ? 'Limit reached — attempt voided'
+              : attempt.fullscreenExits === 0
+                ? 'Stayed in full screen'
+                : 'Under the limit'
+          }
         />
       </div>
 
@@ -135,6 +150,8 @@ export function AttemptReview({ cohortId, attempt }: { cohortId: string; attempt
                 >
                   {event.kind === 'restarted' ? (
                     <RotateCcw className="size-4" aria-hidden />
+                  ) : event.kind.startsWith('fullscreen') ? (
+                    <Maximize className="size-4" aria-hidden />
                   ) : (
                     <AlertTriangle className="size-4" aria-hidden />
                   )}

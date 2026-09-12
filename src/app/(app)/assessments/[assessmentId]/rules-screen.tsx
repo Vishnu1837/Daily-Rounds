@@ -3,12 +3,24 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Clock, Eye, Hourglass, ShieldAlert, Shuffle, Timer } from 'lucide-react';
+import {
+  ArrowLeft,
+  Clock,
+  Eye,
+  Hourglass,
+  LayoutGrid,
+  Maximize,
+  ShieldAlert,
+  Shuffle,
+  Timer,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, SectionTitle } from '@/components/ui/card';
 import { PageHeader } from '@/components/ui/page-header';
 import { useToast } from '@/components/ui/toast';
+import { FULLSCREEN_EXIT_LIMIT } from '@/lib/assessments/integrity';
+import { leaveFullscreen, requestFullscreen } from '@/lib/use-fullscreen';
 import { startAttemptAction } from '@/server/actions/assessments';
 
 type Brief = {
@@ -16,6 +28,8 @@ type Brief = {
   title: string;
   instructions: string | null;
   subjectName: string | null;
+  /** Which clock the paper runs on — the single biggest thing this screen has to convey. */
+  timerMode: 'per_question' | 'whole_paper';
   totalTimeSeconds: number | null;
   defaultQuestionSeconds: number;
   focusGraceSeconds: number;
@@ -39,8 +53,14 @@ function minutes(seconds: number): string {
  *
  * Everything that can surprise a student mid-attempt is said here, in plain words, before
  * any clock starts: that individual questions expire, that leaving the tab restarts the
- * paper, and that the honesty of the thing rests on them rather than on surveillance. The
- * timers begin only when they press the button — that is why this screen exists at all.
+ * paper, that five drops out of full screen void it, and that the honesty of the thing
+ * rests on them rather than on surveillance. The timers begin only when they press the
+ * button — that is why this screen exists at all.
+ *
+ * The button is also the one place full screen can be *asked for*. Browsers grant it only
+ * inside a user gesture, so the request rides on this click and the attempt page inherits
+ * it across the client-side navigation; the runner's gate is what covers every other way in
+ * — a reload, a back button, a browser that refused.
  */
 export function RulesScreen({
   brief,
@@ -57,6 +77,7 @@ export function RulesScreen({
   const totalLabel = brief.totalTimeSeconds
     ? minutes(brief.totalTimeSeconds)
     : minutes(brief.questionSeconds);
+  const wholePaper = brief.timerMode === 'whole_paper';
 
   /*
    * What to say about a bank. A student who is told "20 questions" and then meets a
@@ -99,11 +120,13 @@ export function RulesScreen({
       <Card className="divide-border divide-y p-0">
         <Rule
           icon={<Hourglass className="size-4" aria-hidden />}
-          title={`${brief.questionCount} ${brief.questionCount === 1 ? 'question' : 'questions'}, about ${totalLabel}`}
+          title={`${brief.questionCount} ${brief.questionCount === 1 ? 'question' : 'questions'}, ${wholePaper ? 'in' : 'about'} ${totalLabel}`}
           body={
-            brief.totalTimeSeconds
-              ? `There is a ${minutes(brief.totalTimeSeconds)} limit on the whole paper, running alongside the per-question timers.`
-              : `Each question has its own timer — ${brief.defaultQuestionSeconds} seconds unless it says otherwise.`
+            wholePaper
+              ? `One clock for the whole paper. No question has a timer of its own, so the ${minutes(brief.totalTimeSeconds ?? 0)} is yours to spend however you like across the ${brief.questionCount}.`
+              : brief.totalTimeSeconds
+                ? `There is a ${minutes(brief.totalTimeSeconds)} limit on the whole paper, running alongside the per-question timers.`
+                : `Each question has its own timer — ${brief.defaultQuestionSeconds} seconds unless it says otherwise.`
           }
         />
         {brief.bankSize !== null && (
@@ -120,14 +143,30 @@ export function RulesScreen({
           />
         )}
         <Rule
-          icon={<Timer className="size-4" aria-hidden />}
-          title="Questions expire on their own"
-          body="When a question's timer runs out it locks and moves on. An unanswered question scores nothing, so answer rather than perfect."
+          icon={<LayoutGrid className="size-4" aria-hidden />}
+          title="You can move around the paper"
+          body={
+            wholePaper
+              ? 'Skip a question and come back, change an answer you have already given, or flag one for review — the numbered grid beside the paper shows what you have answered, skipped and marked, and takes you straight to any of them.'
+              : 'Go back to any question whose timer is still running, flag ones to return to, and use the numbered grid beside the paper to see what you have answered and skipped.'
+          }
         />
+        {!wholePaper && (
+          <Rule
+            icon={<Timer className="size-4" aria-hidden />}
+            title="A question's clock starts the first time you see it"
+            body="And it keeps running while you are elsewhere, so a question you skip may have expired by the time you come back to it. An expired question locks — you can still read it, the answer is fixed, and it scores nothing. Answer rather than perfect."
+          />
+        )}
         <Rule
           icon={<ShieldAlert className="size-4" aria-hidden />}
           title="Leaving the page restarts the assessment"
           body={`Switching tabs or apps for more than ${brief.focusGraceSeconds} seconds restarts you from question 1${brief.bankSize !== null ? ' — the same questions, with the clocks back at the start' : ''}. Coming straight back is fine. Every restart is recorded for your cohort lead.`}
+        />
+        <Rule
+          icon={<Maximize className="size-4" aria-hidden />}
+          title="It runs in full screen"
+          body={`The paper takes the whole screen when you start, and the questions are hidden whenever it does not have it. Coming straight back is fine, but ${FULLSCREEN_EXIT_LIMIT} exits void the attempt — it is closed, kept, and your cohort lead sees the count.`}
         />
         <Rule
           icon={<Clock className="size-4" aria-hidden />}
@@ -153,18 +192,25 @@ export function RulesScreen({
         size="xl"
         fullWidth
         loading={pending || starting}
-        onClick={() =>
+        onClick={() => {
+          // Inside the gesture, before anything is awaited: a request made after the server
+          // action resolves has lost its user activation and browsers refuse it.
+          const entering = requestFullscreen();
+
           startTransition(async () => {
             setStarting(true);
             const result = await startAttemptAction(brief.id);
             if (!result.ok) {
               setStarting(false);
+              await entering;
+              void leaveFullscreen();
               toast.error('Could not start', result.message);
               return;
             }
+            await entering;
             router.push(`/assessments/${brief.id}/attempt/${result.data.attemptId}`);
-          })
-        }
+          });
+        }}
       >
         Start assessment
       </Button>

@@ -3,10 +3,17 @@ import 'server-only';
 import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import type { AttemptStatus, QuestionType, ReviewStatus } from '@/db/schema';
+import type {
+  AssessmentAudience,
+  AttemptStatus,
+  QuestionType,
+  ReviewStatus,
+  TimerMode,
+} from '@/db/schema';
 import {
   assessmentAnswers,
   assessmentAttempts,
+  assessmentAudienceMembers,
   assessmentIntegrityEvents,
   assessmentQuestions,
   assessments,
@@ -16,6 +23,8 @@ import {
 } from '@/db/schema';
 import { paperSize } from '@/lib/assessments/draw';
 import { isAutoGradable, questionDeadline, scorePercent } from '@/lib/assessments/grade';
+import { FULLSCREEN_EXIT_LIMIT } from '@/lib/assessments/integrity';
+import { visibleToMember } from '@/server/assessment-audience';
 import { attemptQuestionIds, bankCoverage, inPaperOrder } from '@/server/assessment-paper';
 import type { MemberContext } from '@/server/context';
 
@@ -48,6 +57,11 @@ export type AdminAssessmentRow = {
   /** Attempts with written answers still waiting for the admin to mark them. */
   pendingReview: number;
   totalTimeSeconds: number | null;
+  timerMode: TimerMode;
+  /** 'selected' means only the named students can see it, even while published. */
+  audience: AssessmentAudience;
+  /** How many students it is narrowed to. Zero when the audience is everyone. */
+  audienceCount: number;
   passMarkPct: number;
   updatedAt: Date;
 };
@@ -61,9 +75,15 @@ export async function getAssessments(ctx: CohortCtx): Promise<AdminAssessmentRow
       subjectName: subjects.name,
       curriculumRef: assessments.curriculumRef,
       totalTimeSeconds: assessments.totalTimeSeconds,
+      timerMode: assessments.timerMode,
+      audience: assessments.audience,
       questionsPerAttempt: assessments.questionsPerAttempt,
       passMarkPct: assessments.passMarkPct,
       updatedAt: assessments.updatedAt,
+      audienceCount: sql<number>`(
+        SELECT count(*)::int FROM ${assessmentAudienceMembers}
+        WHERE ${assessmentAudienceMembers.assessmentId} = ${assessments.id}
+      )`,
       questionCount: sql<number>`(
         SELECT count(*)::int FROM ${assessmentQuestions}
         WHERE ${assessmentQuestions.assessmentId} = ${assessments.id}
@@ -108,12 +128,24 @@ export type AdminAssessmentDetail = {
   instructions: string | null;
   curriculumRef: string | null;
   totalTimeSeconds: number | null;
+  timerMode: TimerMode;
   defaultQuestionSeconds: number;
   focusGraceSeconds: number;
   /** Null means every sitting serves the whole bank, in order. */
   questionsPerAttempt: number | null;
   passMarkPct: number;
   allowAnswerReview: boolean;
+  audience: AssessmentAudience;
+  /** The members named on the audience list, whether or not it is currently in force. */
+  audienceMemberIds: string[];
+  /**
+   * Sittings open right now.
+   *
+   * The builder shows this because it is the one thing that stops a published paper being
+   * edited: questions can be changed under a published assessment, but not under a student
+   * who is part-way through one.
+   */
+  liveAttempts: number;
   questions: AdminQuestion[];
 };
 
@@ -128,11 +160,26 @@ export async function getAssessmentDetail(
     .limit(1);
   if (!row) return null;
 
-  const questions = await db
-    .select()
-    .from(assessmentQuestions)
-    .where(eq(assessmentQuestions.assessmentId, assessmentId))
-    .orderBy(asc(assessmentQuestions.position));
+  const [questions, audience, live] = await Promise.all([
+    db
+      .select()
+      .from(assessmentQuestions)
+      .where(eq(assessmentQuestions.assessmentId, assessmentId))
+      .orderBy(asc(assessmentQuestions.position)),
+    db
+      .select({ memberId: assessmentAudienceMembers.memberId })
+      .from(assessmentAudienceMembers)
+      .where(eq(assessmentAudienceMembers.assessmentId, assessmentId)),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(assessmentAttempts)
+      .where(
+        and(
+          eq(assessmentAttempts.assessmentId, assessmentId),
+          eq(assessmentAttempts.status, 'in_progress'),
+        ),
+      ),
+  ]);
 
   return {
     id: row.id,
@@ -141,11 +188,15 @@ export async function getAssessmentDetail(
     instructions: row.instructions,
     curriculumRef: row.curriculumRef,
     totalTimeSeconds: row.totalTimeSeconds,
+    timerMode: row.timerMode,
     defaultQuestionSeconds: row.defaultQuestionSeconds,
     focusGraceSeconds: row.focusGraceSeconds,
     questionsPerAttempt: row.questionsPerAttempt,
     passMarkPct: row.passMarkPct,
     allowAnswerReview: row.allowAnswerReview,
+    audience: row.audience,
+    audienceMemberIds: audience.map((a) => a.memberId),
+    liveAttempts: live[0]?.n ?? 0,
     questions: questions.map((q) => ({
       id: q.id,
       position: q.position,
@@ -160,6 +211,42 @@ export async function getAssessmentDetail(
       points: q.points,
     })),
   };
+}
+
+export type AudienceCandidate = {
+  memberId: string;
+  fullName: string;
+  email: string;
+  /** Already on this assessment's audience list. */
+  selected: boolean;
+};
+
+/**
+ * The cohort's active students, flagged with whether this assessment is already aimed at
+ * them — everything the audience picker needs, in one read.
+ *
+ * The email is here because names in a cohort repeat and a test account is usually told
+ * apart by its address rather than by its name. Admin-only, like everything above.
+ */
+export async function getAudienceCandidates(
+  ctx: CohortCtx,
+  assessmentId: string,
+): Promise<AudienceCandidate[]> {
+  return db
+    .select({
+      memberId: cohortMembers.id,
+      fullName: users.fullName,
+      email: users.email,
+      selected: sql<boolean>`EXISTS (
+        SELECT 1 FROM ${assessmentAudienceMembers}
+        WHERE ${assessmentAudienceMembers.assessmentId} = ${assessmentId}
+          AND ${assessmentAudienceMembers.memberId} = ${cohortMembers.id}
+      )`,
+    })
+    .from(cohortMembers)
+    .innerJoin(users, eq(users.id, cohortMembers.userId))
+    .where(and(eq(cohortMembers.cohortId, ctx.cohort.id), eq(cohortMembers.status, 'active')))
+    .orderBy(asc(users.fullName));
 }
 
 export type AdminAttemptRow = {
@@ -339,6 +426,9 @@ export type AttemptDetail = {
   startedAt: Date;
   submittedAt: Date | null;
   restartCount: number;
+  /** Full-screen exits counted against the sitting, and the number that voids one. */
+  fullscreenExits: number;
+  fullscreenExitLimit: number;
   passMarkPct: number;
   allowAnswerReview: boolean;
   earned: number;
@@ -387,6 +477,7 @@ export async function getAttemptDetail(args: {
       startedAt: assessmentAttempts.startedAt,
       submittedAt: assessmentAttempts.submittedAt,
       restartCount: assessmentAttempts.restartCount,
+      fullscreenExits: assessmentAttempts.fullscreenExits,
       autoScore: assessmentAttempts.autoScore,
       autoTotal: assessmentAttempts.autoTotal,
       manualScore: assessmentAttempts.manualScore,
@@ -516,6 +607,7 @@ export async function getAttemptDetail(args: {
 
   return {
     ...attempt,
+    fullscreenExitLimit: FULLSCREEN_EXIT_LIMIT,
     earned: score.earned,
     outOf: score.outOf,
     pct: score.pct,
@@ -575,7 +667,14 @@ export async function getStudentAssessments(ctx: MemberContext): Promise<Student
     })
     .from(assessments)
     .leftJoin(subjects, eq(subjects.id, assessments.subjectId))
-    .where(and(eq(assessments.cohortId, ctx.cohort.id), eq(assessments.status, 'published')))
+    .where(
+      and(
+        eq(assessments.cohortId, ctx.cohort.id),
+        eq(assessments.status, 'published'),
+        // Narrowly-published papers never reach this list at all — see `visibleToMember`.
+        visibleToMember(ctx.memberId),
+      ),
+    )
     .orderBy(desc(assessments.publishedAt));
 
   if (rows.length === 0) return [];
@@ -640,12 +739,20 @@ export type RuntimeQuestion = {
   imageUrl: string | null;
   options: string[];
   points: number;
-  timeLimitSeconds: number;
+  /**
+   * This question's own allowance. Null under one clock for the whole paper, where the
+   * question has no deadline of its own at all.
+   */
+  timeLimitSeconds: number | null;
   /** Server-derived deadline once the question has been opened; null until then. */
   deadline: string | null;
   selectedIndex: number | null;
   textAnswer: string | null;
   expired: boolean;
+  /** The student flagged this one to come back to. */
+  markedForReview: boolean;
+  /** Whether this question has ever been on screen — what separates skipped from unseen. */
+  seen: boolean;
 };
 
 export type AttemptRuntime = {
@@ -656,7 +763,20 @@ export type AttemptRuntime = {
   attemptNumber: number;
   restartCount: number;
   focusGraceSeconds: number;
+  /**
+   * Which clock this paper runs on.
+   *
+   * The runner reads it for more than the countdown: under one clock for the whole paper
+   * every question stays open, so a student can skip forward, mark one to come back to, and
+   * change an answer they have already given. Under per-question timers a question locks
+   * when its own allowance runs out, wherever the student happens to be at the time.
+   */
+  timerMode: TimerMode;
   defaultQuestionSeconds: number;
+  /** Full-screen exits already counted against this sitting. */
+  fullscreenExits: number;
+  /** Exits that void the attempt. Sent so the warning quotes the rule the server applies. */
+  fullscreenExitLimit: number;
   /** ISO instant the whole paper closes, if there is a total limit. */
   expiresAt: string | null;
   /** The server's clock at render, so the client seeds its countdown from ours. */
@@ -681,11 +801,13 @@ export async function getAttemptRuntime(args: {
       assessmentId: assessmentAttempts.assessmentId,
       attemptNumber: assessmentAttempts.attemptNumber,
       restartCount: assessmentAttempts.restartCount,
+      fullscreenExits: assessmentAttempts.fullscreenExits,
       status: assessmentAttempts.status,
       expiresAt: assessmentAttempts.expiresAt,
       title: assessments.title,
       instructions: assessments.instructions,
       focusGraceSeconds: assessments.focusGraceSeconds,
+      timerMode: assessments.timerMode,
       defaultQuestionSeconds: assessments.defaultQuestionSeconds,
     })
     .from(assessmentAttempts)
@@ -721,6 +843,7 @@ export async function getAttemptRuntime(args: {
       selectedIndex: assessmentAnswers.selectedIndex,
       textAnswer: assessmentAnswers.textAnswer,
       expired: assessmentAnswers.expired,
+      markedForReview: assessmentAnswers.markedForReview,
     })
     .from(assessmentQuestions)
     .leftJoin(
@@ -742,7 +865,10 @@ export async function getAttemptRuntime(args: {
     attemptNumber: attempt.attemptNumber,
     restartCount: attempt.restartCount,
     focusGraceSeconds: attempt.focusGraceSeconds,
+    timerMode: attempt.timerMode,
     defaultQuestionSeconds: attempt.defaultQuestionSeconds,
+    fullscreenExits: attempt.fullscreenExits,
+    fullscreenExitLimit: FULLSCREEN_EXIT_LIMIT,
     expiresAt: attempt.expiresAt?.toISOString() ?? null,
     serverNow: new Date().toISOString(),
     questions: rows.map((r, index) => ({
@@ -755,17 +881,32 @@ export async function getAttemptRuntime(args: {
       imageUrl: r.imageUrl,
       options: isAutoGradable(r.type) ? r.options : [],
       points: r.points,
-      timeLimitSeconds: r.timeLimitSeconds ?? attempt.defaultQuestionSeconds,
-      deadline: r.startedAt
-        ? questionDeadline(
-            r.startedAt,
-            r.timeLimitSeconds,
-            attempt.defaultQuestionSeconds,
-          ).toISOString()
-        : null,
+      /*
+       * Under one clock for the whole paper a question has no allowance of its own, and
+       * saying so with a null rather than quietly sending the default is what keeps the
+       * runner from rendering a countdown that means nothing and locking a question a
+       * student is still entitled to change.
+       */
+      timeLimitSeconds:
+        attempt.timerMode === 'whole_paper'
+          ? null
+          : (r.timeLimitSeconds ?? attempt.defaultQuestionSeconds),
+      deadline:
+        attempt.timerMode === 'whole_paper' || !r.startedAt
+          ? null
+          : questionDeadline(
+              r.startedAt,
+              r.timeLimitSeconds,
+              attempt.defaultQuestionSeconds,
+            ).toISOString(),
       selectedIndex: r.selectedIndex,
       textAnswer: r.textAnswer,
       expired: r.expired ?? false,
+      markedForReview: r.markedForReview ?? false,
+      // The answer row is written the first time a question is opened, so its existence is
+      // the record of having been shown one — which is what makes "skipped" distinguishable
+      // from "never reached" in the palette.
+      seen: r.startedAt !== null,
     })),
   };
 }
@@ -793,6 +934,7 @@ export async function getAssessmentBrief(args: {
       status: assessments.status,
       instructions: assessments.instructions,
       subjectName: subjects.name,
+      timerMode: assessments.timerMode,
       totalTimeSeconds: assessments.totalTimeSeconds,
       defaultQuestionSeconds: assessments.defaultQuestionSeconds,
       focusGraceSeconds: assessments.focusGraceSeconds,
@@ -811,7 +953,15 @@ export async function getAssessmentBrief(args: {
     })
     .from(assessments)
     .leftJoin(subjects, eq(subjects.id, assessments.subjectId))
-    .where(and(eq(assessments.id, args.assessmentId), eq(assessments.cohortId, args.cohortId)))
+    .where(
+      and(
+        eq(assessments.id, args.assessmentId),
+        eq(assessments.cohortId, args.cohortId),
+        // A student who is not an audience for this gets nothing back, so the rules screen
+        // 404s rather than describing a paper they will not be allowed to start.
+        args.memberId ? visibleToMember(args.memberId) : undefined,
+      ),
+    )
     .limit(1);
 
   if (!row) return null;

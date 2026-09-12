@@ -35,7 +35,13 @@ import {
   saveQuestionsAction,
   setAssessmentStatusAction,
 } from '@/server/actions/assessments';
-import type { AdminAssessmentDetail, AdminAttemptRow } from '@/server/queries/assessments';
+import type {
+  AdminAssessmentDetail,
+  AdminAttemptRow,
+  AudienceCandidate,
+} from '@/server/queries/assessments';
+
+import { AudiencePanel } from './audience-panel';
 
 /** A question as the builder holds it while being edited. */
 type Draft = {
@@ -158,21 +164,35 @@ export function AssessmentBuilder({
   cohortId,
   assessment,
   attempts,
+  audience,
 }: {
   cohortId: string;
   assessment: AdminAssessmentDetail;
   attempts: AdminAttemptRow[];
+  audience: AudienceCandidate[];
 }) {
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
-  const [tab, setTab] = useState<'questions' | 'settings' | 'results'>('questions');
+  const [tab, setTab] = useState<'questions' | 'settings' | 'audience' | 'results'>('questions');
   const [drafts, setDrafts] = useState<Draft[]>(() => assessment.questions.map(fromSaved));
   const [importOpen, setImportOpen] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [page, setPage] = useState(0);
 
   const published = assessment.status === 'published';
+  /*
+   * What actually stops the questions being edited.
+   *
+   * It used to be `published`, which was aimed at the right hazard and aimed far too wide:
+   * fixing a typo in a live paper meant first taking the paper away from everyone who could
+   * see it. A wholesale save deletes and recreates the question rows, so what has to be
+   * protected is a *sitting in progress* — an attempt holds its own drawn paper, and those
+   * rows point at ids the save would destroy. With nobody mid-paper there is nothing to
+   * pull out from under anyone, and the server enforces exactly this rule.
+   */
+  const liveAttempts = assessment.liveAttempts;
+  const frozen = liveAttempts > 0;
   const problems = useMemo(() => drafts.map(draftErrors), [drafts]);
   const blocked = problems.some((p) => p.length > 0);
 
@@ -268,9 +288,9 @@ export function AssessmentBuilder({
         eyebrow={assessment.status}
         title={assessment.title}
         description={
-          published
-            ? 'Published. Move it back to draft to change the questions — students may be part-way through.'
-            : `${drafts.length} ${drafts.length === 1 ? 'question' : 'questions'} · pass mark ${assessment.passMarkPct}%`
+          frozen
+            ? `${liveAttempts} ${liveAttempts === 1 ? 'student is' : 'students are'} sitting this right now. Questions are locked until they finish; everything else can still be changed.`
+            : `${drafts.length} ${drafts.length === 1 ? 'question' : 'questions'} · pass mark ${assessment.passMarkPct}%${published ? ' · live, and still editable' : ''}`
         }
         actions={
           <div className="flex flex-wrap gap-2">
@@ -297,7 +317,7 @@ export function AssessmentBuilder({
         }
       />
 
-      {dirty && !published && (
+      {dirty && !frozen && (
         <Card className="border-warning/40 bg-warning/8 flex flex-wrap items-center gap-3 p-4">
           <AlertTriangle className="text-warning size-4 shrink-0" aria-hidden />
           <p className="text-fg min-w-0 flex-1 text-sm">You have unsaved question changes.</p>
@@ -314,6 +334,13 @@ export function AssessmentBuilder({
         options={[
           { value: 'questions', label: `Questions (${drafts.length})` },
           { value: 'settings', label: 'Settings' },
+          {
+            value: 'audience',
+            label:
+              assessment.audience === 'selected'
+                ? `Audience (${assessment.audienceMemberIds.length})`
+                : 'Audience',
+          },
           { value: 'results', label: `Results (${attempts.length})` },
         ]}
       />
@@ -332,12 +359,12 @@ export function AssessmentBuilder({
                 setDrafts((c) => [...c, emptyDraft()]);
                 setDirty(true);
               }}
-              disabled={published}
+              disabled={frozen}
             >
               <Plus className="size-4" aria-hidden />
               Add one
             </Button>
-            {!published && (
+            {!frozen && (
               <Button
                 size="md"
                 className="ml-auto"
@@ -385,7 +412,7 @@ export function AssessmentBuilder({
                   total={drafts.length}
                   draft={draft}
                   errors={problems[index] ?? []}
-                  readOnly={published}
+                  readOnly={frozen}
                   defaultSeconds={assessment.defaultQuestionSeconds}
                   onChange={(patch) => update(index, patch)}
                   onMove={(dir) => move(index, dir)}
@@ -429,6 +456,15 @@ export function AssessmentBuilder({
 
       {tab === 'settings' && <SettingsForm cohortId={cohortId} assessment={assessment} />}
 
+      {tab === 'audience' && (
+        <AudiencePanel
+          cohortId={cohortId}
+          assessmentId={assessment.id}
+          status={assessment.status}
+          candidates={audience}
+        />
+      )}
+
       {tab === 'results' && <ResultsTable assessment={assessment} attempts={attempts} />}
 
       <Sheet
@@ -440,7 +476,7 @@ export function AssessmentBuilder({
       >
         <ImportPanel
           cohortId={cohortId}
-          canEdit={!published}
+          canEdit={!frozen}
           editorDirty={dirty}
           onAccept={(parsed) => {
             setDrafts((current) => [...current, ...parsed.map(fromParsed)]);
@@ -742,7 +778,7 @@ function ImportPanel({
   onAppend,
 }: {
   cohortId: string;
-  /** False once published — the editor's wholesale save is refused, the append is not. */
+  /** False while somebody is mid-sitting — the wholesale save is refused, the append is not. */
   canEdit: boolean;
   editorDirty: boolean;
   onAccept: (questions: ParsedQuestion[]) => void;
@@ -924,7 +960,8 @@ function ImportPanel({
               {errorCount > 0
                 ? 'Questions with errors cannot go straight into the bank — send them to the editor, fix them there, and save.'
                 : 'Straight into the bank saves them now and leaves every attempt already running untouched.'}
-              {!canEdit && ' The editor is read-only while this assessment is published.'}
+              {!canEdit &&
+                ' The editor is read-only while a student is part-way through a sitting.'}
               {canEdit && editorDirty && ' Save your unsaved edits first to use the editor route.'}
             </p>
           </div>
@@ -948,6 +985,15 @@ function SettingsForm({
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | undefined>();
   const [errors, setErrors] = useState<Record<string, string>>({});
+  /*
+   * Held in state, not just posted, because the two timing models want different fields to
+   * be the important one: a whole-paper clock makes "seconds per question" dead weight and
+   * makes the total a required field rather than an optional cap. Showing both as equals
+   * was the original mistake — an admin could set a sixty-second question timer and a
+   * ninety-minute paper limit and have no way to know which of the two would end a sitting.
+   */
+  const [timerMode, setTimerMode] = useState(assessment.timerMode);
+  const wholePaper = timerMode === 'whole_paper';
 
   return (
     <Card className="p-5">
@@ -989,18 +1035,42 @@ function SettingsForm({
           defaultValue={assessment.instructions ?? ''}
           error={errors.instructions}
         />
+        <input type="hidden" name="timerMode" value={timerMode} />
+        <fieldset className="border-border rounded-panel border p-4">
+          <legend className="text-fg px-1 text-sm font-bold">How this paper is timed</legend>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <TimingChoice
+              checked={!wholePaper}
+              onSelect={() => setTimerMode('per_question')}
+              title="A timer on each question"
+              body="Every question gets its own allowance and locks when it runs out, wherever the student is by then. Right for rapid recall."
+            />
+            <TimingChoice
+              checked={wholePaper}
+              onSelect={() => setTimerMode('whole_paper')}
+              title="One timer for the whole paper"
+              body="No question has a clock of its own. The student spends the total however they like and can revisit anything until it closes. Right for a mock exam."
+            />
+          </div>
+        </fieldset>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <TextInput
-            label="Total time (minutes)"
+            label={wholePaper ? 'Total time (minutes)' : 'Total time (minutes, optional)'}
             name="totalTimeMinutes"
             type="number"
             min={0}
             max={600}
+            required={wholePaper}
             defaultValue={
               assessment.totalTimeSeconds ? Math.round(assessment.totalTimeSeconds / 60) : 0
             }
             error={errors.totalTimeMinutes}
-            hint="0 means only the per-question timers apply."
+            hint={
+              wholePaper
+                ? 'The whole clock. This is the only deadline on the paper, so it cannot be 0.'
+                : '0 means only the per-question timers apply.'
+            }
           />
           <TextInput
             label="Default seconds per question"
@@ -1008,8 +1078,19 @@ function SettingsForm({
             type="number"
             min={5}
             max={3600}
+            // Read-only rather than disabled: a disabled input posts nothing, and the value
+            // would be reset to the schema default the first time an admin saved a
+            // whole-paper assessment — quietly losing the setting they would get back by
+            // switching the mode again.
+            readOnly={wholePaper}
+            className={wholePaper ? 'opacity-60' : undefined}
             defaultValue={assessment.defaultQuestionSeconds}
             error={errors.defaultQuestionSeconds}
+            hint={
+              wholePaper
+                ? 'Not used under one clock for the whole paper. Kept, in case you switch back.'
+                : 'Any question can override this with its own.'
+            }
           />
           <TextInput
             label="Pass mark (%)"
@@ -1054,6 +1135,53 @@ function SettingsForm({
         </Button>
       </form>
     </Card>
+  );
+}
+
+/**
+ * One of the two timing models, as a card rather than a line in a dropdown.
+ *
+ * A `<select>` would fit, and would also hide the only thing an admin needs in order to
+ * choose: what each option does to the student's sitting. The consequences are two
+ * sentences long and they belong on screen at the moment of the decision.
+ */
+function TimingChoice({
+  checked,
+  onSelect,
+  title,
+  body,
+}: {
+  checked: boolean;
+  onSelect: () => void;
+  title: string;
+  body: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={checked}
+      className={cn(
+        'rounded-panel border p-3 text-left transition-colors',
+        checked
+          ? 'border-pulse-500 bg-pulse-500/8'
+          : 'border-border hover:border-border-strong hover:bg-bg-sunken',
+      )}
+    >
+      <span className="flex items-center gap-2">
+        <span
+          className={cn(
+            'grid size-4 shrink-0 place-items-center rounded-full border',
+            checked ? 'border-pulse-600 bg-pulse-600' : 'border-border-strong',
+          )}
+          aria-hidden
+        >
+          {checked && <span className="size-1.5 rounded-full bg-white" />}
+        </span>
+        <span className="text-fg text-sm font-bold">{title}</span>
+      </span>
+      <span className="text-fg-muted mt-1.5 block text-xs">{body}</span>
+    </button>
   );
 }
 
