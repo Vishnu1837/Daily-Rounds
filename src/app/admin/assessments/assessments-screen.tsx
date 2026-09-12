@@ -14,7 +14,10 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Sheet } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/toast';
 import { saveAssessmentAction } from '@/server/actions/assessments';
+import type { TimerMode } from '@/db/schema';
 import type { AdminAssessmentRow, ReviewQueueRow } from '@/server/queries/assessments';
+
+import { TimingModeField } from './timing-mode-field';
 
 type StatusFilter = 'all' | 'draft' | 'published' | 'archived';
 
@@ -171,6 +174,8 @@ function CreateAssessmentForm({ cohortId }: { cohortId: string }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | undefined>();
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [timerMode, setTimerMode] = useState<TimerMode>('per_question');
+  const wholePaper = timerMode === 'whole_paper';
 
   return (
     <form
@@ -210,16 +215,22 @@ function CreateAssessmentForm({ cohortId }: { cohortId: string }) {
         error={errors.instructions}
         placeholder="Single best answer. Do not use notes."
       />
+      <TimingModeField value={timerMode} onChange={setTimerMode} />
       <div className="grid gap-4 sm:grid-cols-2">
         <TextInput
-          label="Total time (minutes)"
+          label={wholePaper ? 'Total time (minutes)' : 'Total time (minutes, optional)'}
           name="totalTimeMinutes"
           type="number"
           min={0}
           max={600}
+          required={wholePaper}
           defaultValue={0}
           error={errors.totalTimeMinutes}
-          hint="0 means only the per-question timers apply."
+          hint={
+            wholePaper
+              ? 'The whole clock. This is the only deadline on the paper, so it cannot be 0.'
+              : '0 means only the per-question timers apply.'
+          }
         />
         <TextInput
           label="Default seconds per question"
@@ -227,9 +238,18 @@ function CreateAssessmentForm({ cohortId }: { cohortId: string }) {
           type="number"
           min={5}
           max={3600}
+          // Read-only rather than disabled: a disabled input posts nothing, and the value
+          // would fall back to the schema default — losing a setting the admin would expect
+          // to find waiting for them if they switched the timing back.
+          readOnly={wholePaper}
+          className={wholePaper ? 'opacity-60' : undefined}
           defaultValue={60}
           error={errors.defaultQuestionSeconds}
-          hint="Used for any question with no timer of its own."
+          hint={
+            wholePaper
+              ? 'Not used under one clock for the whole paper.'
+              : 'Used for any question with no timer of its own.'
+          }
         />
         <TextInput
           label="Pass mark (%)"

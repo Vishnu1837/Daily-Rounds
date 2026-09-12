@@ -41,6 +41,8 @@ import type {
   AudienceCandidate,
 } from '@/server/queries/assessments';
 
+import { TimingModeField } from '../timing-mode-field';
+
 import { AudiencePanel } from './audience-panel';
 
 /** A question as the builder holds it while being edited. */
@@ -414,6 +416,7 @@ export function AssessmentBuilder({
                   errors={problems[index] ?? []}
                   readOnly={frozen}
                   defaultSeconds={assessment.defaultQuestionSeconds}
+                  wholePaper={assessment.timerMode === 'whole_paper'}
                   onChange={(patch) => update(index, patch)}
                   onMove={(dir) => move(index, dir)}
                   onRemove={() => {
@@ -542,6 +545,7 @@ function QuestionCard({
   errors,
   readOnly,
   defaultSeconds,
+  wholePaper,
   onChange,
   onMove,
   onRemove,
@@ -552,6 +556,8 @@ function QuestionCard({
   errors: string[];
   readOnly: boolean;
   defaultSeconds: number;
+  /** Under one clock for the whole paper a question has no allowance of its own to set. */
+  wholePaper: boolean;
   onChange: (patch: Partial<Draft>) => void;
   onMove: (direction: -1 | 1) => void;
   onRemove: () => void;
@@ -640,19 +646,28 @@ function QuestionCard({
             <option value="short_answer">Short answer</option>
             <option value="long_answer">Long answer</option>
           </Select>
-          <TextInput
-            label="Seconds"
-            type="number"
-            min={5}
-            max={3600}
-            disabled={readOnly}
-            value={draft.timeLimitSeconds ?? ''}
-            placeholder={String(defaultSeconds)}
-            hint="Blank uses the default."
-            onChange={(e) =>
-              onChange({ timeLimitSeconds: e.target.value ? Number(e.target.value) : null })
-            }
-          />
+          {/*
+           * Hidden rather than merely disabled under one clock for the whole paper. A greyed
+           * field still reads as a setting that exists and might matter; this one does not
+           * exist at all in that mode, and the engine will not look at it. Whatever value a
+           * question already carries is left on the row untouched, so switching the timing
+           * back brings every override with it.
+           */}
+          {!wholePaper && (
+            <TextInput
+              label="Seconds"
+              type="number"
+              min={5}
+              max={3600}
+              disabled={readOnly}
+              value={draft.timeLimitSeconds ?? ''}
+              placeholder={String(defaultSeconds)}
+              hint="Blank uses the default."
+              onChange={(e) =>
+                onChange({ timeLimitSeconds: e.target.value ? Number(e.target.value) : null })
+              }
+            />
+          )}
           <TextInput
             label="Marks"
             type="number"
@@ -1035,24 +1050,7 @@ function SettingsForm({
           defaultValue={assessment.instructions ?? ''}
           error={errors.instructions}
         />
-        <input type="hidden" name="timerMode" value={timerMode} />
-        <fieldset className="border-border rounded-panel border p-4">
-          <legend className="text-fg px-1 text-sm font-bold">How this paper is timed</legend>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            <TimingChoice
-              checked={!wholePaper}
-              onSelect={() => setTimerMode('per_question')}
-              title="A timer on each question"
-              body="Every question gets its own allowance and locks when it runs out, wherever the student is by then. Right for rapid recall."
-            />
-            <TimingChoice
-              checked={wholePaper}
-              onSelect={() => setTimerMode('whole_paper')}
-              title="One timer for the whole paper"
-              body="No question has a clock of its own. The student spends the total however they like and can revisit anything until it closes. Right for a mock exam."
-            />
-          </div>
-        </fieldset>
+        <TimingModeField value={timerMode} onChange={setTimerMode} />
 
         <div className="grid gap-4 sm:grid-cols-2">
           <TextInput
@@ -1135,53 +1133,6 @@ function SettingsForm({
         </Button>
       </form>
     </Card>
-  );
-}
-
-/**
- * One of the two timing models, as a card rather than a line in a dropdown.
- *
- * A `<select>` would fit, and would also hide the only thing an admin needs in order to
- * choose: what each option does to the student's sitting. The consequences are two
- * sentences long and they belong on screen at the moment of the decision.
- */
-function TimingChoice({
-  checked,
-  onSelect,
-  title,
-  body,
-}: {
-  checked: boolean;
-  onSelect: () => void;
-  title: string;
-  body: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={checked}
-      className={cn(
-        'rounded-panel border p-3 text-left transition-colors',
-        checked
-          ? 'border-pulse-500 bg-pulse-500/8'
-          : 'border-border hover:border-border-strong hover:bg-bg-sunken',
-      )}
-    >
-      <span className="flex items-center gap-2">
-        <span
-          className={cn(
-            'grid size-4 shrink-0 place-items-center rounded-full border',
-            checked ? 'border-pulse-600 bg-pulse-600' : 'border-border-strong',
-          )}
-          aria-hidden
-        >
-          {checked && <span className="size-1.5 rounded-full bg-white" />}
-        </span>
-        <span className="text-fg text-sm font-bold">{title}</span>
-      </span>
-      <span className="text-fg-muted mt-1.5 block text-xs">{body}</span>
-    </button>
   );
 }
 
